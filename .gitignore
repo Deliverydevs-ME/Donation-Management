@@ -1,7 +1,33 @@
+# Python cache/build artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+build/
+dist/
+*.egg-info/
+
+# Node/Frappe frontend artifacts
+node_modules/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Local environment files
+.env
+.venv/
+env/
+venv/
+
+# OS/editor files
 .DS_Store
-*.pyc
-*.egg-info
+Thumbs.db
+.vscode/
+.idea/
 *.swp
 tags
-node_modules
-__pycache__
