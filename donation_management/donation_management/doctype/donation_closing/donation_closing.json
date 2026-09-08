@@ -9,17 +9,19 @@
   "closing_date",
   "company",
   "prepared_by",
+  "cashier",
   "received_by",
   "received_on",
+  "cash_handover",
   "submitted_by",
   "submitted_on",
   "status",
   "column_break_cd",
   "total_amount",
-        "pending_items_count",
-        "closing_details_section",
-        "closing_details",
-        "amended_from"
+  "pending_items_count",
+  "closing_details_section",
+  "closing_details",
+  "amended_from"
  ],
  "fields": [
   {
@@ -48,6 +50,13 @@
    "read_only": 1
   },
   {
+   "fieldname": "cashier",
+   "fieldtype": "Link",
+   "label": "Cashier",
+   "options": "User",
+   "read_only": 1
+  },
+  {
    "depends_on": "eval:doc.received_by",
    "fieldname": "received_by",
    "fieldtype": "Link",
@@ -61,6 +70,12 @@
    "fieldtype": "Datetime",
    "label": "Received On",
    "read_only": 1
+  },
+  {
+   "fieldname": "cash_handover",
+   "fieldtype": "Link",
+   "label": "Cash Handover",
+   "options": "Donation Cash Handover"
   },
   {
    "allow_on_submit": 1,
@@ -84,12 +99,12 @@
    "default": "Draft",
    "fieldname": "status",
    "fieldtype": "Select",
-            "in_list_view": 1,
-            "in_standard_filter": 1,
-            "label": "Status",
-            "options": "\nDraft\nReceived\nDeposited\nCancelled",
-            "read_only": 1
-        },
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Status",
+   "options": "\nDraft\nReceived\nDeposited\nCancelled",
+   "read_only": 1
+  },
   {
    "fieldname": "column_break_cd",
    "fieldtype": "Column Break"
@@ -113,12 +128,12 @@
    "fieldtype": "Section Break",
    "label": "Pending Cash Donations"
   },
-        {
-            "fieldname": "closing_details",
-            "fieldtype": "Table",
-            "label": "Closing Details",
-            "options": "Donation Closing Detail"
-        },
+  {
+   "fieldname": "closing_details",
+   "fieldtype": "Table",
+   "label": "Closing Details",
+   "options": "Donation Closing Detail"
+  },
   {
    "fieldname": "amended_from",
    "fieldtype": "Link",

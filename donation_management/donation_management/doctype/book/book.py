@@ -22,7 +22,7 @@ COUPON_COLORS = {
 }
 
 DENOMINATIONS = (10, 20, 50, 100, 500, 1000, 5000)
-COUPON_VALUES = (50, 100, 500)
+COUPON_VALUES = (10, 50, 100, 500, 1000, 5000)
 FINANCE_MANAGER_ROLE = "Finance Manager"
 BOOK_TYPE_COUPON = "Coupon Book"
 BOOK_TYPE_DONATION = "Donation Book"
@@ -62,6 +62,8 @@ class Book(Document):
 		self.validate_assigned_books()
 
 	def on_update(self):
+		if self.is_donation_book():
+			sync_donation_book_leaves(self.name)
 		if self.is_coupon_book():
 			self.create_journal_entry_for_return()
 
@@ -132,13 +134,16 @@ class Book(Document):
 
 	def validate_coupon_value(self):
 		if cint(self.coupon_value) not in COUPON_VALUES:
-			frappe.throw(frappe._("Coupon Value must be 50, 100, or 500."))
+			frappe.throw(frappe._("Coupon Value must be 10, 50, 100, 500, 1000, or 5000."))
 
 	def set_coupon_color(self):
 		self.coupon_color = COUPON_COLORS.get(self.coupon_type)
 
 	def set_coupon_type_from_item(self):
 		self.coupon_type = get_coupon_type_from_item(self.item)
+		item_coupon_value = get_coupon_value_from_item(self.item)
+		if item_coupon_value:
+			self.coupon_value = str(item_coupon_value)
 		if not self.coupon_type:
 			frappe.throw(
 				frappe._(
@@ -640,7 +645,7 @@ def return_book(
 		frappe.throw(frappe._("Used Pages cannot exceed Total Pages."))
 
 	if cint(doc.coupon_value) not in COUPON_VALUES:
-		frappe.throw(frappe._("Coupon Value must be 50, 100, or 500 before returning a Book."))
+		frappe.throw(frappe._("Coupon Value must be 10, 50, 100, 500, 1000, or 5000 before returning a Book."))
 
 	calculated_collected_amount = flt(used_pages * cint(doc.coupon_value))
 	if collected_amount is not None and flt(collected_amount) != calculated_collected_amount:
@@ -1039,6 +1044,148 @@ def update_donation_book_receipt_usage(book):
 		},
 		update_modified=False,
 	)
+	sync_donation_book_leaves(book)
+
+
+def sync_donation_book_leaves(book):
+	if not book or not frappe.db.exists("Book", book):
+		return
+
+	book_doc = frappe.get_doc("Book", book)
+	if not book_doc.is_donation_book():
+		return
+
+	for receipt_range in get_donation_book_leaf_ranges(book_doc):
+		for receipt_number in range(
+			get_receipt_number_int(receipt_range["from_receipt_no"], "From Receipt No"),
+			get_receipt_number_int(receipt_range["to_receipt_no"], "To Receipt No") + 1,
+		):
+			upsert_donation_book_leaf(book_doc, receipt_range.get("book_serial_no"), str(receipt_number))
+
+	refresh_donation_book_leaf_usage(book)
+
+
+def get_donation_book_leaf_ranges(book_doc):
+	ranges = []
+	if book_doc.assigned_books:
+		for row in book_doc.assigned_books:
+			if row.from_receipt_no and row.to_receipt_no:
+				ranges.append(
+					{
+						"book_serial_no": row.book_serial_no,
+						"from_receipt_no": row.from_receipt_no,
+						"to_receipt_no": row.to_receipt_no,
+					}
+				)
+	elif book_doc.from_receipt_no and book_doc.to_receipt_no:
+		ranges.append(
+			{
+				"book_serial_no": book_doc.book_serial_no,
+				"from_receipt_no": book_doc.from_receipt_no,
+				"to_receipt_no": book_doc.to_receipt_no,
+			}
+		)
+	return ranges
+
+
+def upsert_donation_book_leaf(book_doc, book_serial_no, receipt_number):
+	existing = frappe.db.exists(
+		"Donation Book Leaf",
+		{
+			"book": book_doc.name,
+			"book_serial_no": book_serial_no,
+			"receipt_number": receipt_number,
+		},
+	)
+	if existing:
+		return existing
+
+	leaf = frappe.get_doc(
+		{
+			"doctype": "Donation Book Leaf",
+			"book": book_doc.name,
+			"book_serial_no": book_serial_no,
+			"receipt_number": receipt_number,
+			"status": "Pending",
+		}
+	)
+	leaf.insert(ignore_permissions=True)
+	return leaf.name
+
+
+def refresh_donation_book_leaf_usage(book):
+	if not frappe.db.table_exists("Donation Book Leaf"):
+		return
+
+	frappe.db.sql(
+		"""
+		update `tabDonation Book Leaf`
+		set status = 'Pending',
+			donor = null,
+			donation_order = null,
+			payment_mode = null,
+			manual_receipt_date = null,
+			journal_entry = null,
+			accounting_status = null
+		where book = %s
+		""",
+		book,
+	)
+
+	used_rows = frappe.db.sql(
+		"""
+		select
+			parent.name as donation_order,
+			parent.donor_name as donor,
+			parent.mode_of_payment as payment_mode,
+			parent.manual_receipt_date,
+			parent.journal_entry,
+			parent.accounting_status,
+			parent.donation_book_serial_no as book_serial_no,
+			detail.manual_receipt_number as receipt_number
+		from `tabDonation Order` parent
+		inner join `tabDonation Order Purpose Detail` detail
+			on detail.parent = parent.name
+		where parent.donation_book = %(book)s
+			and parent.docstatus != 2
+			and ifnull(detail.manual_receipt_number, '') != ''
+		union
+		select
+			parent.name as donation_order,
+			parent.donor_name as donor,
+			parent.mode_of_payment as payment_mode,
+			parent.manual_receipt_date,
+			parent.journal_entry,
+			parent.accounting_status,
+			parent.donation_book_serial_no as book_serial_no,
+			parent.manual_receipt_number as receipt_number
+		from `tabDonation Order` parent
+		where parent.donation_book = %(book)s
+			and parent.docstatus != 2
+			and ifnull(parent.manual_receipt_number, '') != ''
+		""",
+		{"book": book},
+		as_dict=True,
+	)
+	for row in used_rows:
+		frappe.db.set_value(
+			"Donation Book Leaf",
+			{
+				"book": book,
+				"book_serial_no": row.book_serial_no,
+				"receipt_number": row.receipt_number,
+			},
+			{
+				"status": "Used",
+				"donor": row.donor,
+				"donation_order": row.donation_order,
+				"payment_mode": row.payment_mode,
+				"manual_receipt_date": row.manual_receipt_date,
+				"journal_entry": row.journal_entry,
+				"accounting_status": row.accounting_status,
+			},
+			update_modified=False,
+		)
 
 
 def validate_donation_book_order_total_matches_return(doc):
@@ -1071,6 +1218,13 @@ def get_coupon_type_from_item(item):
 			return coupon_type
 
 	return None
+
+
+def get_coupon_value_from_item(item):
+	if not item or not frappe.get_meta("Item").has_field("custom_donation_coupon_value"):
+		return None
+
+	return frappe.db.get_value("Item", item, "custom_donation_coupon_value")
 
 
 def is_coupon_item(item):

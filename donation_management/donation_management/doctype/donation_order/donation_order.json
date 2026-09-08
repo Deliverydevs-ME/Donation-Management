@@ -12,11 +12,20 @@
   "donor_cnic",
   "donor_name",
   "referred_by_trustee",
+  "donor_pos_id",
+  "party",
+  "confidential_ref_co",
+  "donor_information_request_status",
+  "requesting_user",
+  "request_date",
+  "request_remarks",
   "donor_program_enrollments_html",
   "donor_column_break",
   "name_on_donation_slip",
   "donation_posting_date",
   "location",
+  "donation_location",
+  "location_assignment",
   "is_mohasil_collection",
   "mohasil_section",
   "mohasil",
@@ -25,7 +34,15 @@
   "manual_receipt_number",
   "mohasil_column_break",
   "manual_receipt_date",
+  "manual_receipt_issued_by",
+  "computerized_receipt",
+  "manual_receipt_reconciliation_status",
   "cash_denominations",
+  "receipt_controls_section",
+  "remarks",
+  "is_donation_print",
+  "esaal_e_sawab_section",
+  "esaal_e_sawab",
   "payment_details_section",
   "company",
   "mode_of_payment",
@@ -35,6 +52,9 @@
   "cheque_number",
   "cheque_deposit_date",
   "pdc_status",
+  "instrument_status",
+  "instrument_proof",
+  "crossing_stamp_confirmed",
   "column_break_urhi",
   "pdc_posted_on",
   "bank_account",
@@ -84,6 +104,10 @@
   "purpose_flags_section",
   "requires_student",
   "requires_prisoner",
+  "cancellation_section",
+  "cancellation_reason",
+  "cancellation_approved_by",
+  "replacement_donation_order",
   "amended_from"
  ],
  "fields": [
@@ -138,6 +162,56 @@
    "read_only": 1
   },
   {
+   "fieldname": "donor_pos_id",
+   "fieldtype": "Data",
+   "label": "Donor POS ID",
+   "fetch_from": "donor_name.customer_pos_id",
+   "read_only": 1,
+   "print_hide": 1,
+   "report_hide": 1
+  },
+  {
+   "fieldname": "party",
+   "fieldtype": "Data",
+   "label": "Party",
+   "print_hide": 1
+  },
+  {
+   "fieldname": "confidential_ref_co",
+   "fieldtype": "Data",
+   "label": "Confidential Ref/C/O",
+   "print_hide": 1,
+   "report_hide": 1
+  },
+  {
+   "fieldname": "donor_information_request_status",
+   "fieldtype": "Select",
+   "label": "Donor Information Request Status",
+   "options": "\nRequested\nProvided\nPartially Provided\nDeclined",
+   "print_hide": 1
+  },
+  {
+   "fieldname": "requesting_user",
+   "fieldtype": "Link",
+   "label": "Requesting User",
+   "options": "User",
+   "read_only": 1,
+   "print_hide": 1
+  },
+  {
+   "fieldname": "request_date",
+   "fieldtype": "Datetime",
+   "label": "Request Date",
+   "read_only": 1,
+   "print_hide": 1
+  },
+  {
+   "fieldname": "request_remarks",
+   "fieldtype": "Small Text",
+   "label": "Request Remarks",
+   "print_hide": 1
+  },
+  {
    "fieldname": "donor_column_break",
    "fieldtype": "Column Break"
   },
@@ -159,6 +233,22 @@
    "in_list_view": 1,
    "label": "Location",
    "options": "Location Type"
+  },
+  {
+   "fieldname": "donation_location",
+   "fieldtype": "Link",
+   "label": "Donation Location",
+   "options": "Donation Location",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "location_assignment",
+   "fieldtype": "Link",
+   "label": "Location Assignment",
+   "options": "Donation Location Assignment",
+   "read_only": 1
   },
   {
    "default": "0",
@@ -218,12 +308,58 @@
    "label": "Manual Receipt Date"
   },
   {
+   "fieldname": "manual_receipt_issued_by",
+   "fieldtype": "Link",
+   "label": "Manual Receipt Issued By",
+   "options": "User"
+  },
+  {
+   "fieldname": "computerized_receipt",
+   "fieldtype": "Link",
+   "label": "Computerized Receipt",
+   "options": "Donation Order",
+   "read_only": 1
+  },
+  {
+   "fieldname": "manual_receipt_reconciliation_status",
+   "fieldtype": "Select",
+   "label": "Manual Receipt Reconciliation Status",
+   "options": "\nMissing\nPending Conversion\nConverted\nCancelled\nDuplicate",
+   "default": "Pending Conversion"
+  },
+  {
    "depends_on": "eval:doc.is_mohasil_collection",
    "fieldname": "cash_denominations",
    "fieldtype": "Table",
    "label": "Cash Denominations",
-   "mandatory_depends_on": "eval:doc.is_mohasil_collection",
    "options": "Cash Denomination"
+  },
+  {
+   "fieldname": "receipt_controls_section",
+   "fieldtype": "Section Break",
+   "label": "Receipt Controls"
+  },
+  {
+   "fieldname": "remarks",
+   "fieldtype": "Small Text",
+   "label": "Remarks"
+  },
+  {
+   "fieldname": "is_donation_print",
+   "fieldtype": "Check",
+   "label": "Is Donation Print",
+   "default": "1"
+  },
+  {
+   "fieldname": "esaal_e_sawab_section",
+   "fieldtype": "Section Break",
+   "label": "Esaal e Sawab"
+  },
+  {
+   "fieldname": "esaal_e_sawab",
+   "fieldtype": "Table",
+   "label": "Esaal e Sawab",
+   "options": "Esaal E Sawab Detail"
   },
   {
    "fieldname": "payment_details_section",
@@ -285,6 +421,25 @@
    "label": "PDC Status",
    "options": "Not Applicable\nPending Deposit\nDeposited",
    "read_only": 1
+  },
+  {
+   "fieldname": "instrument_status",
+   "fieldtype": "Select",
+   "label": "Instrument Status",
+   "options": "\nReceived\nPending Encashment\nEncashed\nBounced/Rejected\nCancelled",
+   "depends_on": "eval:['Cheque', 'Bank Draft'].includes(doc.mode_of_payment)"
+  },
+  {
+   "fieldname": "instrument_proof",
+   "fieldtype": "Attach",
+   "label": "Instrument Proof",
+   "depends_on": "eval:['Cheque', 'Bank Draft'].includes(doc.mode_of_payment)"
+  },
+  {
+   "fieldname": "crossing_stamp_confirmed",
+   "fieldtype": "Check",
+   "label": "Crossing/Stamp Confirmed",
+   "depends_on": "eval:['Cheque', 'Bank Draft'].includes(doc.mode_of_payment)"
   },
   {
    "fieldname": "pdc_posted_on",
@@ -587,6 +742,32 @@
   {
    "fieldname": "column_break_poyv",
    "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "cancellation_section",
+   "fieldtype": "Section Break",
+   "label": "Cancellation Controls",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "cancellation_reason",
+   "fieldtype": "Small Text",
+   "label": "Cancellation Reason",
+   "print_hide": 1
+  },
+  {
+   "fieldname": "cancellation_approved_by",
+   "fieldtype": "Link",
+   "label": "Cancellation Approved By",
+   "options": "User",
+   "print_hide": 1
+  },
+  {
+   "fieldname": "replacement_donation_order",
+   "fieldtype": "Link",
+   "label": "Replacement Donation Order",
+   "options": "Donation Order",
+   "print_hide": 1
   },
   {
    "fieldname": "amended_from",

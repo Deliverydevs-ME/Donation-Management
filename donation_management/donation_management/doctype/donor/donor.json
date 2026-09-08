@@ -12,8 +12,12 @@
   "basic_info",
   "naming_series",
   "customer_type",
+  "registration_classification",
   "customer_name",
+  "donor_uid",
   "donor_phone_number",
+  "whatsapp_number",
+  "whatsapp_number_digits",
   "donor_email",
   "mohasil",
   "is_group",
@@ -22,6 +26,7 @@
   "gender",
   "donor_cnic",
   "parent_donor",
+  "family_relationship",
   "lft",
   "rgt",
   "old_parent",
@@ -32,6 +37,8 @@
   "prospect_name",
   "account_manager",
   "image",
+  "esaal_e_sawab_section",
+  "esaal_e_sawab",
   "defaults_tab",
   "default_currency",
   "default_bank_account",
@@ -46,6 +53,12 @@
   "market_segment",
   "industry",
   "customer_pos_id",
+  "party",
+  "confidential_ref_co",
+  "donor_information_request_status",
+  "requesting_user",
+  "request_date",
+  "request_remarks",
   "website",
   "language",
   "column_break_45",
@@ -136,6 +149,13 @@
    "search_index": 1
   },
   {
+   "fieldname": "donor_uid",
+   "fieldtype": "Data",
+   "label": "Donor UID",
+   "unique": 1,
+   "in_list_view": 1
+  },
+  {
    "fieldname": "donor_email",
    "fieldtype": "Data",
    "in_global_search": 1,
@@ -182,6 +202,13 @@
    "reqd": 1
   },
   {
+   "fieldname": "registration_classification",
+   "fieldtype": "Select",
+   "label": "R/NR Classification",
+   "options": "\nR\nNR",
+   "in_standard_filter": 1
+  },
+  {
    "fieldname": "column_break0",
    "fieldtype": "Column Break",
    "width": "50%"
@@ -212,6 +239,19 @@
    "in_standard_filter": 1,
    "label": "Donor Phone Number",
    "options": "Phone"
+  },
+  {
+   "fieldname": "whatsapp_number",
+   "fieldtype": "Phone",
+   "label": "WhatsApp Number",
+   "options": "Phone"
+  },
+  {
+   "fieldname": "whatsapp_number_digits",
+   "fieldtype": "Data",
+   "label": "WhatsApp Number Digits",
+   "hidden": 1,
+   "read_only": 1
   },
   {
    "fieldname": "donor_phone_digits",
@@ -271,6 +311,17 @@
    "hidden": 1,
    "label": "Image",
    "print_hide": 1
+  },
+  {
+   "fieldname": "esaal_e_sawab_section",
+   "fieldtype": "Section Break",
+   "label": "Esaal e Sawab"
+  },
+  {
+   "fieldname": "esaal_e_sawab",
+   "fieldtype": "Table",
+   "label": "Esaal e Sawab",
+   "options": "Esaal E Sawab Detail"
   },
   {
    "fieldname": "defaults_tab",
@@ -367,6 +418,47 @@
    "print_hide": 1,
    "read_only": 1,
    "report_hide": 1
+  },
+  {
+   "fieldname": "party",
+   "fieldtype": "Data",
+   "label": "Party",
+   "print_hide": 1
+  },
+  {
+   "fieldname": "confidential_ref_co",
+   "fieldtype": "Data",
+   "label": "Confidential Ref/C/O",
+   "print_hide": 1,
+   "report_hide": 1
+  },
+  {
+   "fieldname": "donor_information_request_status",
+   "fieldtype": "Select",
+   "label": "Donor Information Request Status",
+   "options": "\nRequested\nProvided\nPartially Provided\nDeclined",
+   "print_hide": 1
+  },
+  {
+   "fieldname": "requesting_user",
+   "fieldtype": "Link",
+   "label": "Requesting User",
+   "options": "User",
+   "read_only": 1,
+   "print_hide": 1
+  },
+  {
+   "fieldname": "request_date",
+   "fieldtype": "Datetime",
+   "label": "Request Date",
+   "read_only": 1,
+   "print_hide": 1
+  },
+  {
+   "fieldname": "request_remarks",
+   "fieldtype": "Small Text",
+   "label": "Request Remarks",
+   "print_hide": 1
   },
   {
    "fieldname": "website",
@@ -684,6 +776,11 @@
    "label": "Parent Donor",
    "link_filters": "[[\"Donor\", \"is_group\", \"=\", 1]]",
    "options": "Donor"
+  },
+  {
+   "fieldname": "family_relationship",
+   "fieldtype": "Data",
+   "label": "Family Relationship"
   },
   {
    "fieldname": "lft",

@@ -1,0 +1,47 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "field:maktab_name",
+ "creation": "2026-09-07 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "maktab_name",
+  "donation_location",
+  "territory",
+  "responsible_person",
+  "head_count",
+  "status",
+  "financial_section",
+  "fixed_contribution",
+  "frequency",
+  "expected_monthly_cost"
+ ],
+ "fields": [
+  {"fieldname": "maktab_name", "fieldtype": "Data", "label": "Maktab Name", "reqd": 1, "unique": 1},
+  {"fieldname": "donation_location", "fieldtype": "Link", "label": "Donation Location", "options": "Donation Location"},
+  {"fieldname": "territory", "fieldtype": "Link", "label": "Territory", "options": "Territory"},
+  {"fieldname": "responsible_person", "fieldtype": "Link", "label": "Responsible Person", "options": "Employee"},
+  {"fieldname": "head_count", "fieldtype": "Int", "label": "Head Count", "non_negative": 1},
+  {"default": "Active", "fieldname": "status", "fieldtype": "Select", "label": "Status", "options": "Active\nInactive\nClosed"},
+  {"fieldname": "financial_section", "fieldtype": "Section Break", "label": "Financials"},
+  {"fieldname": "fixed_contribution", "fieldtype": "Currency", "label": "Fixed Contribution", "non_negative": 1},
+  {"default": "Monthly", "fieldname": "frequency", "fieldtype": "Select", "label": "Frequency", "options": "Monthly\nQuarterly\nHalf Yearly\nYearly"},
+  {"fieldname": "expected_monthly_cost", "fieldtype": "Currency", "label": "Expected Monthly Cost", "non_negative": 1}
+ ],
+ "links": [],
+ "modified": "2026-09-07 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Donation Management",
+ "name": "Ilaqi Maktab",
+ "owner": "Administrator",
+ "permissions": [
+  {"create": 1, "delete": 1, "email": 1, "export": 1, "print": 1, "read": 1, "report": 1, "role": "System Manager", "share": 1, "write": 1},
+  {"create": 1, "email": 1, "export": 1, "print": 1, "read": 1, "report": 1, "role": "Donation Manager", "share": 1, "write": 1},
+  {"email": 1, "print": 1, "read": 1, "report": 1, "role": "Donation User", "share": 1}
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "maktab_name"
+}

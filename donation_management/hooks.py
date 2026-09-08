@@ -120,6 +120,7 @@ fixtures = [
 
 # before_app_install = "donation_management.utils.before_app_install"
 # after_app_install = "donation_management.utils.after_app_install"
+after_migrate = "donation_management.patches.ensure_enhancement_customizations.execute"
 
 # Integration Cleanup
 # -------------------

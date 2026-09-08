@@ -4,6 +4,9 @@ import frappe
 from frappe.utils import cint, flt, getdate
 
 from donation_management.donation_management.doctype.donor.donor import normalize_phone
+from donation_management.donation_management.doctype.donation_location_assignment.donation_location_assignment import (
+	get_effective_donation_location as get_effective_donation_location_from_assignment,
+)
 
 
 DONOR_FIELDS = [
@@ -13,6 +16,10 @@ DONOR_FIELDS = [
 	"donor_phone_number",
 	"referred_by_trustee",
 	"mohasil",
+	"customer_pos_id",
+	"party",
+	"confidential_ref_co",
+	"donor_information_request_status",
 ]
 
 
@@ -27,6 +34,10 @@ def format_donor_response(donor):
 		"donor_phone_number": donor.donor_phone_number,
 		"referred_by_trustee": donor.referred_by_trustee,
 		"mohasil": donor.mohasil,
+		"donor_pos_id": donor.get("customer_pos_id"),
+		"party": donor.get("party"),
+		"confidential_ref_co": donor.get("confidential_ref_co"),
+		"donor_information_request_status": donor.get("donor_information_request_status"),
 	}
 
 
@@ -80,6 +91,51 @@ def get_donor_details(donor=None):
 
 	donor_details = frappe.db.get_value("Donor", donor, DONOR_FIELDS, as_dict=True)
 	return format_donor_response(donor_details)
+
+
+@frappe.whitelist()
+def get_donor_esaal_e_sawab(donor=None):
+	if not donor:
+		return []
+
+	return frappe.get_all(
+		"Esaal E Sawab Detail",
+		filters={
+			"parenttype": "Donor",
+			"parent": donor,
+			"parentfield": "esaal_e_sawab",
+		},
+		fields=["person_name", "relationship", "remarks"],
+		order_by="idx asc",
+	)
+
+
+@frappe.whitelist()
+def get_effective_donation_location(employee=None, donation_date=None):
+	return get_effective_donation_location_from_assignment(employee, donation_date)
+
+
+@frappe.whitelist()
+def find_family_donors(phone_number=None, address=None):
+	filters = {}
+	phone_digits = normalize_phone(phone_number)
+	if phone_digits:
+		filters["donor_phone_digits"] = phone_digits
+
+	or_filters = []
+	if address:
+		or_filters.append(["Donor", "primary_address", "like", f"%{address}%"])
+
+	if not filters and not or_filters:
+		return []
+
+	return frappe.get_all(
+		"Donor",
+		filters=filters,
+		or_filters=or_filters,
+		fields=["name", "customer_name", "donor_phone_number", "primary_address", "parent_donor", "family_relationship"],
+		limit_page_length=20,
+	)
 
 
 @frappe.whitelist()

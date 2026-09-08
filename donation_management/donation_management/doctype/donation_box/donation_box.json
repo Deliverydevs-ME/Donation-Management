@@ -10,6 +10,12 @@
   "box_code",
   "donation_head",
   "box_shape",
+  "status",
+  "territory",
+  "zone_manager",
+  "mohasil",
+  "first_issuance_approved_by",
+  "location_change_approved_by",
   "amended_from"
  ],
  "fields": [
@@ -34,15 +40,56 @@
    "in_list_view": 1,
    "label": "Donation Head",
    "options": "\nZakat\nAtiya\nSadqa",
-   "reqd": 1
+   "reqd": 1,
+   "default": "Sadqa"
   },
   {
    "fieldname": "box_shape",
-   "fieldtype": "Data",
+   "fieldtype": "Link",
    "in_list_view": 1,
    "label": "Box Shape",
+   "read_only": 0,
+   "reqd": 1,
+   "options": "Box Shape"
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Operational Status",
+   "options": "\nAvailable\nIssued\nCollected\nReceived\nClosed\nCancelled",
+   "default": "Available",
    "read_only": 1,
-   "reqd": 1
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "territory",
+   "fieldtype": "Link",
+   "label": "Territory",
+   "options": "Territory"
+  },
+  {
+   "fieldname": "zone_manager",
+   "fieldtype": "Link",
+   "label": "Zone Manager",
+   "options": "Employee"
+  },
+  {
+   "fieldname": "mohasil",
+   "fieldtype": "Link",
+   "label": "Mohasil",
+   "options": "Employee"
+  },
+  {
+   "fieldname": "first_issuance_approved_by",
+   "fieldtype": "Link",
+   "label": "First Issuance Approved By",
+   "options": "User"
+  },
+  {
+   "fieldname": "location_change_approved_by",
+   "fieldtype": "Link",
+   "label": "Location Change Approved By",
+   "options": "User"
   },
   {
    "fieldname": "amended_from",

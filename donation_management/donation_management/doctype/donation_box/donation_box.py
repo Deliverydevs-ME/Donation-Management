@@ -5,16 +5,10 @@ import frappe
 from frappe.model.document import Document
 
 
-BOX_SHAPES = {
-	"Zakat": "Square",
-	"Atiya": "Triangle",
-	"Sadqa": "Trapezium",
-}
-
-
 class DonationBox(Document):
 	def validate(self):
 		self.validate_box_number()
+		self.set_defaults()
 		self.set_box_shape()
 		self.set_box_code()
 		self.validate_unique_box_number()
@@ -26,14 +20,18 @@ class DonationBox(Document):
 	def on_submit(self):
 		self.create_box_collection()
 
-	def set_box_shape(self):
+	def set_defaults(self):
 		if not self.donation_head:
+			self.donation_head = "Sadqa"
+
+	def set_box_shape(self):
+		if self.box_shape:
 			return
 
-		if self.donation_head not in BOX_SHAPES:
-			frappe.throw(frappe._("Invalid donation head {0}").format(self.donation_head))
-
-		self.box_shape = BOX_SHAPES[self.donation_head]
+		default_shape = frappe.db.get_value("Box Shape", {"enabled": 1}, "name", order_by="creation asc")
+		if not default_shape:
+			frappe.throw(frappe._("Create at least one enabled Box Shape before creating Donation Boxes."))
+		self.box_shape = default_shape
 
 	def set_box_code(self):
 		if self.donation_head and self.box_number:

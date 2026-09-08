@@ -1,0 +1,28 @@
+{
+ "actions": [],
+ "creation": "2026-09-07 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "box_type",
+  "income_account",
+  "cost_center"
+ ],
+ "fields": [
+  {"fieldname": "box_type", "fieldtype": "Select", "in_list_view": 1, "label": "Box Type", "options": "Zakat\nAtiya\nSadqa", "reqd": 1},
+  {"fieldname": "income_account", "fieldtype": "Link", "in_list_view": 1, "label": "Income Account", "options": "Account", "reqd": 1},
+  {"fieldname": "cost_center", "fieldtype": "Link", "label": "Cost Center", "options": "Cost Center"}
+ ],
+ "istable": 1,
+ "links": [],
+ "modified": "2026-09-07 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Donation Management",
+ "name": "Box Type Account Mapping",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

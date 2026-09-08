@@ -1,7 +1,7 @@
 {
  "actions": [],
  "allow_rename": 1,
- "autoname": "BXCL-.##########",
+ "autoname": "BXCL-.####",
  "creation": "2026-04-29 16:22:00",
  "doctype": "DocType",
  "engine": "InnoDB",
@@ -10,6 +10,7 @@
   "action",
   "action_date",
   "status_after",
+  "approval_reference",
   "box_snapshot_section",
   "donation_box",
   "box_number",
@@ -22,8 +23,11 @@
   "donor_location",
   "contact",
   "staff",
+  "collector",
   "collection_snapshot_section",
   "collected_amount",
+  "payment_mode",
+  "donation_order",
   "cash_denominations",
   "journal_entry"
  ],
@@ -40,7 +44,7 @@
    "fieldtype": "Select",
    "in_list_view": 1,
    "label": "Action",
-   "options": "\nIssuance\nCollection\nReissuance",
+   "options": "\nIssuance\nCollection\nReissuance\nReceive\nClose\nCancel",
    "reqd": 1
   },
   {
@@ -55,6 +59,11 @@
    "fieldtype": "Data",
    "in_list_view": 1,
    "label": "Status After"
+  },
+  {
+   "fieldname": "approval_reference",
+   "fieldtype": "Data",
+   "label": "Approval Reference"
   },
   {
    "fieldname": "box_snapshot_section",
@@ -122,6 +131,12 @@
    "label": "Staff"
   },
   {
+   "fieldname": "collector",
+   "fieldtype": "Link",
+   "label": "Collector",
+   "options": "Employee"
+  },
+  {
    "fieldname": "collection_snapshot_section",
    "fieldtype": "Section Break",
    "label": "Collection Snapshot"
@@ -132,6 +147,18 @@
    "in_list_view": 1,
    "label": "Collected Amount",
    "non_negative": 1
+  },
+  {
+   "fieldname": "payment_mode",
+   "fieldtype": "Link",
+   "label": "Payment Mode",
+   "options": "Mode of Payment"
+  },
+  {
+   "fieldname": "donation_order",
+   "fieldtype": "Link",
+   "label": "Donation Order",
+   "options": "Donation Order"
   },
   {
    "fieldname": "cash_denominations",

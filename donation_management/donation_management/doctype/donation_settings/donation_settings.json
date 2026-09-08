@@ -6,7 +6,14 @@
  "field_order": [
   "donor_section",
   "allow_donor_without_phone_or_email",
-  "allow_duplicate_donor_phone"
+  "allow_duplicate_donor_phone",
+  "closing_section",
+  "closing_cutoff_time",
+  "cash_handover_destination",
+  "require_cash_handover_proof",
+  "receipt_timing_policy",
+  "box_section",
+  "box_type_account_mappings"
  ],
  "fields": [
   {
@@ -27,6 +34,44 @@
    "fieldname": "allow_duplicate_donor_phone",
    "fieldtype": "Check",
    "label": "Allow Duplicate Donor Phone Number"
+  },
+  {
+   "fieldname": "closing_section",
+   "fieldtype": "Section Break",
+   "label": "Closing Controls"
+  },
+  {
+   "fieldname": "closing_cutoff_time",
+   "fieldtype": "Time",
+   "label": "Closing Cut-off Time"
+  },
+  {
+   "fieldname": "cash_handover_destination",
+   "fieldtype": "Data",
+   "label": "Cash Handover Destination"
+  },
+  {
+   "fieldname": "require_cash_handover_proof",
+   "fieldtype": "Check",
+   "label": "Require Cash Handover Proof",
+   "default": "0"
+  },
+  {
+   "fieldname": "receipt_timing_policy",
+   "fieldtype": "Select",
+   "label": "Receipt Timing Policy",
+   "options": "\nBefore Handover\nAfter Handover\nAfter Deposit"
+  },
+  {
+   "fieldname": "box_section",
+   "fieldtype": "Section Break",
+   "label": "Box Controls"
+  },
+  {
+   "fieldname": "box_type_account_mappings",
+   "fieldtype": "Table",
+   "label": "Box Type Account Mappings",
+   "options": "Box Type Account Mapping"
   }
  ],
  "issingle": 1,

@@ -1,0 +1,39 @@
+{
+ "actions": [],
+ "autoname": "MPS-.#####",
+ "creation": "2026-09-07 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "ilaqi_maktab",
+  "due_date",
+  "due_amount",
+  "collected_amount",
+  "advance_amount",
+  "outstanding_amount",
+  "status"
+ ],
+ "fields": [
+  {"fieldname": "ilaqi_maktab", "fieldtype": "Link", "label": "Ilaqi Maktab", "options": "Ilaqi Maktab", "reqd": 1},
+  {"fieldname": "due_date", "fieldtype": "Date", "label": "Due Date", "reqd": 1},
+  {"fieldname": "due_amount", "fieldtype": "Currency", "label": "Due Amount", "non_negative": 1, "reqd": 1},
+  {"fieldname": "collected_amount", "fieldtype": "Currency", "label": "Collected Amount", "non_negative": 1},
+  {"fieldname": "advance_amount", "fieldtype": "Currency", "label": "Advance Amount", "non_negative": 1},
+  {"fieldname": "outstanding_amount", "fieldtype": "Currency", "label": "Outstanding Amount", "read_only": 1},
+  {"default": "Pending", "fieldname": "status", "fieldtype": "Select", "label": "Status", "options": "Pending\nPartially Paid\nPaid\nOverdue"}
+ ],
+ "links": [],
+ "modified": "2026-09-07 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Donation Management",
+ "name": "Maktab Payment Schedule",
+ "owner": "Administrator",
+ "permissions": [
+  {"create": 1, "delete": 1, "email": 1, "export": 1, "print": 1, "read": 1, "report": 1, "role": "System Manager", "share": 1, "write": 1},
+  {"create": 1, "email": 1, "export": 1, "print": 1, "read": 1, "report": 1, "role": "Donation Manager", "share": 1, "write": 1}
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "ilaqi_maktab"
+}

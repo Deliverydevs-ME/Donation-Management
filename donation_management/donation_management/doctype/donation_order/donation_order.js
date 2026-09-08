@@ -33,6 +33,8 @@ frappe.ui.form.on("Donation Order", {
 			filters: mohasil_employee_filters,
 		}));
 
+		frm.set_query("donation_location", () => ({}));
+
 		frm.set_query("donation_book_serial_no", () => ({
 			query: "donation_management.donation_management.doctype.book.book.get_mohasil_donation_book_serials",
 			filters: {
@@ -141,6 +143,7 @@ frappe.ui.form.on("Donation Order", {
 
 	refresh(frm) {
 		add_donation_order_action_buttons(frm);
+		add_esaal_e_sawab_action(frm);
 		hide_legacy_purpose_fields(frm);
 		toggle_purpose_grid_debit_account(frm);
 		toggle_parent_debit_account(frm);
@@ -217,10 +220,15 @@ frappe.ui.form.on("Donation Order", {
 		set_donor_details_from_name(frm);
 	},
 
+	donation_posting_date(frm) {
+		set_effective_donation_location(frm);
+	},
+
 	is_mohasil_collection(frm) {
 		toggle_mohasil_details(frm);
 		if (frm.doc.is_mohasil_collection) {
 			set_mohasil_from_selected_donor(frm);
+			set_effective_donation_location(frm);
 		}
 	},
 
@@ -231,6 +239,7 @@ frappe.ui.form.on("Donation Order", {
 		if (frm.doc.donation_book) {
 			frm.set_value("donation_book", "");
 		}
+		set_effective_donation_location(frm);
 	},
 
 	donation_book_serial_no(frm) {
@@ -316,6 +325,24 @@ frappe.ui.form.on("Donation Order", {
 	},
 
 });
+
+function add_esaal_e_sawab_action(frm) {
+	if (frm.doc.docstatus !== 0 || !frm.doc.donor_name) {
+		return;
+	}
+
+	frm.add_custom_button(__("Refresh from Donor"), () => {
+		if ((frm.doc.esaal_e_sawab || []).length) {
+			frappe.confirm(
+				__("Existing Esaal e Sawab rows will be replaced from the selected Donor. Continue?"),
+				() => load_esaal_e_sawab_from_donor(frm, true)
+			);
+			return;
+		}
+
+		load_esaal_e_sawab_from_donor(frm, true);
+	}, __("Esaal e Sawab"));
+}
 
 frappe.ui.form.on("Cash Denomination", {
 	denomination(frm, cdt, cdn) {
@@ -1110,6 +1137,10 @@ function set_donor_details_from_name(frm) {
 			set_value_if_changed(frm, "donor_email", donor.donor_email || "");
 			set_value_if_changed(frm, "donor_phone_number", donor.donor_phone_number || "");
 			set_value_if_changed(frm, "referred_by_trustee", donor.referred_by_trustee || "");
+			set_value_if_changed(frm, "donor_pos_id", donor.donor_pos_id || "");
+			set_value_if_changed(frm, "party", donor.party || "");
+			set_value_if_changed(frm, "confidential_ref_co", donor.confidential_ref_co || "");
+			load_esaal_e_sawab_from_donor(frm, false);
 			if (frm.doc.is_mohasil_collection && !frm.doc.mohasil) {
 				set_value_if_changed(frm, "mohasil", donor.mohasil || "");
 			}
@@ -1127,7 +1158,7 @@ function toggle_mohasil_details(frm) {
 	frm.toggle_display("mohasil_section", show_mohasil_details);
 	frm.toggle_reqd("mohasil", show_mohasil_details);
 	frm.toggle_reqd("donation_book_serial_no", show_mohasil_details);
-	frm.toggle_reqd("cash_denominations", show_mohasil_details);
+	frm.toggle_reqd("cash_denominations", false);
 	toggle_purpose_receipt_number_column(frm, show_mohasil_details);
 
 	if (!show_mohasil_details) {
@@ -1136,6 +1167,7 @@ function toggle_mohasil_details(frm) {
 		set_value_if_changed(frm, "donation_book", "");
 		set_value_if_changed(frm, "manual_receipt_number", "");
 		set_value_if_changed(frm, "manual_receipt_date", "");
+		set_value_if_changed(frm, "location_assignment", "");
 		clear_purpose_receipt_numbers(frm);
 		frm.clear_table("cash_denominations");
 		frm.refresh_field("cash_denominations");
@@ -1254,7 +1286,55 @@ function set_mohasil_from_selected_donor(frm) {
 		const mohasil = response && response.message && response.message.mohasil;
 		if (frm.doc.is_mohasil_collection && !frm.doc.mohasil && mohasil) {
 			set_value_if_changed(frm, "mohasil", mohasil);
+			set_effective_donation_location(frm);
 		}
+	});
+}
+
+function set_effective_donation_location(frm) {
+	if (!cint(frm.doc.is_mohasil_collection) || !frm.doc.mohasil || !frm.doc.donation_posting_date) {
+		return;
+	}
+
+	frappe.call({
+		method: "donation_management.donation_management.api.get_effective_donation_location",
+		args: {
+			employee: frm.doc.mohasil,
+			donation_date: frm.doc.donation_posting_date,
+		},
+		callback(response) {
+			const assignment = response.message || {};
+			set_value_if_changed(frm, "donation_location", assignment.donation_location || "");
+			set_value_if_changed(frm, "location_assignment", assignment.assignment || "");
+		},
+	});
+}
+
+function load_esaal_e_sawab_from_donor(frm, force) {
+	if (!frm.doc.donor_name || frm.doc.docstatus !== 0) {
+		return;
+	}
+
+	if (!force && (frm.doc.esaal_e_sawab || []).length) {
+		return;
+	}
+
+	frappe.call({
+		method: "donation_management.donation_management.api.get_donor_esaal_e_sawab",
+		args: {
+			donor: frm.doc.donor_name,
+		},
+		callback(response) {
+			const rows = response.message || [];
+			frm.clear_table("esaal_e_sawab");
+			rows.forEach((row) => {
+				const child = frm.add_child("esaal_e_sawab");
+				child.person_name = row.person_name;
+				child.relationship = row.relationship;
+				child.remarks = row.remarks;
+			});
+			frm.refresh_field("esaal_e_sawab");
+		},
 	});
 }
 

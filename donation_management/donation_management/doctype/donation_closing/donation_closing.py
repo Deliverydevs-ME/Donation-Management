@@ -12,6 +12,7 @@ class DonationClosing(Document):
 	def validate(self):
 		self.set_company_default()
 		self.set_prepared_by()
+		self.set_cashier()
 		self.set_totals()
 		self.validate_closing_details()
 
@@ -19,11 +20,16 @@ class DonationClosing(Document):
 		if not self.prepared_by:
 			self.prepared_by = frappe.session.user
 
+	def set_cashier(self):
+		if not self.cashier:
+			self.cashier = self.prepared_by or frappe.session.user
+
 	def on_submit(self):
 		if not self.closing_details:
 			frappe.throw(frappe._("Add at least one pending cash donation before submitting."))
 		if self.status != "Received" or not self.received_by:
 			frappe.throw(frappe._("Donation Closing must be received before submission."))
+		self.validate_cash_handover()
 
 		self.status = "Deposited"
 		self.submitted_by = frappe.session.user
@@ -37,6 +43,28 @@ class DonationClosing(Document):
 		self.status = "Cancelled"
 		self.db_set("status", self.status, update_modified=False)
 		self.reset_source_deposit_status()
+
+	def validate_cash_handover(self):
+		if not self.total_amount:
+			return
+
+		if not self.cash_handover:
+			frappe.throw(frappe._("Cash Handover is required before submitting Donation Closing."))
+
+		handover = frappe.db.get_value(
+			"Donation Cash Handover",
+			self.cash_handover,
+			["docstatus", "status", "amount", "variance"],
+			as_dict=True,
+		)
+		if not handover:
+			frappe.throw(frappe._("Cash Handover {0} was not found.").format(self.cash_handover))
+		if handover.docstatus != 1 or handover.status != "Received":
+			frappe.throw(frappe._("Cash Handover must be submitted and Received before closing."))
+		if flt(handover.amount) < flt(self.total_amount):
+			frappe.throw(frappe._("Cash Handover Amount cannot be less than Donation Closing total."))
+		if flt(handover.variance):
+			frappe.throw(frappe._("Cash Handover variance must be resolved before closing."))
 
 	def set_company_default(self):
 		if not self.company:
@@ -75,6 +103,7 @@ class DonationClosing(Document):
 			self.company,
 			closing_date=closing_date,
 			exclude_closing=self.name,
+			cashier=get_fetch_cashier(),
 		)
 		self.closing_details = []
 
@@ -170,17 +199,23 @@ def get_closing_details_payload(doc):
 	]
 
 
-def get_pending_cash_donations(company=None, closing_date=None, exclude_closing=None):
+def get_fetch_cashier():
+	if frappe.has_role(("Finance Manager", "CFO", "Donation Manager", "System Manager")):
+		return None
+	return frappe.session.user
+
+
+def get_pending_cash_donations(company=None, closing_date=None, exclude_closing=None, cashier=None):
 	company = company or get_default_company()
 	closing_date = getdate(closing_date) if closing_date else None
 	pending = []
-	pending.extend(get_pending_donation_orders(company, closing_date, exclude_closing))
+	pending.extend(get_pending_donation_orders(company, closing_date, exclude_closing, cashier=cashier))
 	pending.extend(get_pending_box_collections(company, closing_date, exclude_closing))
 	pending.extend(get_pending_books(company, closing_date, exclude_closing))
 	return pending
 
 
-def get_pending_donation_orders(company, closing_date=None, exclude_closing=None):
+def get_pending_donation_orders(company, closing_date=None, exclude_closing=None, cashier=None):
 	filters = {
 		"docstatus": 1,
 		"company": company,
@@ -195,6 +230,8 @@ def get_pending_donation_orders(company, closing_date=None, exclude_closing=None
 				"{0} 23:59:59".format(closing_date),
 			],
 		]
+	if cashier:
+		filters["owner"] = cashier
 
 	orders = frappe.get_all(
 		"Donation Order",

@@ -1,0 +1,50 @@
+{
+ "actions": [],
+ "autoname": "DBL-.#####",
+ "creation": "2026-09-07 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "book",
+  "book_serial_no",
+  "receipt_number",
+  "status",
+  "donor",
+  "donation_order",
+  "payment_mode",
+  "manual_receipt_date",
+  "journal_entry",
+  "accounting_status",
+  "returned_amount",
+  "remarks"
+ ],
+ "fields": [
+  {"fieldname": "book", "fieldtype": "Link", "label": "Book", "options": "Book", "reqd": 1},
+  {"fieldname": "book_serial_no", "fieldtype": "Link", "label": "Book Serial No", "options": "Serial No"},
+  {"fieldname": "receipt_number", "fieldtype": "Data", "label": "Receipt Number", "reqd": 1},
+  {"default": "Pending", "fieldname": "status", "fieldtype": "Select", "label": "Status", "options": "Received\nUsed\nPending\nCancelled\nDestroyed\nMissing\nReturned Unused", "reqd": 1},
+  {"fieldname": "donor", "fieldtype": "Link", "label": "Donor", "options": "Donor"},
+  {"fieldname": "donation_order", "fieldtype": "Link", "label": "Donation Order", "options": "Donation Order"},
+  {"fieldname": "payment_mode", "fieldtype": "Link", "label": "Payment Mode", "options": "Mode of Payment"},
+  {"fieldname": "manual_receipt_date", "fieldtype": "Date", "label": "Manual Receipt Date"},
+  {"fieldname": "journal_entry", "fieldtype": "Link", "label": "Journal Entry", "options": "Journal Entry"},
+  {"fieldname": "accounting_status", "fieldtype": "Select", "label": "Accounting Status", "options": "\nNot Posted\nPosted\nCancelled"},
+  {"fieldname": "returned_amount", "fieldtype": "Currency", "label": "Returned Amount", "non_negative": 1},
+  {"fieldname": "remarks", "fieldtype": "Small Text", "label": "Remarks"}
+ ],
+ "links": [],
+ "modified": "2026-09-07 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Donation Management",
+ "name": "Donation Book Leaf",
+ "owner": "Administrator",
+ "permissions": [
+  {"create": 1, "delete": 1, "email": 1, "export": 1, "print": 1, "read": 1, "report": 1, "role": "System Manager", "share": 1, "write": 1},
+  {"create": 1, "email": 1, "export": 1, "print": 1, "read": 1, "report": 1, "role": "Donation Manager", "share": 1, "write": 1},
+  {"email": 1, "export": 1, "print": 1, "read": 1, "report": 1, "role": "Donation User", "share": 1}
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "receipt_number"
+}

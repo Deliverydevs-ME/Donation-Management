@@ -123,7 +123,7 @@ def get_donation_order_receipts(company, from_date, to_date, accounting_status):
 		select
 			donation_order.name,
 			donation_order.donation_posting_date as operational_date,
-			donation_order.location,
+			coalesce(donation_order.donation_location, donation_order.location) as location,
 			donation_order.mode_of_payment,
 			donation_order.donation_amount,
 			donation_order.accounting_status,

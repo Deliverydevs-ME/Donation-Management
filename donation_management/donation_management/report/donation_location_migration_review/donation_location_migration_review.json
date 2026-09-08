@@ -1,0 +1,24 @@
+{
+ "add_total_row": 0,
+ "creation": "2026-09-07 00:00:00.000000",
+ "disable_prepared_report": 0,
+ "doctype": "Report",
+ "is_standard": "Yes",
+ "modified": "2026-09-07 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Donation Management",
+ "name": "Donation Location Migration Review",
+ "owner": "Administrator",
+ "prepared_report": 0,
+ "ref_doctype": "Donation Order",
+ "report_name": "Donation Location Migration Review",
+ "report_type": "Script Report",
+ "roles": [
+  {
+   "role": "Donation Manager"
+  },
+  {
+   "role": "System Manager"
+  }
+ ]
+}

@@ -9,6 +9,9 @@ from donation_management.donation_management.doctype.donor.donor import (
 	normalize_phone,
 	validate_mohasil_employee,
 )
+from donation_management.donation_management.doctype.donation_location_assignment.donation_location_assignment import (
+	get_assignment_for_date,
+)
 from donation_management.donation_management.doctype.donor_program_enrollment.donor_program_enrollment import (
 	upsert_donor_program_enrollment,
 )
@@ -71,6 +74,8 @@ class DonationOrder(Document):
 		self.set_company_defaults()
 		self.set_donor_details()
 		self.validate_mohasil_details()
+		self.set_and_validate_donation_location()
+		self.set_esaal_e_sawab_snapshot()
 		self.set_purpose_details()
 		self.validate_donation_book_receipts()
 		self.set_previous_sponsorship_balance()
@@ -81,11 +86,13 @@ class DonationOrder(Document):
 		self.validate_cash_denominations()
 		self.set_accounting_details()
 		self.set_pdc_details()
+		self.set_donor_information_request_audit()
 		self.validate_accounting_details()
 		self.validate_posted_accounting_locked()
 
 	def on_update(self):
 		self.update_linked_donation_book_usage()
+		self.create_instrument_event_if_changed()
 
 	def on_submit(self):
 		if self.is_pending_pdc() and getdate(self.cheque_deposit_date) > getdate(today()):
@@ -107,6 +114,9 @@ class DonationOrder(Document):
 	def on_cancel(self):
 		self.cancel_linked_journal_entry()
 		self.update_linked_donation_book_usage()
+
+	def before_cancel(self):
+		self.validate_cancellation_controls()
 
 	def on_trash(self):
 		self.cancel_linked_journal_entry()
@@ -165,6 +175,9 @@ class DonationOrder(Document):
 				"donor_phone_digits",
 				"referred_by_trustee",
 				"mohasil",
+				"customer_pos_id",
+				"party",
+				"confidential_ref_co",
 			],
 			as_dict=True,
 		)
@@ -192,10 +205,73 @@ class DonationOrder(Document):
 		self.donor_email = donor.donor_email or self.donor_email
 		self.donor_phone_number = donor.donor_phone_number
 		self.referred_by_trustee = donor.referred_by_trustee
+		if hasattr(self, "donor_pos_id"):
+			self.donor_pos_id = donor.customer_pos_id
+		if hasattr(self, "party"):
+			self.party = donor.party
+		if hasattr(self, "confidential_ref_co"):
+			self.confidential_ref_co = donor.confidential_ref_co
 		if cint(self.is_mohasil_collection) and not self.mohasil:
 			self.mohasil = donor.mohasil
 		if not self.name_on_donation_slip:
 			self.name_on_donation_slip = donor.customer_name
+
+	def set_and_validate_donation_location(self):
+		posting_date = getdate(self.donation_posting_date)
+
+		if cint(self.is_mohasil_collection):
+			if not self.mohasil:
+				frappe.throw(frappe._("Mohasil is required for Mohasil Collection."))
+
+			assignment = get_assignment_for_date(self.mohasil, posting_date)
+			if not assignment:
+				frappe.throw(
+					frappe._("No active Donation Location Assignment found for Mohasil {0} on {1}.").format(
+						self.mohasil,
+						frappe.format_value(posting_date, {"fieldtype": "Date"}),
+					)
+				)
+
+			if self.donation_location and self.donation_location != assignment.donation_location:
+				frappe.throw(
+					frappe._("Donation Location must be {0} for Mohasil {1} on {2}.").format(
+						assignment.donation_location,
+						self.mohasil,
+						frappe.format_value(posting_date, {"fieldtype": "Date"}),
+					)
+				)
+
+			self.donation_location = assignment.donation_location
+			self.location_assignment = assignment.name
+			return
+
+		self.location_assignment = None
+		if not self.donation_location:
+			frappe.throw(frappe._("Donation Location is required."))
+
+	def set_esaal_e_sawab_snapshot(self):
+		if not self.donor_name or self.get("esaal_e_sawab"):
+			return
+
+		rows = frappe.get_all(
+			"Esaal E Sawab Detail",
+			filters={
+				"parenttype": "Donor",
+				"parent": self.donor_name,
+				"parentfield": "esaal_e_sawab",
+			},
+			fields=["person_name", "relationship", "remarks"],
+			order_by="idx asc",
+		)
+		for row in rows:
+			self.append(
+				"esaal_e_sawab",
+				{
+					"person_name": row.person_name,
+					"relationship": row.relationship,
+					"remarks": row.remarks,
+				},
+			)
 
 	def validate_mohasil_details(self):
 		if self.manual_receipt_number:
@@ -537,7 +613,7 @@ class DonationOrder(Document):
 			return
 
 		if not self.cash_denominations:
-			frappe.throw(frappe._("Cash Denominations are required for Mohasil Collection."))
+			return
 
 		denomination_total = 0
 		has_note_count = False
@@ -555,7 +631,7 @@ class DonationOrder(Document):
 				has_note_count = True
 
 		if not has_note_count:
-			frappe.throw(frappe._("At least one denomination count is required for Mohasil Collection."))
+			return
 
 		expected_amount = flt(self.donation_amount)
 		if flt(denomination_total) != expected_amount:
@@ -565,6 +641,13 @@ class DonationOrder(Document):
 					frappe.format_value(expected_amount, {"fieldtype": "Currency"}),
 				)
 			)
+
+	def validate_cancellation_controls(self):
+		if not self.cancellation_reason:
+			frappe.throw(frappe._("Cancellation Reason is required before cancelling Donation Order."))
+
+		if not self.cancellation_approved_by:
+			frappe.throw(frappe._("Cancellation Approved By is required before cancelling Donation Order."))
 
 	def set_bank_deposit_status(self):
 		if self.mode_of_payment_type == "Cash" and self.accounting_status == "Posted":
@@ -1234,6 +1317,7 @@ class DonationOrder(Document):
 			self.cheque_deposit_date = None
 			self.pdc_status = PDC_STATUS_NOT_APPLICABLE
 			self.pdc_posted_on = None
+			self.instrument_status = None
 			return
 
 		if not self.cheque_number:
@@ -1251,6 +1335,42 @@ class DonationOrder(Document):
 
 		self.pdc_status = PDC_STATUS_PENDING
 		self.accounting_status = "Not Posted"
+		if not self.instrument_status:
+			self.instrument_status = "Pending Encashment"
+
+	def set_donor_information_request_audit(self):
+		if not self.donor_information_request_status:
+			self.requesting_user = None
+			self.request_date = None
+			return
+
+		previous = self.get_doc_before_save()
+		if previous and previous.donor_information_request_status == self.donor_information_request_status:
+			return
+
+		self.requesting_user = frappe.session.user
+		self.request_date = now_datetime()
+
+	def create_instrument_event_if_changed(self):
+		if not self.instrument_status or self.mode_of_payment not in ("Cheque", "Bank Draft"):
+			return
+
+		previous = self.get_doc_before_save()
+		if previous and previous.instrument_status == self.instrument_status:
+			return
+
+		event = frappe.get_doc(
+			{
+				"doctype": "Donation Instrument Event",
+				"donation_order": self.name,
+				"event_status": self.instrument_status,
+				"user": frappe.session.user,
+				"proof": self.instrument_proof,
+				"crossing_stamp_confirmed": self.crossing_stamp_confirmed,
+				"remarks": self.remarks,
+			}
+		)
+		event.insert(ignore_permissions=True)
 
 	def get_allowed_debit_account_types(self):
 		if self.mode_of_payment_type == "Cash":

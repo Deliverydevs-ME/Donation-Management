@@ -33,3 +33,4 @@ donation_management.patches.set_group_for_donor_types
 donation_management.patches.remove_book_list_doctypes
 donation_management.patches.backfill_book_serial_numbers
 donation_management.patches.backfill_book_receipt_usage
+donation_management.patches.ensure_enhancement_customizations

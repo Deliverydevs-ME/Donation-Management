@@ -4,6 +4,7 @@
 import re
 
 import frappe
+from frappe.utils import now_datetime
 from frappe.utils import cint
 from frappe.utils.nestedset import NestedSet
 
@@ -53,6 +54,8 @@ class Donor(NestedSet):
 		self.validate_phone_not_used_by_trustee()
 		self.validate_unique_donor_email()
 		self.validate_mohasil()
+		self.set_whatsapp_digits()
+		self.set_donor_information_request_audit()
 
 	def on_update(self):
 		super().on_update()
@@ -196,6 +199,25 @@ class Donor(NestedSet):
 			return
 
 		validate_mohasil_employee(self.mohasil, "Mohasil")
+
+	def set_whatsapp_digits(self):
+		if self.whatsapp_number:
+			self.whatsapp_number_digits = normalize_phone(self.whatsapp_number) or None
+		else:
+			self.whatsapp_number_digits = None
+
+	def set_donor_information_request_audit(self):
+		if not self.donor_information_request_status:
+			self.requesting_user = None
+			self.request_date = None
+			return
+
+		previous = self.get_doc_before_save()
+		if previous and previous.donor_information_request_status == self.donor_information_request_status:
+			return
+
+		self.requesting_user = frappe.session.user
+		self.request_date = now_datetime()
 
 
 def normalize_cnic(cnic):
