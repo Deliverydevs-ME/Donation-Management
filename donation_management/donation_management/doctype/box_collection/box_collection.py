@@ -127,6 +127,8 @@ class BoxCollection(Document):
 		care_of_trustee=None,
 		care_of_donor=None,
 		deployment_officer=None,
+		approval_reference=None,
+		approved_by=None,
 	):
 		self.issue_box(
 			action_type="Issuance",
@@ -139,6 +141,8 @@ class BoxCollection(Document):
 			care_of_trustee=care_of_trustee,
 			care_of_donor=care_of_donor,
 			deployment_officer=deployment_officer,
+			approval_reference=approval_reference,
+			approved_by=approved_by,
 		)
 		return "Assignment date set"
 
@@ -154,6 +158,8 @@ class BoxCollection(Document):
 		care_of_trustee=None,
 		care_of_donor=None,
 		deployment_officer=None,
+		approval_reference=None,
+		approved_by=None,
 	):
 		self.issue_box(
 			action_type="Reissuance",
@@ -166,6 +172,8 @@ class BoxCollection(Document):
 			care_of_trustee=care_of_trustee,
 			care_of_donor=care_of_donor,
 			deployment_officer=deployment_officer,
+			approval_reference=approval_reference,
+			approved_by=approved_by,
 		)
 		return "Reassignment date set"
 
@@ -181,6 +189,8 @@ class BoxCollection(Document):
 		care_of_trustee=None,
 		care_of_donor=None,
 		deployment_officer=None,
+		approval_reference=None,
+		approved_by=None,
 	):
 		self.ensure_submitted()
 
@@ -190,6 +200,7 @@ class BoxCollection(Document):
 		if action_type == "Reissuance" and self.status != "Collected":
 			frappe.throw(frappe._("Only Collected boxes can be reissued."))
 
+		previous_location = self.donation_location
 		self.donation_location = donation_location or self.donation_location
 		self.location_type = location_type or self.location_type
 		self.location_name = location_name or self.location_name
@@ -203,6 +214,13 @@ class BoxCollection(Document):
 		self.populate_location_from_master(force=True)
 
 		self.validate_assignment_details()
+		if self.requires_issue_approval(action_type, previous_location):
+			if not approval_reference:
+				frappe.throw(frappe._("Approval Reference is required for {0}.").format(action_type))
+			if not approved_by:
+				frappe.throw(frappe._("Approved By is required for {0}.").format(action_type))
+			self.approval_reference = approval_reference
+			self.approved_by = approved_by
 		self.status = "Issued"
 		self.assignment_date = today()
 		self.collection_date = None
@@ -211,6 +229,11 @@ class BoxCollection(Document):
 		self.flags.box_collection_action = True
 		self.save(ignore_permissions=True)
 		self.create_action_log(action_type)
+
+	def requires_issue_approval(self, action_type, previous_location=None):
+		if action_type == "Issuance":
+			return True
+		return bool(previous_location and self.donation_location and previous_location != self.donation_location)
 
 	@frappe.whitelist()
 	def set_collection_date(
@@ -276,6 +299,51 @@ class BoxCollection(Document):
 		)
 		frappe.db.set_value("Box Collection Log", log_name, "journal_entry", journal_entry, update_modified=False)
 		return "Collection date set"
+
+	@frappe.whitelist()
+	def receive_box(self):
+		self.ensure_submitted()
+		if self.status != "Collected":
+			frappe.throw(frappe._("Only Collected boxes can be received."))
+
+		self.status = "Received"
+		self.received_by = frappe.session.user
+		self.received_on = now_datetime()
+		self.flags.box_collection_action = True
+		self.save(ignore_permissions=True)
+		self.create_action_log("Receive")
+		return "Box received"
+
+	@frappe.whitelist()
+	def close_box(self):
+		self.ensure_submitted()
+		if self.status != "Received":
+			frappe.throw(frappe._("Only Received boxes can be closed."))
+
+		self.status = "Closed"
+		self.closed_by = frappe.session.user
+		self.closed_on = now_datetime()
+		self.flags.box_collection_action = True
+		self.save(ignore_permissions=True)
+		self.create_action_log("Close")
+		return "Box closed"
+
+	@frappe.whitelist()
+	def cancel_box(self, reason=None):
+		self.ensure_submitted()
+		if self.status == "Cancelled":
+			return "Box already cancelled"
+		if not reason:
+			frappe.throw(frappe._("Cancellation Reason is required."))
+
+		self.status = "Cancelled"
+		self.cancellation_reason = reason
+		self.cancelled_by = frappe.session.user
+		self.cancelled_on = now_datetime()
+		self.flags.box_collection_action = True
+		self.save(ignore_permissions=True)
+		self.create_action_log("Cancel")
+		return "Box cancelled"
 
 	def ensure_submitted(self):
 		if self.docstatus != 1:
@@ -397,7 +465,13 @@ class BoxCollection(Document):
 				"donor_location": self.donor_location,
 				"contact": self.contact,
 				"staff": staff,
+				"collector": self.collection_office if action_type == "Collection" else None,
+				"approval_reference": self.approval_reference,
+				"approved_by": self.approved_by,
 				"collected_amount": self.collected_amount if action_type == "Collection" else 0,
+				"mode_of_payment": self.mode_of_payment,
+				"payment_mode": self.mode_of_payment,
+				"donation_order": self.donation_order,
 				"cash_denominations": denomination_rows or [],
 			}
 		).insert(ignore_permissions=True)

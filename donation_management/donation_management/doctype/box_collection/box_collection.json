@@ -7,27 +7,26 @@
  "engine": "InnoDB",
  "field_order": [
   "box_number",
-  "status",
-  "column_break_zbat",
   "box_code",
   "donation_head",
   "box_shape",
+  "status",
   "section_break_gjgj",
   "donation_location",
-  "location_type",
-  "location_name",
-  "column_break_jdck",
-  "contact",
-  "contact_number",
-  "donor_location",
   "care_of_section",
   "care_of_trustee",
   "care_of_donor",
   "column_break_guwg",
-  "deployment_officer",
   "assignment_date",
-  "collection_office",
   "collection_date",
+  "deployment_officer",
+  "column_break_nypz",
+  "collection_office",
+  "amended_from",
+  "donor_location",
+  "location_type",
+  "location_name",
+  "contact",
   "collected_amount",
   "accounting_section",
   "company",
@@ -38,8 +37,20 @@
   "accounting_cost_center",
   "journal_entry",
   "accounting_status",
-  "column_break_nypz",
-  "amended_from"
+  "approval_section",
+  "approval_reference",
+  "approved_by",
+  "received_by",
+  "received_on",
+  "closed_by",
+  "closed_on",
+  "cancelled_by",
+  "cancelled_on",
+  "cancellation_reason",
+  "donation_order",
+  "column_break_zbat",
+  "contact_number",
+  "column_break_jdck"
  ],
  "fields": [
   {
@@ -85,7 +96,7 @@
    "fieldtype": "Select",
    "in_list_view": 1,
    "label": "Status",
-   "options": "Available\nIssued\nCollected",
+   "options": "Available\nIssued\nCollected\nReceived\nClosed\nCancelled",
    "read_only": 1
   },
   {
@@ -275,6 +286,82 @@
    "label": "Accounting Status",
    "options": "\nNot Posted\nPosted\nCancelled",
    "read_only": 1
+  },
+  {
+   "fieldname": "approval_section",
+   "fieldtype": "Section Break",
+   "label": "Approval and Lifecycle"
+  },
+  {
+   "fieldname": "approval_reference",
+   "fieldtype": "Data",
+   "label": "Approval Reference",
+   "allow_on_submit": 1
+  },
+  {
+   "fieldname": "approved_by",
+   "fieldtype": "Link",
+   "label": "Approved By",
+   "options": "User",
+   "allow_on_submit": 1
+  },
+  {
+   "fieldname": "received_by",
+   "fieldtype": "Link",
+   "label": "Received By",
+   "options": "User",
+   "read_only": 1,
+   "allow_on_submit": 1
+  },
+  {
+   "fieldname": "received_on",
+   "fieldtype": "Datetime",
+   "label": "Received On",
+   "read_only": 1,
+   "allow_on_submit": 1
+  },
+  {
+   "fieldname": "closed_by",
+   "fieldtype": "Link",
+   "label": "Closed By",
+   "options": "User",
+   "read_only": 1,
+   "allow_on_submit": 1
+  },
+  {
+   "fieldname": "closed_on",
+   "fieldtype": "Datetime",
+   "label": "Closed On",
+   "read_only": 1,
+   "allow_on_submit": 1
+  },
+  {
+   "fieldname": "cancelled_by",
+   "fieldtype": "Link",
+   "label": "Cancelled By",
+   "options": "User",
+   "read_only": 1,
+   "allow_on_submit": 1
+  },
+  {
+   "fieldname": "cancelled_on",
+   "fieldtype": "Datetime",
+   "label": "Cancelled On",
+   "read_only": 1,
+   "allow_on_submit": 1
+  },
+  {
+   "fieldname": "cancellation_reason",
+   "fieldtype": "Small Text",
+   "label": "Cancellation Reason",
+   "allow_on_submit": 1
+  },
+  {
+   "fieldname": "donation_order",
+   "fieldtype": "Link",
+   "label": "Donation Order",
+   "options": "Donation Order",
+   "allow_on_submit": 1
   },
   {
    "fieldname": "column_break_zbat",

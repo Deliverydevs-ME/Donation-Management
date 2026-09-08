@@ -87,6 +87,15 @@ frappe.ui.form.on("Box Collection", {
 		if (frm.doc.status === "Issued") {
 			frm.add_custom_button(__("Collection"), () => show_collection_dialog(frm), __("Actions"));
 		}
+		if (frm.doc.status === "Collected") {
+			frm.add_custom_button(__("Receive"), () => run_simple_box_action(frm, "receive_box", __("Receive this box?")), __("Actions"));
+		}
+		if (frm.doc.status === "Received") {
+			frm.add_custom_button(__("Close"), () => run_simple_box_action(frm, "close_box", __("Close this box?")), __("Actions"));
+		}
+		if (!["Closed", "Cancelled"].includes(frm.doc.status)) {
+			frm.add_custom_button(__("Cancel Box"), () => show_cancel_dialog(frm), __("Actions"));
+		}
 	},
 
 	donation_location(frm) {
@@ -175,6 +184,26 @@ function show_assignment_dialog(frm, title, method) {
 					filters: mohasil_employee_filters,
 				}),
 			},
+			{
+				fieldname: "approval_section",
+				fieldtype: "Section Break",
+				label: __("Approval"),
+			},
+			{
+				fieldname: "approval_reference",
+				fieldtype: "Data",
+				label: __("Approval Reference"),
+				reqd: 1,
+				default: frm.doc.approval_reference,
+			},
+			{
+				fieldname: "approved_by",
+				fieldtype: "Link",
+				label: __("Approved By"),
+				options: "User",
+				reqd: 1,
+				default: frm.doc.approved_by,
+			},
 		],
 		primary_action_label: title,
 		primary_action(values) {
@@ -185,6 +214,34 @@ function show_assignment_dialog(frm, title, method) {
 		},
 	});
 
+	dialog.show();
+}
+
+function run_simple_box_action(frm, method, confirmation) {
+	frappe.confirm(confirmation, () => {
+		frm.call(method).then(() => frm.reload_doc());
+	});
+}
+
+function show_cancel_dialog(frm) {
+	const dialog = new frappe.ui.Dialog({
+		title: __("Cancel Box"),
+		fields: [
+			{
+				fieldname: "reason",
+				fieldtype: "Small Text",
+				label: __("Reason"),
+				reqd: 1,
+			},
+		],
+		primary_action_label: __("Cancel Box"),
+		primary_action(values) {
+			frm.call("cancel_box", { reason: values.reason }).then(() => {
+				dialog.hide();
+				frm.reload_doc();
+			});
+		},
+	});
 	dialog.show();
 }
 

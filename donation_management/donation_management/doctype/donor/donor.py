@@ -59,6 +59,7 @@ class Donor(NestedSet):
 
 	def on_update(self):
 		super().on_update()
+		self.log_confidential_reference_changes()
 
 	def set_donor_type(self):
 		if self.customer_type not in VALID_DONOR_TYPES:
@@ -218,6 +219,14 @@ class Donor(NestedSet):
 
 		self.requesting_user = frappe.session.user
 		self.request_date = now_datetime()
+
+	def log_confidential_reference_changes(self):
+		try:
+			from donation_management.donation_management.confidential import log_confidential_changes
+
+			log_confidential_changes(self, ("party", "referred_by_trustee", "confidential_ref_co"))
+		except Exception:
+			frappe.log_error(frappe.get_traceback(), "Donor confidential access logging failed")
 
 
 def normalize_cnic(cnic):

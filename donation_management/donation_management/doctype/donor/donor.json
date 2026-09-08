@@ -266,7 +266,10 @@
    "fieldtype": "Link",
    "label": "Referred By Trustee",
    "mandatory_depends_on": "eval:doc.customer_type == 'Refered by Trustee'",
-   "options": "Trustee"
+   "options": "Trustee",
+   "permlevel": 1,
+   "print_hide": 1,
+   "report_hide": 1
   },
   {
    "fieldname": "lead_name",
@@ -423,14 +426,17 @@
    "fieldname": "party",
    "fieldtype": "Data",
    "label": "Party",
-   "print_hide": 1
+   "print_hide": 1,
+   "permlevel": 1,
+   "report_hide": 1
   },
   {
    "fieldname": "confidential_ref_co",
    "fieldtype": "Data",
    "label": "Confidential Ref/C/O",
    "print_hide": 1,
-   "report_hide": 1
+   "report_hide": 1,
+   "permlevel": 1
   },
   {
    "fieldname": "donor_information_request_status",
@@ -912,6 +918,36 @@
    "read": 1,
    "report": 1,
    "role": "Accounts Manager"
+  },
+  {
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Donation Confidential Reference User",
+   "write": 1,
+   "permlevel": 1
+  },
+  {
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Donation Manager",
+   "write": 1,
+   "permlevel": 1
+  },
+  {
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "write": 1,
+   "permlevel": 1
   }
  ],
  "quick_entry": 1,

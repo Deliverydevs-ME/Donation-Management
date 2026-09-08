@@ -328,7 +328,39 @@ function add_action_buttons(frm) {
 		if (frm.doc.book_type === book_type_coupon) {
 			frm.add_custom_button(__("Request Page Adjustment"), () => create_page_adjustment(frm), __("Actions"));
 		}
+	} else if (frm.doc.status === "Closed" && frappe.user.has_role("Finance Manager")) {
+		frm.add_custom_button(__("Reopen"), () => show_reopen_dialog(frm), __("Actions"));
 	}
+}
+
+function show_reopen_dialog(frm) {
+	const dialog = new frappe.ui.Dialog({
+		title: __("Reopen Book"),
+		fields: [
+			{
+				fieldname: "reason",
+				fieldtype: "Small Text",
+				label: __("Reason"),
+				reqd: 1,
+			},
+		],
+		primary_action_label: __("Reopen"),
+		primary_action(values) {
+			frappe.call({
+				method: "donation_management.donation_management.doctype.book.book.reopen_book",
+				args: {
+					book: frm.doc.name,
+					reason: values.reason,
+				},
+				freeze: true,
+				callback() {
+					dialog.hide();
+					frm.reload_doc();
+				},
+			});
+		},
+	});
+	dialog.show();
 }
 
 function create_page_adjustment(frm) {

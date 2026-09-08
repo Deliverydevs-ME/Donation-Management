@@ -771,6 +771,12 @@ function add_donation_order_action_buttons(frm) {
 			create_pdc_journal_entry(frm);
 		}, action_group);
 	}
+
+	if (can_issue_computerized_receipt(frm)) {
+		frm.add_custom_button(__("Issue Computerized Receipt"), () => {
+			issue_computerized_receipt(frm);
+		}, action_group);
+	}
 }
 
 function can_create_pdc_journal_entry(frm) {
@@ -808,6 +814,30 @@ function create_pdc_journal_entry(frm) {
 					result.journal_entry || "",
 				])
 			);
+			frm.reload_doc();
+		},
+	});
+}
+
+function can_issue_computerized_receipt(frm) {
+	return (
+		!frm.is_new() &&
+		frm.doc.docstatus === 1 &&
+		!frm.doc.computerized_receipt
+	);
+}
+
+function issue_computerized_receipt(frm) {
+	frappe.call({
+		method: "donation_management.donation_management.doctype.donation_order.donation_order.issue_computerized_receipt",
+		args: {
+			donation_order: frm.doc.name,
+		},
+		freeze: true,
+		freeze_message: __("Issuing computerized receipt..."),
+		callback(response) {
+			const result = response.message || {};
+			frappe.msgprint(__("Computerized receipt issued: {0}", [result.computerized_receipt || frm.doc.name]));
 			frm.reload_doc();
 		},
 	});

@@ -11,6 +11,7 @@
   "donor_email",
   "donor_cnic",
   "donor_name",
+  "donor_program_enrollments_html",
   "referred_by_trustee",
   "donor_pos_id",
   "party",
@@ -19,7 +20,6 @@
   "requesting_user",
   "request_date",
   "request_remarks",
-  "donor_program_enrollments_html",
   "donor_column_break",
   "name_on_donation_slip",
   "donation_posting_date",
@@ -36,6 +36,9 @@
   "manual_receipt_date",
   "manual_receipt_issued_by",
   "computerized_receipt",
+  "receipt_status",
+  "computerized_receipt_issued_on",
+  "computerized_receipt_issued_by",
   "manual_receipt_reconciliation_status",
   "cash_denominations",
   "receipt_controls_section",
@@ -54,8 +57,9 @@
   "pdc_status",
   "instrument_status",
   "instrument_proof",
+  "instrument_event_remarks",
   "crossing_stamp_confirmed",
-  "column_break_urhi",
+  "trust_stamp_confirmed",
   "pdc_posted_on",
   "bank_account",
   "debit_account",
@@ -70,45 +74,46 @@
   "credit_account",
   "accounting_cost_center",
   "journal_entry",
-  "column_break_ekvb",
   "accounting_status",
+  "amount_section",
+  "donation_amount",
+  "total_donation",
+  "sponsorship_amount_section",
+  "sponsorship_amount",
+  "previous_sponsorship_balance",
+  "previous_balance_used",
+  "available_allocation_amount",
+  "allocated_amount",
+  "unallocated_amount",
+  "total_program_amount",
+  "remaining_program_cost",
+  "allocation_status",
+  "sponsored_student_count",
+  "total_sponsored_beneficiaries",
+  "total_covered_months",
   "bank_deposit_status",
   "sponsorship_section",
   "sponsorship_students",
   "beneficiary_section",
   "student_name",
-  "column_break_driv",
   "student_mode",
-  "column_break_xgav",
   "prisoner_name",
-  "amount_section",
-  "donation_amount",
-  "column_break_kyhp",
-  "total_donation",
-  "sponsorship_amount_section",
-  "sponsorship_amount",
-  "allocated_amount",
-  "unallocated_amount",
-  "column_break_poyv",
-  "total_program_amount",
-  "available_allocation_amount",
-  "remaining_program_cost",
-  "column_break_uuuh",
-  "allocation_status",
-  "previous_sponsorship_balance",
-  "previous_balance_used",
-  "column_break_rmsa",
-  "sponsored_student_count",
-  "total_sponsored_beneficiaries",
-  "total_covered_months",
   "purpose_flags_section",
   "requires_student",
   "requires_prisoner",
+  "column_break_poyv",
   "cancellation_section",
   "cancellation_reason",
   "cancellation_approved_by",
   "replacement_donation_order",
-  "amended_from"
+  "amended_from",
+  "column_break_urhi",
+  "column_break_ekvb",
+  "column_break_driv",
+  "column_break_xgav",
+  "column_break_kyhp",
+  "column_break_uuuh",
+  "column_break_rmsa"
  ],
  "fields": [
   {
@@ -159,7 +164,10 @@
    "fieldtype": "Link",
    "label": "Referred By Trustee",
    "options": "Trustee",
-   "read_only": 1
+   "read_only": 1,
+   "permlevel": 1,
+   "print_hide": 1,
+   "report_hide": 1
   },
   {
    "fieldname": "donor_pos_id",
@@ -174,14 +182,17 @@
    "fieldname": "party",
    "fieldtype": "Data",
    "label": "Party",
-   "print_hide": 1
+   "print_hide": 1,
+   "permlevel": 1,
+   "report_hide": 1
   },
   {
    "fieldname": "confidential_ref_co",
    "fieldtype": "Data",
    "label": "Confidential Ref/C/O",
    "print_hide": 1,
-   "report_hide": 1
+   "report_hide": 1,
+   "permlevel": 1
   },
   {
    "fieldname": "donor_information_request_status",
@@ -321,6 +332,28 @@
    "read_only": 1
   },
   {
+   "fieldname": "receipt_status",
+   "fieldtype": "Select",
+   "label": "Computerized Receipt Status",
+   "options": "Pending\nEligible\nIssued\nBlocked\nCancelled",
+   "default": "Pending",
+   "read_only": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "computerized_receipt_issued_on",
+   "fieldtype": "Datetime",
+   "label": "Computerized Receipt Issued On",
+   "read_only": 1
+  },
+  {
+   "fieldname": "computerized_receipt_issued_by",
+   "fieldtype": "Link",
+   "label": "Computerized Receipt Issued By",
+   "options": "User",
+   "read_only": 1
+  },
+  {
    "fieldname": "manual_receipt_reconciliation_status",
    "fieldtype": "Select",
    "label": "Manual Receipt Reconciliation Status",
@@ -436,10 +469,20 @@
    "depends_on": "eval:['Cheque', 'Bank Draft'].includes(doc.mode_of_payment)"
   },
   {
+   "fieldname": "instrument_event_remarks",
+   "fieldtype": "Small Text",
+   "label": "Instrument Event Remarks"
+  },
+  {
    "fieldname": "crossing_stamp_confirmed",
    "fieldtype": "Check",
    "label": "Crossing/Stamp Confirmed",
    "depends_on": "eval:['Cheque', 'Bank Draft'].includes(doc.mode_of_payment)"
+  },
+  {
+   "fieldname": "trust_stamp_confirmed",
+   "fieldtype": "Check",
+   "label": "Trust Stamp Confirmed"
   },
   {
    "fieldname": "pdc_posted_on",
@@ -830,6 +873,36 @@
    "role": "System Manager",
    "share": 1,
    "write": 1
+  },
+  {
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Donation Confidential Reference User",
+   "write": 1,
+   "permlevel": 1
+  },
+  {
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Donation Manager",
+   "write": 1,
+   "permlevel": 1
+  },
+  {
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "write": 1,
+   "permlevel": 1
   }
  ],
  "row_format": "Dynamic",

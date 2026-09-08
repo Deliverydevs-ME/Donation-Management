@@ -16,6 +16,7 @@
   "status",
   "book_serial_numbers",
   "stock_entry",
+  "custody_transfer",
   "column_break_book",
   "warehouse",
   "issued_to_employee",
@@ -44,7 +45,12 @@
   "credit_account",
   "accounting_cost_center",
   "journal_entry",
-  "accounting_status"
+  "accounting_status",
+  "reopen_section",
+  "reopen_reason",
+  "reopened_by",
+  "reopened_on",
+  "reopen_count"
  ],
  "fields": [
   {
@@ -126,6 +132,13 @@
    "fieldtype": "Link",
    "label": "Stock Entry",
    "options": "Stock Entry",
+   "read_only": 1
+  },
+  {
+   "fieldname": "custody_transfer",
+   "fieldtype": "Link",
+   "label": "Custody Transfer",
+   "options": "Donation Book Custody Transfer",
    "read_only": 1
   },
   {
@@ -336,6 +349,35 @@
    "fieldtype": "Select",
    "label": "Accounting Status",
    "options": "\nNot Posted\nPosted\nCancelled",
+   "read_only": 1
+  },
+  {
+   "fieldname": "reopen_section",
+   "fieldtype": "Section Break",
+   "label": "Reopen Controls"
+  },
+  {
+   "fieldname": "reopen_reason",
+   "fieldtype": "Small Text",
+   "label": "Reopen Reason"
+  },
+  {
+   "fieldname": "reopened_by",
+   "fieldtype": "Link",
+   "label": "Reopened By",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "reopened_on",
+   "fieldtype": "Datetime",
+   "label": "Reopened On",
+   "read_only": 1
+  },
+  {
+   "fieldname": "reopen_count",
+   "fieldtype": "Int",
+   "label": "Reopen Count",
    "read_only": 1
   }
  ],

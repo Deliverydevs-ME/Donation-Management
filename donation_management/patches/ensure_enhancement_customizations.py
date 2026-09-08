@@ -12,7 +12,11 @@ def execute():
 
 
 def ensure_roles():
-	for role_name in ("Donation Confidential Reference User", "Donation Cancellation Approver"):
+	for role_name in (
+		"Donation Confidential Reference User",
+		"Donation Cancellation Approver",
+		"Donation Manager",
+	):
 		if frappe.db.exists("Role", role_name):
 			continue
 

@@ -3,9 +3,10 @@
 
 import frappe
 from frappe.model.document import Document
-from frappe.utils import flt, getdate, now_datetime
+from frappe.utils import flt, get_time, getdate, now_datetime
 
 from donation_management.donation_management.api import get_default_company
+from donation_management.donation_management.notifications import notify_finance, notify_users
 
 
 class DonationClosing(Document):
@@ -38,11 +39,23 @@ class DonationClosing(Document):
 		self.db_set("submitted_by", self.submitted_by, update_modified=False)
 		self.db_set("submitted_on", self.submitted_on, update_modified=False)
 		self.mark_sources_as_deposited()
+		notify_finance(
+			frappe._("Donation Closing Deposited"),
+			frappe._("Donation Closing {0} has been submitted and deposited.").format(self.name),
+			self.doctype,
+			self.name,
+		)
 
 	def on_cancel(self):
 		self.status = "Cancelled"
 		self.db_set("status", self.status, update_modified=False)
 		self.reset_source_deposit_status()
+		notify_finance(
+			frappe._("Donation Closing Cancelled"),
+			frappe._("Donation Closing {0} has been cancelled.").format(self.name),
+			self.doctype,
+			self.name,
+		)
 
 	def validate_cash_handover(self):
 		if not self.total_amount:
@@ -65,6 +78,19 @@ class DonationClosing(Document):
 			frappe.throw(frappe._("Cash Handover Amount cannot be less than Donation Closing total."))
 		if flt(handover.variance):
 			frappe.throw(frappe._("Cash Handover variance must be resolved before closing."))
+		self.validate_cash_handover_cutoff()
+
+	def validate_cash_handover_cutoff(self):
+		cutoff_time = frappe.db.get_single_value("Donation Settings", "closing_cutoff_time")
+		if not cutoff_time or not self.closing_date:
+			return
+
+		now = now_datetime()
+		if getdate(self.closing_date) == getdate(now) and now.time() > get_time(cutoff_time):
+			frappe.msgprint(
+				frappe._("Closing is being submitted after configured cut-off time {0}.").format(cutoff_time),
+				alert=True,
+			)
 
 	def set_company_default(self):
 		if not self.company:
@@ -156,6 +182,19 @@ class DonationClosing(Document):
 		self.received_on = now_datetime()
 		self.status = "Received"
 		self.save(ignore_permissions=True)
+		notify_finance(
+			frappe._("Donation Closing Received"),
+			frappe._("Donation Closing {0} is received and awaiting deposit submission.").format(self.name),
+			self.doctype,
+			self.name,
+		)
+		notify_users(
+			frappe._("Donation Closing Received"),
+			frappe._("Your Donation Closing {0} has been received.").format(self.name),
+			users=[self.cashier],
+			reference_doctype=self.doctype,
+			reference_name=self.name,
+		)
 		return self.name
 
 	def mark_sources_as_deposited(self):
@@ -210,8 +249,8 @@ def get_pending_cash_donations(company=None, closing_date=None, exclude_closing=
 	closing_date = getdate(closing_date) if closing_date else None
 	pending = []
 	pending.extend(get_pending_donation_orders(company, closing_date, exclude_closing, cashier=cashier))
-	pending.extend(get_pending_box_collections(company, closing_date, exclude_closing))
-	pending.extend(get_pending_books(company, closing_date, exclude_closing))
+	pending.extend(get_pending_box_collections(company, closing_date, exclude_closing, cashier=cashier))
+	pending.extend(get_pending_books(company, closing_date, exclude_closing, cashier=cashier))
 	return pending
 
 
@@ -270,7 +309,13 @@ def get_pending_donation_orders(company, closing_date=None, exclude_closing=None
 	return result
 
 
-def get_pending_box_collections(company, closing_date=None, exclude_closing=None):
+def get_pending_box_collections(company, closing_date=None, exclude_closing=None, cashier=None):
+	cashier_condition = ""
+	values = {"company": company, "closing_date": closing_date}
+	if cashier:
+		cashier_condition = "and collection_log.owner = %(cashier)s"
+		values["cashier"] = cashier
+
 	collections = frappe.db.sql(
 		"""
 		select
@@ -290,6 +335,7 @@ def get_pending_box_collections(company, closing_date=None, exclude_closing=None
 			and box_collection.company = %(company)s
 			and collection_log.action = 'Collection'
 			and (%(closing_date)s is null or date(collection_log.action_date) = %(closing_date)s)
+			{cashier_condition}
 			and ifnull(collection_log.collected_amount, 0) > 0
 			and not exists (
 				select 1
@@ -305,8 +351,8 @@ def get_pending_box_collections(company, closing_date=None, exclude_closing=None
 					)
 			)
 		order by collection_log.action_date asc, collection_log.creation asc
-		""",
-		{"company": company, "closing_date": closing_date},
+		""".format(cashier_condition=cashier_condition),
+		values,
 		as_dict=True,
 	)
 
@@ -327,7 +373,13 @@ def get_pending_box_collections(company, closing_date=None, exclude_closing=None
 	return result
 
 
-def get_pending_books(company, closing_date=None, exclude_closing=None):
+def get_pending_books(company, closing_date=None, exclude_closing=None, cashier=None):
+	cashier_condition = ""
+	values = {"company": company, "closing_date": closing_date}
+	if cashier:
+		cashier_condition = "and book.owner = %(cashier)s"
+		values["cashier"] = cashier
+
 	books = frappe.db.sql(
 		"""
 		select
@@ -344,9 +396,10 @@ def get_pending_books(company, closing_date=None, exclude_closing=None):
 			and book.company = %(company)s
 			and book.accounting_status = 'Posted'
 			and (%(closing_date)s is null or journal_entry.posting_date = %(closing_date)s)
+			{cashier_condition}
 		order by journal_entry.posting_date asc, book.creation asc
-		""",
-		{"company": company, "closing_date": closing_date},
+		""".format(cashier_condition=cashier_condition),
+		values,
 		as_dict=True,
 	)
 

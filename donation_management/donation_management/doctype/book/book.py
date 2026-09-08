@@ -3,7 +3,7 @@
 
 import frappe
 from frappe.model.document import Document
-from frappe.utils import cint, flt, today
+from frappe.utils import cint, flt, now_datetime, today
 
 from donation_management.donation_management.api import (
 	create_collection_journal_entry,
@@ -191,6 +191,9 @@ class Book(Document):
 		}
 
 		if previous_status == status:
+			return
+
+		if previous_status == "Closed" and status == "Returned" and self.flags.reopening_book:
 			return
 
 		if status not in allowed_transitions.get(previous_status, ()):
@@ -544,68 +547,82 @@ def issue_book(book):
 	if doc.status:
 		frappe.throw(frappe._("Only unissued Books can be issued."))
 	if doc.stock_entry:
-		frappe.throw(frappe._("Book {0} is already linked with Stock Entry {1}.").format(doc.name, doc.stock_entry))
+		frappe.throw(frappe._("Book {0} is already linked with historical Stock Entry {1}.").format(doc.name, doc.stock_entry))
+	if doc.custody_transfer:
+		frappe.throw(
+			frappe._("Book {0} is already linked with Custody Transfer {1}.").format(
+				doc.name,
+				doc.custody_transfer,
+			)
+		)
 
 	doc.validate_book_stock_details()
 	if doc.is_donation_book():
 		doc.validate_assigned_books()
 	else:
 		doc.validate_book_serial_no()
-	stock_entry = create_book_issue_stock_entry(doc)
-	doc.stock_entry = stock_entry.name
+	custody_transfer = create_book_custody_transfer(doc)
+	doc.custody_transfer = custody_transfer.name
 	doc.status = "Issued"
 	doc.save()
 	return doc.as_dict()
 
 
-def create_book_issue_stock_entry(doc):
-	items = get_book_issue_items(doc)
-	serial_numbers = ", ".join(item["serial_no"] for item in items)
-	stock_entry = frappe.get_doc(
+def create_book_custody_transfer(doc):
+	serial_numbers = ", ".join(get_book_issue_serial_numbers(doc))
+	custody_transfer = frappe.get_doc(
 		{
-			"doctype": "Stock Entry",
-			"company": doc.company or get_default_company(),
-			"stock_entry_type": "Material Issue",
-			"purpose": "Material Issue",
-			"from_warehouse": doc.warehouse,
-			"posting_date": today(),
-			"remarks": "Book Issue: {0} | Type: {1} | Serial No: {2} | Issued To: {3}".format(
+			"doctype": "Donation Book Custody Transfer",
+			"book": doc.name,
+			"book_type": doc.book_type,
+			"issued_to_employee": doc.issued_to_employee,
+			"warehouse": doc.warehouse,
+			"transfer_date": today(),
+			"serial_numbers": serial_numbers,
+			"remarks": "Book custody issued: {0} | Type: {1} | Serial No: {2} | Issued To: {3}".format(
 				doc.name,
 				doc.book_type,
 				serial_numbers,
 				doc.issued_to_employee,
 			),
-			"items": items,
 		}
 	)
-	stock_entry.flags.ignore_permissions = True
-	stock_entry.insert(ignore_permissions=True)
-	stock_entry.submit()
-	return stock_entry
+	custody_transfer.flags.ignore_permissions = True
+	custody_transfer.insert(ignore_permissions=True)
+	custody_transfer.submit()
+	return custody_transfer
 
 
-def get_book_issue_items(doc):
+def get_book_issue_serial_numbers(doc):
 	if doc.is_donation_book() and doc.assigned_books:
-		return [
-			{
-				"item_code": row.item or doc.item,
-				"s_warehouse": row.warehouse or doc.warehouse,
-				"qty": 1,
-				"use_serial_batch_fields": 1,
-				"serial_no": row.book_serial_no,
-			}
-			for row in doc.assigned_books
-		]
+		return [row.book_serial_no for row in doc.assigned_books if row.book_serial_no]
 
-	return [
-		{
-			"item_code": doc.item,
-			"s_warehouse": doc.warehouse,
-			"qty": 1,
-			"use_serial_batch_fields": 1,
-			"serial_no": doc.book_serial_no,
-		}
-	]
+	return [doc.book_serial_no] if doc.book_serial_no else []
+
+
+@frappe.whitelist()
+def reopen_book(book, reason):
+	if FINANCE_MANAGER_ROLE not in frappe.get_roles():
+		frappe.throw(frappe._("Only Finance Manager can reopen a Book."))
+	if not reason:
+		frappe.throw(frappe._("Reopen Reason is required."))
+
+	doc = frappe.get_doc("Book", book)
+	doc.check_permission("write")
+	if doc.status != "Closed":
+		frappe.throw(frappe._("Only Closed Books can be reopened."))
+
+	doc.flags.ignore_validate_update_after_submit = True
+	doc.flags.reopening_book = True
+	doc.status = "Returned"
+	doc.reopen_reason = reason
+	doc.reopened_by = frappe.session.user
+	doc.reopened_on = now_datetime()
+	doc.reopen_count = cint(doc.reopen_count) + 1
+	doc.save(ignore_permissions=True)
+	if doc.is_donation_book():
+		sync_donation_book_leaves(doc.name)
+	return doc.as_dict()
 
 
 @frappe.whitelist()

@@ -78,6 +78,7 @@ class DonationOrder(Document):
 		self.set_esaal_e_sawab_snapshot()
 		self.set_purpose_details()
 		self.validate_donation_book_receipts()
+		self.validate_manual_receipt_uniqueness()
 		self.set_previous_sponsorship_balance()
 		self.set_sponsorship_allocations()
 		self.validate_beneficiary()
@@ -93,6 +94,7 @@ class DonationOrder(Document):
 	def on_update(self):
 		self.update_linked_donation_book_usage()
 		self.create_instrument_event_if_changed()
+		self.log_confidential_reference_changes()
 
 	def on_submit(self):
 		if self.is_pending_pdc() and getdate(self.cheque_deposit_date) > getdate(today()):
@@ -106,14 +108,18 @@ class DonationOrder(Document):
 		if self.is_pending_pdc():
 			self.accounting_status = "Not Posted"
 			self.db_set("accounting_status", "Not Posted", update_modified=False)
+			self.set_receipt_status()
 			return
 		self.set_bank_deposit_status()
 		self.create_journal_entry()
 		self.update_donor_program_enrollments()
+		self.set_receipt_status()
 
 	def on_cancel(self):
 		self.cancel_linked_journal_entry()
 		self.update_linked_donation_book_usage()
+		if self.meta.has_field("receipt_status"):
+			self.db_set("receipt_status", "Cancelled", update_modified=False)
 
 	def before_cancel(self):
 		self.validate_cancellation_controls()
@@ -553,6 +559,38 @@ class DonationOrder(Document):
 			values,
 		)
 		return existing[0][0] if existing else None
+
+	def validate_manual_receipt_uniqueness(self):
+		receipt_numbers = []
+		parent_receipt = str(self.manual_receipt_number or "").strip()
+		if parent_receipt:
+			receipt_numbers.append(parent_receipt)
+
+		for row in self.get("purpose_details", []):
+			receipt_number = str(row.get("manual_receipt_number") or "").strip()
+			if receipt_number:
+				receipt_numbers.append(receipt_number)
+
+		if not receipt_numbers:
+			if self.meta.has_field("manual_receipt_reconciliation_status"):
+				self.manual_receipt_reconciliation_status = "Missing"
+			return
+
+		if len(receipt_numbers) != len(set(receipt_numbers)):
+			frappe.throw(frappe._("Manual Receipt Number is repeated in this Donation Order."))
+
+		for receipt_number in set(receipt_numbers):
+			existing = get_existing_manual_receipt_order(receipt_number, current_order=self.name)
+			if existing:
+				frappe.throw(
+					frappe._("Manual Receipt Number {0} is already used in Donation Order {1}.").format(
+						receipt_number,
+						existing,
+					)
+				)
+
+		if self.meta.has_field("manual_receipt_reconciliation_status"):
+			self.manual_receipt_reconciliation_status = "Pending Conversion"
 
 	def validate_donation_book_amount_limit(self):
 		if not cint(self.is_mohasil_collection) or not self.donation_book:
@@ -1311,6 +1349,15 @@ class DonationOrder(Document):
 		)
 
 	def set_pdc_details(self):
+		if self.is_bank_draft_mode():
+			self.is_post_dated_cheque = 0
+			self.cheque_deposit_date = None
+			self.pdc_status = PDC_STATUS_NOT_APPLICABLE
+			self.pdc_posted_on = None
+			if not self.instrument_status:
+				self.instrument_status = "Received"
+			return
+
 		if not self.is_cheque_mode():
 			self.is_post_dated_cheque = 0
 			self.cheque_number = None
@@ -1324,13 +1371,20 @@ class DonationOrder(Document):
 			frappe.throw(frappe._("Cheque Number is required for Cheque donations."))
 
 		if not cint(self.is_post_dated_cheque):
-			frappe.throw(frappe._("Post-Dated Cheque must be checked when Mode of Payment is Cheque."))
+			self.cheque_deposit_date = None
+			self.pdc_status = PDC_STATUS_NOT_APPLICABLE
+			self.pdc_posted_on = None
+			if not self.instrument_status:
+				self.instrument_status = "Received"
+			return
 
 		if not self.cheque_deposit_date:
-			frappe.throw(frappe._("Cheque Deposit Date is required for Cheque donations."))
+			frappe.throw(frappe._("Cheque Deposit Date is required for Post-Dated Cheque donations."))
 
 		if self.journal_entry or self.pdc_status == PDC_STATUS_DEPOSITED:
 			self.pdc_status = PDC_STATUS_DEPOSITED
+			if not self.instrument_status:
+				self.instrument_status = "Encashed"
 			return
 
 		self.pdc_status = PDC_STATUS_PENDING
@@ -1367,10 +1421,18 @@ class DonationOrder(Document):
 				"user": frappe.session.user,
 				"proof": self.instrument_proof,
 				"crossing_stamp_confirmed": self.crossing_stamp_confirmed,
-				"remarks": self.remarks,
+				"remarks": self.instrument_event_remarks or self.remarks,
 			}
 		)
 		event.insert(ignore_permissions=True)
+
+	def log_confidential_reference_changes(self):
+		try:
+			from donation_management.donation_management.confidential import log_confidential_changes
+
+			log_confidential_changes(self, ("party", "referred_by_trustee", "confidential_ref_co"))
+		except Exception:
+			frappe.log_error(frappe.get_traceback(), "Donation Order confidential access logging failed")
 
 	def get_allowed_debit_account_types(self):
 		if self.mode_of_payment_type == "Cash":
@@ -1407,6 +1469,15 @@ class DonationOrder(Document):
 				)
 			)
 
+		if allowed_root_types and account_details.root_type not in allowed_root_types:
+			frappe.throw(
+				frappe._("{0} {1} must be one of these root types: {2}.").format(
+					label,
+					account,
+					", ".join(allowed_root_types),
+				)
+			)
+
 	def get_account_details(self, account):
 		if not account:
 			return frappe._dict()
@@ -1423,15 +1494,6 @@ class DonationOrder(Document):
 			) or frappe._dict()
 
 		return self._account_details_cache[account]
-
-		if allowed_root_types and account_details.root_type not in allowed_root_types:
-			frappe.throw(
-				frappe._("{0} {1} must be one of these root types: {2}.").format(
-					label,
-					account,
-					", ".join(allowed_root_types),
-				)
-			)
 
 	def validate_posted_accounting_locked(self):
 		old_doc = self.get_doc_before_save()
@@ -1606,6 +1668,15 @@ class DonationOrder(Document):
 		)
 		self.journal_entry = journal_entry
 		self.accounting_status = status
+		self.set_receipt_status()
+
+	def set_receipt_status(self):
+		if not self.meta.has_field("receipt_status"):
+			return
+		status = "Issued" if self.computerized_receipt else get_receipt_eligibility_status(self)
+		if self.get("receipt_status") != status:
+			frappe.db.set_value(self.doctype, self.name, "receipt_status", status, update_modified=False)
+			self.receipt_status = status
 
 	def set_accounting_status_from_journal_entry(self):
 		docstatus = frappe.db.get_value("Journal Entry", self.journal_entry, "docstatus")
@@ -1643,6 +1714,127 @@ class DonationOrder(Document):
 			""",
 			("Donor", self.donor_name, journal_entry),
 		)
+
+
+def get_existing_manual_receipt_order(manual_receipt_number, current_order=None):
+	manual_receipt_number = str(manual_receipt_number or "").strip()
+	if not manual_receipt_number:
+		return None
+
+	values = {"manual_receipt_number": manual_receipt_number}
+	exclude_parent = ""
+	exclude_detail = ""
+	if current_order and not str(current_order).startswith("new-"):
+		values["current_order"] = current_order
+		exclude_parent = "and name != %(current_order)s"
+		exclude_detail = "and parent.name != %(current_order)s"
+
+	existing = frappe.db.sql(
+		"""
+		select existing_order.name
+		from (
+			select name
+			from `tabDonation Order`
+			where docstatus != 2
+				{exclude_parent}
+				and manual_receipt_number = %(manual_receipt_number)s
+			union
+			select parent.name
+			from `tabDonation Order` parent
+			inner join `tabDonation Order Purpose Detail` detail
+				on detail.parent = parent.name
+			where parent.docstatus != 2
+				{exclude_detail}
+				and detail.manual_receipt_number = %(manual_receipt_number)s
+		) existing_order
+		limit 1
+		""".format(
+			exclude_parent=exclude_parent,
+			exclude_detail=exclude_detail,
+		),
+		values,
+	)
+	return existing[0][0] if existing else None
+
+
+def get_receipt_eligibility_status(doc):
+	if doc.docstatus == 2:
+		return "Cancelled"
+	if doc.docstatus != 1:
+		return "Pending"
+
+	policy = frappe.db.get_single_value("Donation Settings", "receipt_timing_policy") or "After Deposit"
+	if policy == "Before Handover":
+		return "Eligible"
+
+	if doc.mode_of_payment_type == "Cash":
+		return "Eligible" if is_donation_order_deposited(doc.name) else "Blocked"
+
+	if doc.mode_of_payment in (CHEQUE_MODE_OF_PAYMENT, BANK_DRAFT_MODE_OF_PAYMENT):
+		return "Eligible" if doc.instrument_status == "Encashed" else "Blocked"
+
+	return "Eligible" if doc.accounting_status == "Posted" else "Blocked"
+
+
+def is_donation_order_deposited(donation_order):
+	if frappe.db.get_value("Donation Order", donation_order, "bank_deposit_status") == "Deposited":
+		return True
+
+	return bool(
+		frappe.db.sql(
+			"""
+			select closing.name
+			from `tabDonation Closing Detail` detail
+			inner join `tabDonation Closing` closing
+				on closing.name = detail.parent
+			where detail.source_doctype = 'Donation Order'
+				and detail.source_name = %(donation_order)s
+				and closing.docstatus = 1
+				and closing.status = 'Deposited'
+			limit 1
+			""",
+			{"donation_order": donation_order},
+		)
+	)
+
+
+@frappe.whitelist()
+def issue_computerized_receipt(donation_order):
+	doc = frappe.get_doc("Donation Order", donation_order)
+	doc.check_permission("write")
+
+	if doc.docstatus != 1:
+		frappe.throw(frappe._("Donation Order must be submitted before issuing the computerized receipt."))
+	if doc.computerized_receipt:
+		return {
+			"receipt_status": "Issued",
+			"computerized_receipt": doc.computerized_receipt,
+		}
+
+	status = get_receipt_eligibility_status(doc)
+	if status != "Eligible":
+		frappe.throw(frappe._("Computerized receipt cannot be issued yet. Current status: {0}.").format(status))
+
+	issued_on = now_datetime()
+	frappe.db.set_value(
+		"Donation Order",
+		doc.name,
+		{
+			"computerized_receipt": doc.name,
+			"receipt_status": "Issued",
+			"computerized_receipt_issued_on": issued_on,
+			"computerized_receipt_issued_by": frappe.session.user,
+			"manual_receipt_reconciliation_status": "Converted"
+			if doc.manual_receipt_number
+			else doc.manual_receipt_reconciliation_status,
+		},
+		update_modified=False,
+	)
+	return {
+		"receipt_status": "Issued",
+		"computerized_receipt": doc.name,
+		"issued_on": issued_on,
+	}
 
 
 @frappe.whitelist()
@@ -1718,11 +1910,16 @@ def check_manual_receipt_duplicate(
 	)
 
 	if not existing:
-		return {"exists": False}
+		global_existing = get_existing_manual_receipt_order(manual_receipt_number, current_order=current_order)
+		if not global_existing:
+			return {"exists": False}
+		existing_order = global_existing
+	else:
+		existing_order = existing[0][0]
 
 	return {
 		"exists": True,
-		"donation_order": existing[0][0],
+		"donation_order": existing_order,
 	}
 
 
@@ -1761,11 +1958,14 @@ def create_pdc_journal_entry(donation_order):
 		{
 			"pdc_status": PDC_STATUS_DEPOSITED,
 			"pdc_posted_on": posted_on,
+			"instrument_status": "Encashed",
+			"receipt_status": "Eligible",
 		},
 		update_modified=False,
 	)
 	doc.pdc_status = PDC_STATUS_DEPOSITED
 	doc.pdc_posted_on = posted_on
+	doc.instrument_status = "Encashed"
 
 	return {
 		"journal_entry": doc.journal_entry,
