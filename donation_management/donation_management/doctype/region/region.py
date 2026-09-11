@@ -3,6 +3,9 @@
 
 from frappe.model.document import Document
 
+from donation_management.donation_management.validations import validate_unique_field
+
 
 class Region(Document):
-	pass
+	def validate(self):
+		validate_unique_field(self, "region_name", "Region Name")

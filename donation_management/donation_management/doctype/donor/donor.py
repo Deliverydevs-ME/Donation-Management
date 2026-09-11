@@ -12,6 +12,7 @@ from donation_management.donation_management.doctype.donation_settings.donation_
 	is_donor_contact_required,
 	is_duplicate_donor_phone_allowed,
 )
+from donation_management.donation_management.validations import validate_unique_field
 
 
 VALID_DONOR_TYPES = (
@@ -53,6 +54,7 @@ class Donor(NestedSet):
 		self.validate_unique_donor_phone()
 		self.validate_phone_not_used_by_trustee()
 		self.validate_unique_donor_email()
+		self.validate_unique_donor_uid()
 		self.validate_mohasil()
 		self.set_whatsapp_digits()
 		self.set_donor_information_request_audit()
@@ -139,6 +141,9 @@ class Donor(NestedSet):
 					existing_donor,
 				)
 			)
+
+	def validate_unique_donor_uid(self):
+		validate_unique_field(self, "donor_uid", "Donor UID")
 
 	def validate_unique_donor_phone(self):
 		if is_duplicate_donor_phone_allowed():
@@ -364,14 +369,14 @@ def _get_donor_nodes(filters):
 	donors = frappe.get_list(
 		"Donor",
 		filters=filters,
-		fields=["name", "customer_name", "is_group"],
+		fields=["name", "customer_name", "family_relationship", "is_group"],
 		order_by="customer_name asc, name asc",
 	)
 
 	return [
 		{
 			"value": f"{DONOR_NODE_PREFIX}{donor.name}",
-			"title": donor.customer_name or donor.name,
+			"title": get_donor_tree_title(donor),
 			"expandable": cint(donor.is_group) or _donor_has_children(donor.name),
 			"is_group": cint(donor.is_group),
 			"reference_doctype": "Donor",
@@ -419,14 +424,14 @@ def _get_referred_donor_nodes(trustee):
 	donors = frappe.get_list(
 		"Donor",
 		filters={"referred_by_trustee": trustee},
-		fields=["name", "customer_name", "is_group"],
+		fields=["name", "customer_name", "family_relationship", "is_group"],
 		order_by="customer_name asc, name asc",
 	)
 
 	return [
 		{
 			"value": f"{DONOR_NODE_PREFIX}{donor.name}",
-			"title": donor.customer_name or donor.name,
+			"title": get_donor_tree_title(donor),
 			"expandable": cint(donor.is_group) or _donor_has_children(donor.name),
 			"is_group": cint(donor.is_group),
 			"reference_doctype": "Donor",
@@ -434,6 +439,13 @@ def _get_referred_donor_nodes(trustee):
 		}
 		for donor in donors
 	]
+
+
+def get_donor_tree_title(donor):
+	title = donor.customer_name or donor.name
+	if donor.family_relationship:
+		title = "{0} - {1}".format(title, donor.family_relationship)
+	return title
 
 
 def _trustee_has_children(trustee):

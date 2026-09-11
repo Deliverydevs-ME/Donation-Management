@@ -4,11 +4,14 @@
 import frappe
 from frappe.utils.nestedset import NestedSet
 
+from donation_management.donation_management.validations import validate_unique_field
+
 
 class DonationPurpose(NestedSet):
 	nsm_parent_field = "parent_donation_purpose"
 
 	def validate(self):
+		validate_unique_field(self, "purpose_name", "Purpose Name")
 		self.set_purpose_path()
 		self.validate_account_mappings()
 

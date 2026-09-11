@@ -103,8 +103,12 @@
   "requires_prisoner",
   "column_break_poyv",
   "cancellation_section",
+  "cancellation_status",
   "cancellation_reason",
+  "cancellation_requested_by",
+  "cancellation_requested_on",
   "cancellation_approved_by",
+  "cancellation_approved_on",
   "replacement_donation_order",
   "amended_from",
   "column_break_urhi",
@@ -241,9 +245,11 @@
   {
    "fieldname": "location",
    "fieldtype": "Link",
-   "in_list_view": 1,
+   "hidden": 1,
    "label": "Location",
-   "options": "Location Type"
+   "options": "Location Type",
+   "print_hide": 1,
+   "read_only": 1
   },
   {
    "fieldname": "donation_location",
@@ -793,17 +799,48 @@
    "collapsible": 1
   },
   {
+   "fieldname": "cancellation_status",
+   "fieldtype": "Select",
+   "label": "Cancellation Status",
+   "options": "\nPending Approval\nApproved\nRejected",
+   "print_hide": 1,
+   "read_only": 1
+  },
+  {
    "fieldname": "cancellation_reason",
    "fieldtype": "Small Text",
    "label": "Cancellation Reason",
    "print_hide": 1
   },
   {
+   "fieldname": "cancellation_requested_by",
+   "fieldtype": "Link",
+   "label": "Cancellation Requested By",
+   "options": "User",
+   "print_hide": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "cancellation_requested_on",
+   "fieldtype": "Datetime",
+   "label": "Cancellation Requested On",
+   "print_hide": 1,
+   "read_only": 1
+  },
+  {
    "fieldname": "cancellation_approved_by",
    "fieldtype": "Link",
    "label": "Cancellation Approved By",
    "options": "User",
-   "print_hide": 1
+   "print_hide": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "cancellation_approved_on",
+   "fieldtype": "Datetime",
+   "label": "Cancellation Approved On",
+   "print_hide": 1,
+   "read_only": 1
   },
   {
    "fieldname": "replacement_donation_order",

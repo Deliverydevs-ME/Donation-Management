@@ -3,6 +3,9 @@
 
 from frappe.model.document import Document
 
+from donation_management.donation_management.validations import validate_unique_field
+
 
 class PayrollGroup(Document):
-	pass
+	def validate(self):
+		validate_unique_field(self, "payroll_group_name", "Payroll Group Name")

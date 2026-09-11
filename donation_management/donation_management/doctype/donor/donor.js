@@ -38,6 +38,7 @@ frappe.ui.form.on("Donor", {
 
 	refresh(frm) {
 		toggle_donor_reference_fields(frm);
+		show_donor_information_request_audit_fields(frm);
 		toggle_donor_contact_requirement(frm);
 		add_donor_ledger_buttons(frm);
 	},
@@ -50,6 +51,10 @@ frappe.ui.form.on("Donor", {
 		if (frm.doc.customer_type === "Refered by Trustee") {
 			set_value_if_changed(frm, "parent_donor", "");
 		}
+	},
+
+	donor_information_request_status(frm) {
+		show_donor_information_request_audit_fields(frm);
 	},
 });
 
@@ -75,6 +80,20 @@ function toggle_donor_contact_requirement(frm) {
 		}
 
 		frm.set_intro(messages.join(" "), cint(settings.allow_donor_without_phone_or_email) ? "blue" : "yellow");
+	});
+}
+
+function show_donor_information_request_audit_fields(frm) {
+	["requesting_user", "request_date", "request_remarks"].forEach((fieldname) => {
+		if (frm.fields_dict[fieldname]) {
+			frm.toggle_display(fieldname, true);
+		}
+	});
+
+	["requesting_user", "request_date"].forEach((fieldname) => {
+		if (frm.fields_dict[fieldname]) {
+			frm.set_df_property(fieldname, "read_only", 1);
+		}
 	});
 }
 

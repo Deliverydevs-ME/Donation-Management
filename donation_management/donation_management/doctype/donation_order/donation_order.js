@@ -144,7 +144,9 @@ frappe.ui.form.on("Donation Order", {
 	refresh(frm) {
 		add_donation_order_action_buttons(frm);
 		add_esaal_e_sawab_action(frm);
+		add_cancellation_action_buttons(frm);
 		hide_legacy_purpose_fields(frm);
+		hide_legacy_location_field(frm);
 		toggle_purpose_grid_debit_account(frm);
 		toggle_parent_debit_account(frm);
 		update_beneficiary_fields(frm, false);
@@ -165,6 +167,14 @@ frappe.ui.form.on("Donation Order", {
 			auto_allocate_sponsorship_amounts(frm, false);
 		}
 		set_sponsorship_totals(frm);
+	},
+
+	before_cancel(frm) {
+		if (frm.doc.cancellation_status === "Approved" && frm.doc.cancellation_approved_by) {
+			return;
+		}
+
+		frappe.throw(__("Please request and approve cancellation before cancelling this Donation Order."));
 	},
 
 	company(frm) {
@@ -388,6 +398,10 @@ frappe.ui.form.on("Donation Order Purpose Detail", {
 	},
 
 	debit_account(frm) {
+		sync_primary_purpose_fields(frm);
+	},
+
+	credit_account(frm) {
 		sync_primary_purpose_fields(frm);
 	},
 
@@ -726,8 +740,12 @@ function update_accounting_fields(frm, overwrite_debit_account = false) {
 				}
 			}
 
-			set_value_if_changed(frm, "credit_account", details.credit_account || "");
-			set_value_if_changed(frm, "accounting_cost_center", details.cost_center || "");
+			if (!frm.doc.credit_account) {
+				set_value_if_changed(frm, "credit_account", details.credit_account || "");
+			}
+			if (!frm.doc.accounting_cost_center) {
+				set_value_if_changed(frm, "accounting_cost_center", details.cost_center || "");
+			}
 			refresh_all_purpose_rows(frm);
 		},
 	});
@@ -777,6 +795,77 @@ function add_donation_order_action_buttons(frm) {
 			issue_computerized_receipt(frm);
 		}, action_group);
 	}
+}
+
+function add_cancellation_action_buttons(frm) {
+	if (frm.is_new() || frm.doc.docstatus !== 1) {
+		return;
+	}
+
+	const action_group = __("Cancellation");
+
+	if (frm.doc.cancellation_status !== "Approved") {
+		frm.add_custom_button(__("Request Cancellation"), () => {
+			prompt_cancellation_request(frm);
+		}, action_group);
+	}
+
+	if (frm.doc.cancellation_status === "Pending Approval" && frappe.user.has_role("Donation Cancellation Approver")) {
+		frm.add_custom_button(__("Approve Cancellation"), () => {
+			approve_cancellation_request(frm);
+		}, action_group);
+	}
+}
+
+function prompt_cancellation_request(frm) {
+	const dialog = new frappe.ui.Dialog({
+		title: __("Request Cancellation"),
+		fields: [
+			{
+				fieldname: "reason",
+				fieldtype: "Small Text",
+				label: __("Cancellation Reason"),
+				reqd: 1,
+				default: frm.doc.cancellation_reason || "",
+			},
+		],
+		primary_action_label: __("Request"),
+		primary_action(values) {
+			frappe.call({
+				method: "donation_management.donation_management.doctype.donation_order.donation_order.request_donation_order_cancellation",
+				args: {
+					donation_order: frm.doc.name,
+					reason: values.reason,
+				},
+				freeze: true,
+				freeze_message: __("Requesting cancellation approval..."),
+				callback() {
+					dialog.hide();
+					frappe.show_alert({ message: __("Cancellation approval requested."), indicator: "orange" });
+					frm.reload_doc();
+				},
+			});
+		},
+	});
+
+	dialog.show();
+}
+
+function approve_cancellation_request(frm) {
+	frappe.confirm(__("Approve cancellation for this Donation Order?"), () => {
+		frappe.call({
+			method: "donation_management.donation_management.doctype.donation_order.donation_order.approve_donation_order_cancellation",
+			args: {
+				donation_order: frm.doc.name,
+			},
+			freeze: true,
+			freeze_message: __("Approving cancellation..."),
+			callback() {
+				frappe.show_alert({ message: __("Cancellation approved. You can now cancel the document."), indicator: "green" });
+				frm.reload_doc();
+			},
+		});
+	});
 }
 
 function can_create_pdc_journal_entry(frm) {
@@ -875,6 +964,10 @@ function hide_legacy_purpose_fields(frm) {
 	});
 }
 
+function hide_legacy_location_field(frm) {
+	frm.toggle_display("location", false);
+}
+
 function toggle_purpose_grid_debit_account(frm) {
 	const show_row_debit_account = Boolean(frm.doc.mode_of_payment_type) || is_deposit_account_mode(frm);
 	const cash_mode = frm.doc.mode_of_payment_type === "Cash";
@@ -888,7 +981,7 @@ function toggle_purpose_grid_debit_account(frm) {
 
 	grid.update_docfield_property("debit_account", "hidden", show_row_debit_account ? 0 : 1);
 	grid.update_docfield_property("debit_account", "reqd", show_row_debit_account ? 1 : 0);
-	grid.update_docfield_property("debit_account", "read_only", cash_mode || (manual_bank_mode && !bank_draft_mode) || deposit_account_mode ? 1 : 0);
+	grid.update_docfield_property("debit_account", "read_only", cash_mode || deposit_account_mode ? 1 : 0);
 	frm.refresh_field("purpose_details");
 }
 
@@ -899,7 +992,7 @@ function toggle_parent_debit_account(frm) {
 	const deposit_account_mode = is_deposit_account_mode(frm);
 
 	frm.toggle_display("debit_account", cash_mode || (manual_bank_mode && !bank_draft_mode) || deposit_account_mode);
-	frm.set_df_property("debit_account", "read_only", cash_mode || deposit_account_mode ? 1 : 0);
+	frm.set_df_property("debit_account", "read_only", deposit_account_mode ? 1 : 0);
 	frm.toggle_reqd("debit_account", cash_mode || (manual_bank_mode && !bank_draft_mode));
 }
 
@@ -1013,8 +1106,12 @@ function update_purpose_row_details(frm, cdt, cdn) {
 					} else {
 						set_child_value_if_changed(cdt, cdn, "debit_account", "");
 					}
-					set_child_value_if_changed(cdt, cdn, "credit_account", details.credit_account || "");
-					set_child_value_if_changed(cdt, cdn, "cost_center", details.cost_center || "");
+					if (!latest_row.credit_account) {
+						set_child_value_if_changed(cdt, cdn, "credit_account", details.credit_account || "");
+					}
+					if (!latest_row.cost_center) {
+						set_child_value_if_changed(cdt, cdn, "cost_center", details.cost_center || "");
+					}
 					sync_primary_purpose_fields(frm, true);
 					update_beneficiary_fields(frm, false);
 				},

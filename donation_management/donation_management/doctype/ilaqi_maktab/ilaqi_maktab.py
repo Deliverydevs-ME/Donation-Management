@@ -5,9 +5,13 @@ import frappe
 from frappe.model.document import Document
 from frappe.utils import add_months, flt, getdate, today
 
+from donation_management.donation_management.validations import validate_unique_field
+
 
 class IlaqiMaktab(Document):
 	def validate(self):
+		validate_unique_field(self, "maktab_name", "Maktab Name")
+
 		if flt(self.fixed_contribution) < 0:
 			frappe.throw(frappe._("Fixed Contribution cannot be negative."))
 		if flt(self.expected_monthly_cost) < 0:

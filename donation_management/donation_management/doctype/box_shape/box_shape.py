@@ -3,6 +3,9 @@
 
 from frappe.model.document import Document
 
+from donation_management.donation_management.validations import validate_unique_field
+
 
 class BoxShape(Document):
-	pass
+	def validate(self):
+		validate_unique_field(self, "shape_name", "Shape Name")

@@ -5,9 +5,13 @@ import frappe
 from frappe.model.document import Document
 from frappe.utils import flt
 
+from donation_management.donation_management.validations import validate_unique_field
+
 
 class SponsorshipProgram(Document):
 	def validate(self):
+		validate_unique_field(self, "program_name", "Program Name")
+
 		if flt(self.monthly_donation) <= 0:
 			frappe.throw(frappe._("Monthly Donation must be greater than zero."))
 

@@ -48,6 +48,9 @@ DEPOSIT_ACCOUNT_MODES = ("Cheque", "Card Payment")
 PDC_STATUS_NOT_APPLICABLE = "Not Applicable"
 PDC_STATUS_PENDING = "Pending Deposit"
 PDC_STATUS_DEPOSITED = "Deposited"
+CANCELLATION_STATUS_PENDING = "Pending Approval"
+CANCELLATION_STATUS_APPROVED = "Approved"
+CANCELLATION_APPROVER_ROLE = "Donation Cancellation Approver"
 
 
 def format_sponsorship_duration(total_days):
@@ -90,9 +93,11 @@ class DonationOrder(Document):
 		self.set_donor_information_request_audit()
 		self.validate_accounting_details()
 		self.validate_posted_accounting_locked()
+		self.set_cancellation_request_audit()
 
 	def on_update(self):
 		self.update_linked_donation_book_usage()
+		self.sync_esaal_e_sawab_to_donor()
 		self.create_instrument_event_if_changed()
 		self.log_confidential_reference_changes()
 
@@ -104,6 +109,7 @@ class DonationOrder(Document):
 				)
 			)
 
+		self.sync_esaal_e_sawab_to_donor()
 		self.update_donor_program_enrollments()
 		if self.is_pending_pdc():
 			self.accounting_status = "Not Posted"
@@ -684,8 +690,72 @@ class DonationOrder(Document):
 		if not self.cancellation_reason:
 			frappe.throw(frappe._("Cancellation Reason is required before cancelling Donation Order."))
 
+		if self.get("cancellation_status") != CANCELLATION_STATUS_APPROVED:
+			frappe.throw(frappe._("Donation Order cancellation must be approved before cancelling."))
+
 		if not self.cancellation_approved_by:
 			frappe.throw(frappe._("Cancellation Approved By is required before cancelling Donation Order."))
+
+		if not user_has_cancellation_approver_role(self.cancellation_approved_by):
+			frappe.throw(
+				frappe._("Cancellation Approved By must have the {0} role.").format(CANCELLATION_APPROVER_ROLE)
+			)
+
+	def set_cancellation_request_audit(self):
+		if not self.get("cancellation_reason"):
+			if self.meta.has_field("cancellation_status"):
+				self.cancellation_status = None
+			if self.meta.has_field("cancellation_requested_by"):
+				self.cancellation_requested_by = None
+			if self.meta.has_field("cancellation_requested_on"):
+				self.cancellation_requested_on = None
+			if self.meta.has_field("cancellation_approved_by"):
+				self.cancellation_approved_by = None
+			if self.meta.has_field("cancellation_approved_on"):
+				self.cancellation_approved_on = None
+			return
+
+		if self.get("cancellation_status") == CANCELLATION_STATUS_APPROVED:
+			return
+
+		if self.meta.has_field("cancellation_status") and not self.get("cancellation_status"):
+			self.cancellation_status = CANCELLATION_STATUS_PENDING
+		if self.meta.has_field("cancellation_requested_by") and not self.get("cancellation_requested_by"):
+			self.cancellation_requested_by = frappe.session.user
+		if self.meta.has_field("cancellation_requested_on") and not self.get("cancellation_requested_on"):
+			self.cancellation_requested_on = now_datetime()
+
+	def sync_esaal_e_sawab_to_donor(self):
+		if not self.donor_name or not self.get("esaal_e_sawab"):
+			return
+
+		donor = frappe.get_doc("Donor", self.donor_name)
+		existing_keys = {
+			get_esaal_e_sawab_key(row.person_name, row.relationship)
+			for row in donor.get("esaal_e_sawab", [])
+			if row.person_name
+		}
+		changed = False
+
+		for row in self.get("esaal_e_sawab", []):
+			if not row.person_name:
+				continue
+			key = get_esaal_e_sawab_key(row.person_name, row.relationship)
+			if not key or key in existing_keys:
+				continue
+			donor.append(
+				"esaal_e_sawab",
+				{
+					"person_name": row.person_name,
+					"relationship": row.relationship,
+					"remarks": row.remarks,
+				},
+			)
+			existing_keys.add(key)
+			changed = True
+
+		if changed:
+			donor.save(ignore_permissions=True)
 
 	def set_bank_deposit_status(self):
 		if self.mode_of_payment_type == "Cash" and self.accounting_status == "Posted":
@@ -803,8 +873,10 @@ class DonationOrder(Document):
 			row.donation_type,
 			row.donation_purpose,
 		)
-		row.credit_account = mapping.get("credit_account")
-		row.cost_center = mapping.get("cost_center")
+		if not row.credit_account:
+			row.credit_account = mapping.get("credit_account")
+		if not row.cost_center:
+			row.cost_center = mapping.get("cost_center")
 		if not row.credit_account:
 			frappe.throw(
 				frappe._(
@@ -1238,7 +1310,8 @@ class DonationOrder(Document):
 				row.donation_purpose,
 			)
 			row.credit_account = mapping.get("credit_account")
-			row.cost_center = mapping.get("cost_center")
+			if not row.cost_center:
+				row.cost_center = mapping.get("cost_center")
 
 	def validate_accounting_details(self):
 		if flt(self.donation_amount) <= 0:
@@ -1921,6 +1994,74 @@ def check_manual_receipt_duplicate(
 		"exists": True,
 		"donation_order": existing_order,
 	}
+
+
+def get_esaal_e_sawab_key(person_name, relationship=None):
+	person_name = " ".join(str(person_name or "").strip().lower().split())
+	relationship = " ".join(str(relationship or "").strip().lower().split())
+	if not person_name:
+		return None
+	return (person_name, relationship)
+
+
+def user_has_cancellation_approver_role(user):
+	if not user:
+		return False
+	return CANCELLATION_APPROVER_ROLE in frappe.get_roles(user)
+
+
+@frappe.whitelist()
+def request_donation_order_cancellation(donation_order, reason):
+	doc = frappe.get_doc("Donation Order", donation_order)
+	doc.check_permission("write")
+
+	if doc.docstatus != 1:
+		frappe.throw(frappe._("Only submitted Donation Orders can be sent for cancellation approval."))
+
+	reason = str(reason or "").strip()
+	if not reason:
+		frappe.throw(frappe._("Cancellation Reason is required."))
+
+	frappe.db.set_value(
+		"Donation Order",
+		doc.name,
+		{
+			"cancellation_reason": reason,
+			"cancellation_status": CANCELLATION_STATUS_PENDING,
+			"cancellation_requested_by": frappe.session.user,
+			"cancellation_requested_on": now_datetime(),
+			"cancellation_approved_by": None,
+			"cancellation_approved_on": None,
+		},
+	)
+
+	return {"status": CANCELLATION_STATUS_PENDING}
+
+
+@frappe.whitelist()
+def approve_donation_order_cancellation(donation_order):
+	if not user_has_cancellation_approver_role(frappe.session.user):
+		frappe.throw(frappe._("Only users with the {0} role can approve cancellation.").format(CANCELLATION_APPROVER_ROLE))
+
+	doc = frappe.get_doc("Donation Order", donation_order)
+	doc.check_permission("write")
+
+	if doc.docstatus != 1:
+		frappe.throw(frappe._("Only submitted Donation Orders can be approved for cancellation."))
+	if not doc.cancellation_reason:
+		frappe.throw(frappe._("Cancellation Reason is required before approval."))
+
+	frappe.db.set_value(
+		"Donation Order",
+		doc.name,
+		{
+			"cancellation_status": CANCELLATION_STATUS_APPROVED,
+			"cancellation_approved_by": frappe.session.user,
+			"cancellation_approved_on": now_datetime(),
+		},
+	)
+
+	return {"status": CANCELLATION_STATUS_APPROVED}
 
 
 @frappe.whitelist()

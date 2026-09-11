@@ -78,8 +78,7 @@
    "fieldtype": "Link",
    "in_list_view": 1,
    "label": "Credit Account",
-   "options": "Account",
-   "read_only": 1
+   "options": "Account"
   },
   {
    "fieldname": "cost_center",

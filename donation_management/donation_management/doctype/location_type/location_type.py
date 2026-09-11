@@ -1,9 +1,11 @@
 # Copyright (c) 2026, osama.ahmed@deliverydevs.com and contributors
 # For license information, please see license.txt
 
-# import frappe
 from frappe.model.document import Document
+
+from donation_management.donation_management.validations import validate_unique_field
 
 
 class LocationType(Document):
-	pass
+	def validate(self):
+		validate_unique_field(self, "location", "Location")

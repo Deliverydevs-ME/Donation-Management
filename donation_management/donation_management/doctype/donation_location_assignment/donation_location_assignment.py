@@ -10,7 +10,13 @@ class DonationLocationAssignment(Document):
 	def validate(self):
 		self.validate_dates()
 		self.validate_employee()
-		self.validate_overlap()
+		validate_assignment_conflicts(
+			employee=self.employee,
+			donation_location=self.donation_location,
+			start_date=self.start_date,
+			end_date=self.end_date,
+			name=self.name,
+		)
 		self.set_status()
 
 	def before_submit(self):
@@ -38,34 +44,19 @@ class DonationLocationAssignment(Document):
 			frappe.throw(frappe._("Employee {0} must be Active.").format(self.employee))
 
 	def validate_overlap(self):
-		if not self.employee or not self.start_date:
-			return
+		validate_assignment_overlap(self.employee, self.start_date, self.end_date, self.name)
 
-		overlap = frappe.db.sql(
-			"""
-			select name
-			from `tabDonation Location Assignment`
-			where employee = %(employee)s
-				and docstatus = 1
-				and name != %(name)s
-				and start_date <= %(effective_end)s
-				and ifnull(end_date, '9999-12-31') >= %(start_date)s
-			limit 1
-			""",
-			{
-				"employee": self.employee,
-				"name": self.name or "",
-				"start_date": getdate(self.start_date),
-				"effective_end": getdate(self.end_date) if self.end_date else "9999-12-31",
-			},
+	def validate_duplicate_assignment(self):
+		validate_duplicate_assignment(
+			self.employee,
+			self.donation_location,
+			self.start_date,
+			self.end_date,
+			self.name,
 		)
-		if overlap:
-			frappe.throw(
-				frappe._("Employee {0} already has an overlapping Donation Location Assignment {1}.").format(
-					self.employee,
-					overlap[0][0],
-				)
-			)
+
+	def validate_same_employee_same_dates(self):
+		validate_same_employee_same_dates(self.employee, self.start_date, self.end_date, self.name)
 
 	def set_status(self):
 		if self.docstatus == 2:
@@ -112,6 +103,194 @@ def get_assignment_for_date(employee, donation_date):
 		)
 
 	return rows[0] if rows else None
+
+
+def format_date_for_message(value):
+	if not value:
+		return frappe._("blank")
+
+	return frappe.format_value(value, {"fieldtype": "Date"})
+
+
+def get_assignment_conflict(employee=None, donation_location=None, start_date=None, end_date=None, name=None):
+	if not employee or not start_date:
+		return None
+
+	duplicate = get_duplicate_assignment(employee, donation_location, start_date, end_date, name)
+	if duplicate:
+		return {
+			"type": "duplicate",
+			"title": frappe._("Duplicate Donation Location Assignment"),
+			"message": frappe._(
+				"Donation Location Assignment {0} already exists for Employee {1}, Location {2}, Start Date {3}, and End Date {4}."
+			).format(
+				duplicate.name,
+				employee,
+				donation_location,
+				format_date_for_message(start_date),
+				format_date_for_message(end_date),
+			),
+		}
+
+	same_dates = get_same_employee_same_dates_assignment(employee, start_date, end_date, name)
+	if same_dates:
+		return {
+			"type": "same_dates",
+			"title": frappe._("Employee Already Assigned"),
+			"message": frappe._(
+				"Employee {0} already has Donation Location Assignment {1} for the same Start Date {2} and End Date {3}. Existing Location: {4}."
+			).format(
+				employee,
+				same_dates.name,
+				format_date_for_message(start_date),
+				format_date_for_message(end_date),
+				same_dates.donation_location or frappe._("blank"),
+			),
+		}
+
+	overlap = get_overlapping_assignment(employee, start_date, end_date, name)
+	if overlap:
+		return {
+			"type": "overlap",
+			"title": frappe._("Overlapping Assignment"),
+			"message": frappe._(
+				"Employee {0} already has overlapping Donation Location Assignment {1} from {2} to {3}."
+			).format(
+				employee,
+				overlap.name,
+				format_date_for_message(overlap.start_date),
+				format_date_for_message(overlap.end_date),
+			),
+		}
+
+	return None
+
+
+def get_duplicate_assignment(employee, donation_location, start_date, end_date=None, name=None):
+	if not employee or not donation_location or not start_date:
+		return None
+
+	duplicate = frappe.db.sql(
+		"""
+		select name
+		from `tabDonation Location Assignment`
+		where employee = %(employee)s
+			and donation_location = %(donation_location)s
+			and docstatus != 2
+			and name != %(name)s
+			and start_date = %(start_date)s
+			and ifnull(end_date, '') = %(end_date)s
+		limit 1
+		""",
+		{
+			"employee": employee,
+			"donation_location": donation_location,
+			"name": name or "",
+			"start_date": getdate(start_date),
+			"end_date": getdate(end_date) if end_date else "",
+		},
+		as_dict=True,
+	)
+	return duplicate[0] if duplicate else None
+
+
+def get_same_employee_same_dates_assignment(employee, start_date, end_date=None, name=None):
+	if not employee or not start_date:
+		return None
+
+	existing = frappe.db.sql(
+		"""
+		select name, donation_location
+		from `tabDonation Location Assignment`
+		where employee = %(employee)s
+			and docstatus != 2
+			and name != %(name)s
+			and start_date = %(start_date)s
+			and ifnull(end_date, '') = %(end_date)s
+		limit 1
+		""",
+		{
+			"employee": employee,
+			"name": name or "",
+			"start_date": getdate(start_date),
+			"end_date": getdate(end_date) if end_date else "",
+		},
+		as_dict=True,
+	)
+	return existing[0] if existing else None
+
+
+def get_overlapping_assignment(employee, start_date, end_date=None, name=None):
+	if not employee or not start_date:
+		return None
+
+	overlap = frappe.db.sql(
+		"""
+		select name, start_date, end_date
+		from `tabDonation Location Assignment`
+		where employee = %(employee)s
+			and docstatus != 2
+			and name != %(name)s
+			and start_date <= %(effective_end)s
+			and ifnull(end_date, '9999-12-31') >= %(start_date)s
+		limit 1
+		""",
+		{
+			"employee": employee,
+			"name": name or "",
+			"start_date": getdate(start_date),
+			"effective_end": getdate(end_date) if end_date else "9999-12-31",
+		},
+		as_dict=True,
+	)
+	return overlap[0] if overlap else None
+
+
+def throw_assignment_conflict(conflict):
+	if not conflict:
+		return
+
+	frappe.throw(conflict["message"], title=conflict["title"])
+
+
+def validate_duplicate_assignment(employee, donation_location, start_date, end_date=None, name=None):
+	conflict = get_assignment_conflict(employee, donation_location, start_date, end_date, name)
+	if conflict and conflict["type"] == "duplicate":
+		throw_assignment_conflict(conflict)
+
+
+def validate_same_employee_same_dates(employee, start_date, end_date=None, name=None):
+	conflict = get_assignment_conflict(employee, None, start_date, end_date, name)
+	if conflict and conflict["type"] in ("duplicate", "same_dates"):
+		throw_assignment_conflict(conflict)
+
+
+def validate_assignment_overlap(employee, start_date, end_date=None, name=None):
+	overlap = get_overlapping_assignment(employee, start_date, end_date, name)
+	if not overlap:
+		return
+
+	throw_assignment_conflict(
+		{
+			"type": "overlap",
+			"title": frappe._("Overlapping Assignment"),
+			"message": frappe._(
+				"Employee {0} already has overlapping Donation Location Assignment {1} from {2} to {3}."
+			).format(
+				employee,
+				overlap.name,
+				format_date_for_message(overlap.start_date),
+				format_date_for_message(overlap.end_date),
+			),
+		}
+	)
+
+
+@frappe.whitelist()
+def validate_assignment_conflicts(employee=None, donation_location=None, start_date=None, end_date=None, name=None):
+	conflict = get_assignment_conflict(employee, donation_location, start_date, end_date, name)
+	throw_assignment_conflict(conflict)
+	return {"ok": True}
 
 
 @frappe.whitelist()

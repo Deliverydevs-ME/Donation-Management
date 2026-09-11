@@ -7,6 +7,8 @@ from frappe.model.naming import make_autoname
 from frappe.utils import cint
 from frappe.desk.reportview import get_match_cond
 
+from donation_management.donation_management.validations import validate_unique_field
+
 
 COUPON_COLORS = {
 	"Zakat": "Green",
@@ -34,6 +36,7 @@ class Coupon(Document):
 		self.set_coupon_color()
 		if not self.coupon_number:
 			self.set_coupon_number()
+		validate_unique_field(self, "coupon_number", "Coupon Number")
 
 	def on_update(self):
 		previous_doc = self.get_doc_before_save()
