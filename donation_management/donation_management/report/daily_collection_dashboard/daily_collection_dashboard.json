@@ -1,5 +1,5 @@
 {
- "add_total_row": 0,
+ "add_total_row": 1,
  "creation": "2026-09-07 00:00:00.000000",
  "disable_prepared_report": 0,
  "doctype": "Report",
@@ -17,6 +17,9 @@
  "roles": [
   {
    "role": "Donation Manager"
+  },
+  {
+   "role": "General Secretary"
   },
   {
    "role": "System Manager"

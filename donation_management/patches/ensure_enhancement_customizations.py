@@ -16,6 +16,7 @@ def ensure_roles():
 		"Donation Confidential Reference User",
 		"Donation Cancellation Approver",
 		"Donation Manager",
+		"General Secretary",
 	):
 		if frappe.db.exists("Role", role_name):
 			continue
