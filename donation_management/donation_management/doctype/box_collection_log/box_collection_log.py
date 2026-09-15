@@ -18,6 +18,9 @@ class BoxCollectionLog(Document):
 		if flt(self.collected_amount) < 0:
 			frappe.throw(frappe._("Collected Amount cannot be negative."))
 
+		if not self.cash_denominations:
+			return
+
 		total = 0
 		for row in self.cash_denominations:
 			denomination = cint(row.denomination)

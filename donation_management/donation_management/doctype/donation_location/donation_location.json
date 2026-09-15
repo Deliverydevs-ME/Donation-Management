@@ -8,9 +8,14 @@
  "field_order": [
   "location_name",
   "location_type",
+  "territory",
+  "zone_manager",
+  "responsible_person",
   "contact",
   "contact_person",
   "column_break_loc",
+  "care_of_trustee",
+  "care_of_donor",
   "shophouse_name",
   "address"
  ],
@@ -34,8 +39,38 @@
    "reqd": 1
   },
   {
+   "fieldname": "territory",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Territory/Zone",
+   "options": "Territory"
+  },
+  {
+   "fieldname": "zone_manager",
+   "fieldtype": "Link",
+   "label": "Zone/Territory Manager",
+   "options": "Employee"
+  },
+  {
+   "fieldname": "responsible_person",
+   "fieldtype": "Data",
+   "label": "Responsible Person"
+  },
+  {
    "fieldname": "column_break_loc",
    "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "care_of_trustee",
+   "fieldtype": "Link",
+   "label": "C/O Trustee",
+   "options": "Trustee"
+  },
+  {
+   "fieldname": "care_of_donor",
+   "fieldtype": "Link",
+   "label": "C/O Donor",
+   "options": "Donor"
   },
   {
    "fieldname": "address",
@@ -103,7 +138,7 @@
   }
  ],
  "row_format": "Dynamic",
- "search_fields": "location_name,location_type,address",
+ "search_fields": "location_name,location_type,address,territory,responsible_person",
  "show_title_field_in_link": 1,
  "sort_field": "modified",
  "sort_order": "DESC",

@@ -29,7 +29,7 @@
    "label": "Allow Donor Without Phone or Email"
   },
   {
-   "default": "0",
+   "default": "1",
    "description": "If enabled, multiple Donors may share the same phone number (useful for bulk import and family donors).",
    "fieldname": "allow_duplicate_donor_phone",
    "fieldtype": "Check",

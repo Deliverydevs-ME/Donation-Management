@@ -64,9 +64,9 @@ def ensure_box_shapes():
 
 
 def ensure_donation_settings():
-	if frappe.db.exists("Donation Settings", "Donation Settings"):
-		return
+	if not frappe.db.exists("Donation Settings", "Donation Settings"):
+		settings = frappe.new_doc("Donation Settings")
+		settings.name = "Donation Settings"
+		settings.insert(ignore_permissions=True)
 
-	settings = frappe.new_doc("Donation Settings")
-	settings.name = "Donation Settings"
-	settings.insert(ignore_permissions=True)
+	frappe.db.set_single_value("Donation Settings", "allow_duplicate_donor_phone", 1)

@@ -239,7 +239,8 @@ def get_closing_details_payload(doc):
 
 
 def get_fetch_cashier():
-	if frappe.has_role(("Finance Manager", "CFO", "Donation Manager", "System Manager")):
+	wide_fetch_roles = {"Finance Manager", "CFO", "Donation Manager", "System Manager"}
+	if wide_fetch_roles.intersection(set(frappe.get_roles())):
 		return None
 	return frappe.session.user
 

@@ -9,6 +9,7 @@
   "box_collection",
   "action",
   "action_date",
+  "manual_receipt_date",
   "status_after",
   "approval_reference",
   "approved_by",
@@ -55,6 +56,11 @@
    "in_list_view": 1,
    "label": "Action Date",
    "reqd": 1
+  },
+  {
+   "fieldname": "manual_receipt_date",
+   "fieldtype": "Date",
+   "label": "Manual Receipt Date"
   },
   {
    "fieldname": "status_after",

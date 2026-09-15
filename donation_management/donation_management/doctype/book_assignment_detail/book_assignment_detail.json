@@ -41,6 +41,7 @@
    "read_only": 1
   },
   {
+   "description": "First receipt serial number in this assigned book range. The range is inclusive.",
    "fieldname": "from_receipt_no",
    "fieldtype": "Data",
    "in_list_view": 1,
@@ -48,6 +49,7 @@
    "reqd": 1
   },
   {
+   "description": "Last receipt serial number in this assigned book range. The range is inclusive.",
    "fieldname": "to_receipt_no",
    "fieldtype": "Data",
    "in_list_view": 1,

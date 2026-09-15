@@ -18,7 +18,13 @@ const mohasil_employee_filters = {
 frappe.ui.form.on("Donation Order", {
 	setup(frm) {
 		frm.set_query("donor_name", () => {
-			return {};
+			return {
+				query: "donation_management.donation_management.api.get_donor_link_options",
+				filters: {
+					address: frm.doc.donor_address_filter || "",
+					phone: frm.doc.donor_phone_number || "",
+				},
+			};
 		});
 
 		frm.set_query("mode_of_payment", () => {
@@ -447,6 +453,12 @@ function set_donor_from_email(frm) {
 		callback(response) {
 			const donor = response.message || {};
 			if (donor.invalid) {
+				return;
+			}
+
+			if (donor.multiple) {
+				show_duplicate_phone_donor_message(frm, donor.donors || []);
+				set_value_if_changed(frm, "donor_name", "");
 				return;
 			}
 
@@ -1197,6 +1209,30 @@ function set_donor_from_phone(frm) {
 			render_donor_program_enrollments(frm);
 		},
 	});
+}
+
+function show_duplicate_phone_donor_message(frm, donors) {
+	const donor_rows = donors.map((donor) => {
+		const address = donor.primary_address ? ` - ${escape_html(donor.primary_address)}` : "";
+		return `<li><b>${escape_html(donor.name)}</b> - ${escape_html(donor.customer_name || "")}${address}</li>`;
+	}).join("");
+
+	frappe.msgprint({
+		title: __("Multiple Donors Found"),
+		message: __(
+			"Multiple Donors matched this contact detail. Please select the correct Donor manually from the Donor field."
+		) + `<ul>${donor_rows}</ul>`,
+		indicator: "orange",
+	});
+}
+
+function escape_html(value) {
+	return String(value || "")
+		.replace(/&/g, "&amp;")
+		.replace(/</g, "&lt;")
+		.replace(/>/g, "&gt;")
+		.replace(/"/g, "&quot;")
+		.replace(/'/g, "&#039;");
 }
 
 function clear_donor_details(frm) {

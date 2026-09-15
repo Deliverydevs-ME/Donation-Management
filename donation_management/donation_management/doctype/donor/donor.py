@@ -124,23 +124,8 @@ class Donor(NestedSet):
 			frappe.throw(frappe._("Either Donor Phone Number or Donor Email is required."))
 
 	def validate_unique_donor_email(self):
-		if not self.donor_email:
-			return
-
-		existing_donor = frappe.db.exists(
-			"Donor",
-			{
-				"donor_email": self.donor_email,
-				"name": ["!=", self.name],
-			},
-		)
-		if existing_donor:
-			frappe.throw(
-				frappe._("Donor Email {0} is already used by Donor {1}.").format(
-					self.donor_email,
-					existing_donor,
-				)
-			)
+		# Donors may belong to the same family or organization and share an email address.
+		return
 
 	def validate_unique_donor_uid(self):
 		validate_unique_field(self, "donor_uid", "Donor UID")

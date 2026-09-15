@@ -53,6 +53,8 @@ class DonationBookCollection(Document):
 			self.company = get_default_company()
 		if not self.collection_date:
 			self.collection_date = today()
+		if self.manual_receipt_number and not self.manual_receipt_date:
+			self.manual_receipt_date = self.collection_date
 
 	def validate_book(self):
 		book = frappe.db.get_value(

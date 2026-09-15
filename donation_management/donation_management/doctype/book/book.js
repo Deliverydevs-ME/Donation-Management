@@ -600,7 +600,6 @@ function build_return_dialog(frm, accounting_defaults) {
 		fieldname: "denomination_total",
 		fieldtype: "Currency",
 		label: __("Denomination Total"),
-		read_only: 1,
 	});
 
 	const dialog = new frappe.ui.Dialog({
@@ -627,6 +626,7 @@ function build_return_dialog(frm, accounting_defaults) {
 				mode_of_payment: values.mode_of_payment,
 					debit_account: values.debit_account,
 					credit_account: values.credit_account,
+					denomination_total: values.denomination_total,
 				},
 				freeze: true,
 				callback() {
@@ -653,7 +653,9 @@ function update_return_denomination_total(dialog) {
 	denominations.forEach((denomination) => {
 		total += denomination * flt(dialog.get_value(`denomination_${denomination}`));
 	});
-	dialog.set_value("denomination_total", total);
+	if (total) {
+		dialog.set_value("denomination_total", total);
+	}
 }
 
 function validate_return_denomination_total(dialog, frm) {

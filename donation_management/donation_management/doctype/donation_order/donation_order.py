@@ -160,18 +160,36 @@ class DonationOrder(Document):
 
 	def set_donor_details(self):
 		if not self.donor_name and self.donor_phone_number:
-			self.donor_name = frappe.db.get_value(
+			donors = frappe.get_all(
 				"Donor",
-				{"donor_phone_digits": normalize_phone(self.donor_phone_number)},
-				"name",
+				filters={"donor_phone_digits": normalize_phone(self.donor_phone_number)},
+				pluck="name",
+				limit_page_length=2,
 			)
+			if len(donors) > 1:
+				frappe.throw(
+					frappe._(
+						"Multiple Donors are using Phone Number {0}. Please select Donor manually."
+					).format(self.donor_phone_number)
+				)
+			if donors:
+				self.donor_name = donors[0]
 
 		if not self.donor_name and self.donor_email:
-			self.donor_name = frappe.db.get_value(
+			donors = frappe.get_all(
 				"Donor",
-				{"donor_email": self.donor_email.strip().lower()},
-				"name",
+				filters={"donor_email": self.donor_email.strip().lower()},
+				pluck="name",
+				limit_page_length=2,
 			)
+			if len(donors) > 1:
+				frappe.throw(
+					frappe._(
+						"Multiple Donors are using Email {0}. Please select Donor manually."
+					).format(self.donor_email)
+				)
+			if donors:
+				self.donor_name = donors[0]
 
 		if not self.donor_name:
 			frappe.throw(frappe._("Donor is required."))

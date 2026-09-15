@@ -226,6 +226,7 @@ class BoxCollection(Document):
 		self.collection_date = None
 		self.collection_office = None
 		self.collected_amount = 0
+		self.manual_receipt_date = None
 		self.flags.box_collection_action = True
 		self.save(ignore_permissions=True)
 		self.create_action_log(action_type)
@@ -244,6 +245,8 @@ class BoxCollection(Document):
 		mode_of_payment=None,
 		debit_account=None,
 		credit_account=None,
+		manual_receipt_date=None,
+		denomination_total=None,
 	):
 		self.ensure_submitted()
 
@@ -256,13 +259,26 @@ class BoxCollection(Document):
 		self.validate_mohasil_employee(self.collection_office, "Collection Staff")
 
 		denomination_rows = self.get_denomination_rows(denominations)
-		denomination_total = sum(row["amount"] for row in denomination_rows)
+		calculated_denomination_total = sum(row["amount"] for row in denomination_rows)
+		denomination_total = (
+			flt(denomination_total)
+			if denomination_total not in (None, "")
+			else calculated_denomination_total
+		)
 		collected_amount = flt(collected_amount)
 
 		if collected_amount <= 0:
 			frappe.throw(frappe._("Collected Amount must be greater than zero."))
 
-		if denomination_total != collected_amount:
+		if denomination_rows and calculated_denomination_total != collected_amount:
+			frappe.throw(
+				frappe._("Denomination total {0} must match Collected Amount {1}.").format(
+					frappe.format_value(calculated_denomination_total, {"fieldtype": "Currency"}),
+					frappe.format_value(collected_amount, {"fieldtype": "Currency"}),
+				)
+			)
+
+		if not denomination_rows and denomination_total != collected_amount:
 			frappe.throw(
 				frappe._("Denomination total {0} must match Collected Amount {1}.").format(
 					frappe.format_value(denomination_total, {"fieldtype": "Currency"}),
@@ -283,6 +299,7 @@ class BoxCollection(Document):
 
 		self.status = "Collected"
 		self.collection_date = today()
+		self.manual_receipt_date = manual_receipt_date or self.collection_date
 		self.collected_amount = collected_amount
 		self.flags.box_collection_action = True
 		self.save(ignore_permissions=True)
@@ -396,7 +413,16 @@ class BoxCollection(Document):
 		location = frappe.db.get_value(
 			"Donation Location",
 			self.donation_location,
-			["location_type", "contact", "contact_person", "shophouse_name", "address"],
+			[
+				"location_type",
+				"contact",
+				"contact_person",
+				"shophouse_name",
+				"address",
+				"care_of_trustee",
+				"care_of_donor",
+				"responsible_person",
+			],
 			as_dict=True,
 		)
 		if not location:
@@ -404,9 +430,11 @@ class BoxCollection(Document):
 
 		self.location_type = location.location_type
 		self.contact_number = location.contact
-		self.contact = location.contact_person
+		self.contact = location.responsible_person or location.contact_person
 		self.location_name = location.shophouse_name
 		self.donor_location = location.address
+		self.care_of_trustee = location.care_of_trustee
+		self.care_of_donor = location.care_of_donor
 
 	def get_denomination_rows(self, denominations):
 		denominations = frappe.parse_json(denominations) if isinstance(denominations, str) else denominations
@@ -433,9 +461,6 @@ class BoxCollection(Document):
 				}
 			)
 
-		if not any(row["note_count"] for row in rows):
-			frappe.throw(frappe._("At least one denomination count is required."))
-
 		invalid_denominations = set(denomination_counts) - set(DENOMINATIONS)
 		if invalid_denominations:
 			frappe.throw(
@@ -444,7 +469,7 @@ class BoxCollection(Document):
 				)
 			)
 
-		return rows
+		return [row for row in rows if row["note_count"]]
 
 	def create_action_log(self, action_type, denomination_rows=None):
 		staff = self.collection_office if action_type == "Collection" else self.deployment_officer
@@ -454,6 +479,7 @@ class BoxCollection(Document):
 				"box_collection": self.name,
 				"action": action_type,
 				"action_date": now_datetime(),
+				"manual_receipt_date": self.manual_receipt_date,
 				"status_after": self.status,
 				"donation_box": self.box_number,
 				"box_number": frappe.db.get_value("Donation Box", self.box_number, "box_number"),

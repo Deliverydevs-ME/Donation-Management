@@ -548,6 +548,7 @@
   {
    "fieldname": "primary_address",
    "fieldtype": "Text",
+   "in_standard_filter": 1,
    "label": "Primary Address",
    "read_only": 1
   },
@@ -952,7 +953,7 @@
  ],
  "quick_entry": 1,
  "row_format": "Dynamic",
- "search_fields": "customer_name,donor_phone_number,donor_email,mobile_no,territory",
+ "search_fields": "customer_name,donor_phone_number,donor_email,mobile_no,territory,primary_address",
  "show_name_in_global_search": 1,
  "show_title_field_in_link": 1,
  "sort_field": "modified",

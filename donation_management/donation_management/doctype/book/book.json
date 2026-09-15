@@ -26,6 +26,7 @@
   "volunteer_area",
   "date_section",
   "start_date",
+  "manual_receipt_date",
   "page_section",
   "total_pages",
   "used_pages",
@@ -203,6 +204,13 @@
    "in_list_view": 1,
    "label": "Start Date",
    "reqd": 1
+  },
+  {
+   "depends_on": "eval:doc.book_type == 'Donation Book'",
+   "fieldname": "manual_receipt_date",
+   "fieldtype": "Date",
+   "label": "Latest Manual Receipt Date",
+   "read_only": 1
   },
   {
    "depends_on": "eval:doc.book_type == 'Coupon Book'",

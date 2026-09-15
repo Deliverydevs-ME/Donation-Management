@@ -8,6 +8,7 @@
  "field_order": [
   "donor_section",
   "donor_phone_number",
+  "donor_address_filter",
   "donor_email",
   "donor_cnic",
   "donor_name",
@@ -131,6 +132,12 @@
    "in_list_view": 1,
    "label": "Donor Phone Number",
    "options": "Phone"
+  },
+  {
+   "description": "Type part of the donor address before selecting Donor to filter matching donors.",
+   "fieldname": "donor_address_filter",
+   "fieldtype": "Data",
+   "label": "Donor Address Filter"
   },
   {
    "fetch_from": "donor_name.donor_email",

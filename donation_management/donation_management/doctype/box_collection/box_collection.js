@@ -25,6 +25,7 @@ const always_locked_fields = [
 	"status",
 	"assignment_date",
 	"collection_date",
+	"manual_receipt_date",
 	"collection_office",
 	"collected_amount",
 ];
@@ -247,7 +248,7 @@ function show_cancel_dialog(frm) {
 
 function set_location_details_from_master(frm) {
 	if (!frm.doc.donation_location) {
-		["location_type", "location_name", "donor_location", "contact", "contact_number"].forEach(
+		["location_type", "location_name", "donor_location", "contact", "contact_number", "care_of_trustee", "care_of_donor"].forEach(
 			(fieldname) => frm.set_value(fieldname, "")
 		);
 		return;
@@ -258,6 +259,9 @@ function set_location_details_from_master(frm) {
 			"location_type",
 			"contact",
 			"contact_person",
+			"responsible_person",
+			"care_of_trustee",
+			"care_of_donor",
 			"shophouse_name",
 			"address",
 		])
@@ -266,9 +270,11 @@ function set_location_details_from_master(frm) {
 			frm.set_value({
 				location_type: location.location_type || "",
 				contact_number: location.contact || "",
-				contact: location.contact_person || "",
+				contact: location.responsible_person || location.contact_person || "",
 				location_name: location.shophouse_name || "",
 				donor_location: location.address || "",
+				care_of_trustee: location.care_of_trustee || "",
+				care_of_donor: location.care_of_donor || "",
 			});
 		});
 }
@@ -276,7 +282,7 @@ function set_location_details_from_master(frm) {
 function set_dialog_location_details(dialog) {
 	const donation_location = dialog.get_value("donation_location");
 	if (!donation_location) {
-		["location_type", "location_name", "donor_location", "contact", "contact_number"].forEach(
+		["location_type", "location_name", "donor_location", "contact", "contact_number", "care_of_trustee", "care_of_donor"].forEach(
 			(fieldname) => dialog.set_value(fieldname, "")
 		);
 		return;
@@ -287,6 +293,9 @@ function set_dialog_location_details(dialog) {
 			"location_type",
 			"contact",
 			"contact_person",
+			"responsible_person",
+			"care_of_trustee",
+			"care_of_donor",
 			"shophouse_name",
 			"address",
 		])
@@ -294,9 +303,11 @@ function set_dialog_location_details(dialog) {
 			const location = response.message || {};
 			dialog.set_value("location_type", location.location_type || "");
 			dialog.set_value("contact_number", location.contact || "");
-			dialog.set_value("contact", location.contact_person || "");
+			dialog.set_value("contact", location.responsible_person || location.contact_person || "");
 			dialog.set_value("location_name", location.shophouse_name || "");
 			dialog.set_value("donor_location", location.address || "");
+			dialog.set_value("care_of_trustee", location.care_of_trustee || "");
+			dialog.set_value("care_of_donor", location.care_of_donor || "");
 		});
 }
 
@@ -332,6 +343,12 @@ function build_collection_dialog(frm, accounting_defaults) {
 			label: __("Collected Amount"),
 			reqd: 1,
 			onchange: () => update_denomination_total(dialog),
+		},
+		{
+			fieldname: "manual_receipt_date",
+			fieldtype: "Date",
+			label: __("Manual Receipt Date"),
+			default: frappe.datetime.get_today(),
 		},
 		{
 			fieldname: "accounting_section",
@@ -397,7 +414,6 @@ function build_collection_dialog(frm, accounting_defaults) {
 		fieldname: "denomination_total",
 		fieldtype: "Currency",
 		label: __("Denomination Total"),
-		read_only: 1,
 	});
 
 	const dialog = new frappe.ui.Dialog({
@@ -421,6 +437,8 @@ function build_collection_dialog(frm, accounting_defaults) {
 				mode_of_payment: values.mode_of_payment,
 				debit_account: values.debit_account,
 				credit_account: values.credit_account,
+				manual_receipt_date: values.manual_receipt_date,
+				denomination_total: values.denomination_total,
 			}).then(() => {
 				dialog.hide();
 				frm.reload_doc();
@@ -437,7 +455,9 @@ function update_denomination_total(dialog) {
 	denominations.forEach((denomination) => {
 		total += denomination * flt(dialog.get_value(`denomination_${denomination}`));
 	});
-	dialog.set_value("denomination_total", total);
+	if (total) {
+		dialog.set_value("denomination_total", total);
+	}
 }
 
 function validate_denomination_total(dialog) {

@@ -50,11 +50,20 @@ def get_donor_by_email(donor_email=None):
 	if "@" not in donor_email:
 		return {"invalid": 1}
 
-	donor = frappe.db.get_value("Donor", {"donor_email": donor_email}, DONOR_FIELDS, as_dict=True)
-	if not donor:
+	donors = frappe.get_all(
+		"Donor",
+		filters={"donor_email": donor_email},
+		fields=DONOR_FIELDS + ["primary_address"],
+		order_by="modified desc",
+		limit_page_length=20,
+	)
+	if not donors:
 		return {}
 
-	return format_donor_response(donor)
+	if len(donors) > 1:
+		return {"multiple": 1, "donors": donors}
+
+	return format_donor_response(donors[0])
 
 
 @frappe.whitelist()
@@ -72,16 +81,65 @@ def get_donor_by_phone(donor_phone_number=None):
 	if len(donor_phone_digits) < 10:
 		return {"invalid": 1}
 
-	donor = frappe.db.get_value(
+	donors = frappe.get_all(
 		"Donor",
-		{"donor_phone_digits": donor_phone_digits},
-		DONOR_FIELDS,
-		as_dict=True,
+		filters={"donor_phone_digits": donor_phone_digits},
+		fields=DONOR_FIELDS + ["primary_address"],
+		order_by="modified desc",
+		limit_page_length=20,
 	)
-	if not donor:
+	if not donors:
 		return {}
 
-	return format_donor_response(donor)
+	if len(donors) > 1:
+		return {"multiple": 1, "donors": donors}
+
+	return format_donor_response(donors[0])
+
+
+@frappe.whitelist()
+@frappe.validate_and_sanitize_search_inputs
+def get_donor_link_options(doctype, txt, searchfield, start, page_len, filters):
+	filters = frappe._dict(filters or {})
+	values = {
+		"txt": f"%{txt or ''}%",
+		"start": start,
+		"page_len": page_len,
+		"address": f"%{filters.get('address') or ''}%",
+		"phone": f"%{filters.get('phone') or ''}%",
+		"phone_digits": f"%{normalize_phone(filters.get('phone') or '')}%",
+	}
+	conditions = [
+		"""(
+			name like %(txt)s
+			or customer_name like %(txt)s
+			or donor_phone_number like %(txt)s
+			or donor_email like %(txt)s
+			or ifnull(primary_address, '') like %(txt)s
+		)""",
+	]
+	if filters.get("address"):
+		conditions.append("ifnull(primary_address, '') like %(address)s")
+	if filters.get("phone"):
+		conditions.append(
+			"""(
+				ifnull(donor_phone_number, '') like %(phone)s
+				or ifnull(donor_phone_digits, '') like %(phone_digits)s
+			)"""
+		)
+
+	return frappe.db.sql(
+		f"""
+		select name, customer_name, donor_phone_number, primary_address
+		from `tabDonor`
+		where {" and ".join(conditions)}
+		order by
+			case when name like %(txt)s then 0 else 1 end,
+			modified desc
+		limit %(start)s, %(page_len)s
+		""",
+		values,
+	)
 
 
 @frappe.whitelist()

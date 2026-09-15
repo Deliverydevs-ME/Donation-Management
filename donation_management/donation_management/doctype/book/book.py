@@ -237,6 +237,7 @@ class Book(Document):
 		self.to_receipt_no = None
 		self.used_receipts = 0
 		self.remaining_receipts = 0
+		self.manual_receipt_date = None
 		self.set("assigned_books", [])
 
 	def validate_donation_book_details(self):
@@ -445,10 +446,8 @@ class Book(Document):
 		if self.status in ("Returned", "Closed"):
 			if flt(self.collected_amount) <= 0:
 				frappe.throw(frappe._("Total Amount Collected is required when Book is returned."))
-			if not self.cash_denominations:
-				frappe.throw(frappe._("Cash Denominations are required when Book is returned."))
 
-		if not self.cash_denominations and flt(self.collected_amount) <= 0:
+		if not self.cash_denominations:
 			return
 
 		denomination_total = 0
@@ -647,6 +646,7 @@ def return_book(
 	mode_of_payment=None,
 	debit_account=None,
 	credit_account=None,
+	denomination_total=None,
 ):
 	doc = frappe.get_doc("Book", book)
 	if doc.status != "Issued":
@@ -669,6 +669,15 @@ def return_book(
 		frappe.throw(frappe._("Total Amount Collected must equal Used Pages multiplied by Coupon Value."))
 
 	denominations = frappe.parse_json(denominations) or []
+	manual_denomination_total = flt(denomination_total)
+	denomination_rows_total = sum(
+		cint(row.get("denomination")) * cint(row.get("note_count")) for row in denominations
+	)
+	if denomination_rows_total and flt(denomination_rows_total) != calculated_collected_amount:
+		frappe.throw(frappe._("Cash denomination total must match Total Amount Collected."))
+	if not denomination_rows_total and manual_denomination_total != calculated_collected_amount:
+		frappe.throw(frappe._("Denomination Total must match Total Amount Collected."))
+
 	doc.set("cash_denominations", [])
 	for row in denominations:
 		if cint(row.get("note_count")):
@@ -1080,6 +1089,22 @@ def sync_donation_book_leaves(book):
 			upsert_donation_book_leaf(book_doc, receipt_range.get("book_serial_no"), str(receipt_number))
 
 	refresh_donation_book_leaf_usage(book)
+	update_book_latest_manual_receipt_date(book)
+
+
+def update_book_latest_manual_receipt_date(book):
+	latest_manual_receipt_date = frappe.db.get_value(
+		"Donation Book Leaf",
+		{"book": book, "status": "Used"},
+		"max(manual_receipt_date)",
+	)
+	frappe.db.set_value(
+		"Book",
+		book,
+		"manual_receipt_date",
+		latest_manual_receipt_date,
+		update_modified=False,
+	)
 
 
 def get_donation_book_leaf_ranges(book_doc):
