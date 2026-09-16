@@ -33,9 +33,9 @@ def get_data(filters):
 	if filters.get("status"):
 		conditions.append("collection.status = %(status)s")
 		values["status"] = filters.status
-	if filters.get("donation_location"):
-		conditions.append("collection.donation_location = %(donation_location)s")
-		values["donation_location"] = filters.donation_location
+	if filters.get("donation_box_location"):
+		conditions.append("collection.donation_box_location = %(donation_box_location)s")
+		values["donation_box_location"] = filters.donation_box_location
 	if filters.get("mohasil"):
 		conditions.append("(box.mohasil = %(mohasil)s or collection.deployment_officer = %(mohasil)s or collection.collection_office = %(mohasil)s)")
 		values["mohasil"] = filters.mohasil
@@ -47,7 +47,7 @@ def get_data(filters):
 			collection.box_number,
 			collection.box_code,
 			collection.status,
-			coalesce(location.shophouse_name, collection.location_name, location.location_name) as location_name,
+			coalesce(location.location_name, collection.location_name) as location_name,
 			coalesce(collection.donor_location, location.address) as location_address,
 			coalesce(collection.location_type, location.location_type) as location_type,
 			coalesce(location.territory, box.territory) as territory,
@@ -65,8 +65,8 @@ def get_data(filters):
 		from `tabBox Collection` collection
 		left join `tabDonation Box` box
 			on box.name = collection.box_number
-		left join `tabDonation Location` location
-			on location.name = collection.donation_location
+		left join `tabDonation Box Location` location
+			on location.name = collection.donation_box_location
 		where collection.docstatus != 2
 			{where_clause}
 		order by days_outstanding desc, collection.modified desc

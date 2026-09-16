@@ -8,10 +8,10 @@
  "field_order": [
   "donor_section",
   "donor_phone_number",
-  "donor_address_filter",
   "donor_email",
   "donor_cnic",
   "donor_name",
+  "donor_primary_address",
   "donor_program_enrollments_html",
   "referred_by_trustee",
   "donor_pos_id",
@@ -134,12 +134,6 @@
    "options": "Phone"
   },
   {
-   "description": "Type part of the donor address before selecting Donor to filter matching donors.",
-   "fieldname": "donor_address_filter",
-   "fieldtype": "Data",
-   "label": "Donor Address Filter"
-  },
-  {
    "fetch_from": "donor_name.donor_email",
    "fieldname": "donor_email",
    "fieldtype": "Data",
@@ -162,6 +156,15 @@
    "label": "Donor",
    "options": "Donor",
    "reqd": 1
+  },
+  {
+   "fetch_from": "donor_name.primary_address",
+   "fieldname": "donor_primary_address",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "in_standard_filter": 1,
+   "label": "Donor Primary Address",
+   "read_only": 1
   },
   {
    "fieldname": "donor_program_enrollments_html",

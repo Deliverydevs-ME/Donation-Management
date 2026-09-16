@@ -21,7 +21,6 @@ frappe.ui.form.on("Donation Order", {
 			return {
 				query: "donation_management.donation_management.api.get_donor_link_options",
 				filters: {
-					address: frm.doc.donor_address_filter || "",
 					phone: frm.doc.donor_phone_number || "",
 				},
 			};

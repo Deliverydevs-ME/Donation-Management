@@ -1,7 +1,6 @@
 frappe.query_reports["Donation Closing and Pending Closing"] = {
 	onload(report) {
-		report.page.clear_primary_action();
-		setTimeout(() => report.page.clear_primary_action(), 300);
+		remove_report_add_button(report, ["Add Donation Closing", "Add Donation Order"]);
 	},
 	filters: [
 		{
@@ -28,3 +27,20 @@ frappe.query_reports["Donation Closing and Pending Closing"] = {
 		},
 	],
 };
+
+function remove_report_add_button(report, labels) {
+	const clear = () => {
+		report.page.clear_primary_action();
+		$(report.page.wrapper)
+			.find("button, a")
+			.filter(function () {
+				const text = ($(this).text() || "").trim();
+				return labels.some((label) => text === __(label) || text.includes(__(label)));
+			})
+			.remove();
+	};
+
+	clear();
+	setTimeout(clear, 300);
+	setTimeout(clear, 1000);
+}

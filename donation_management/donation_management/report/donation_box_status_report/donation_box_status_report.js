@@ -7,10 +7,10 @@ frappe.query_reports["Donation Box Status Report"] = {
 			options: "\nAvailable\nOccupied\nIssued\nPending Receipt\nUnder Collection\nCollected\nReceived\nReturned\nClosed\nCancelled",
 		},
 		{
-			fieldname: "donation_location",
-			label: __("Donation Location"),
+			fieldname: "donation_box_location",
+			label: __("Donation Box Location"),
 			fieldtype: "Link",
-			options: "Donation Location",
+			options: "Donation Box Location",
 		},
 		{
 			fieldname: "mohasil",

@@ -1,4 +1,8 @@
 frappe.query_reports["Book Leaves Status Report"] = {
+	onload(report) {
+		remove_report_add_button(report, ["Add Donation Book", "Add Book", "Add Donation Order"]);
+	},
+
 	filters: [
 		{
 			fieldname: "book",
@@ -26,3 +30,20 @@ frappe.query_reports["Book Leaves Status Report"] = {
 		},
 	],
 };
+
+function remove_report_add_button(report, labels) {
+	const clear = () => {
+		report.page.clear_primary_action();
+		$(report.page.wrapper)
+			.find("button, a")
+			.filter(function () {
+				const text = ($(this).text() || "").trim();
+				return labels.some((label) => text === __(label) || text.includes(__(label)));
+			})
+			.remove();
+	};
+
+	clear();
+	setTimeout(clear, 300);
+	setTimeout(clear, 1000);
+}

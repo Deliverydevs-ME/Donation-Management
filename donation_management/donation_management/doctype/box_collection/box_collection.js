@@ -7,7 +7,7 @@ const mohasil_employee_filters = {
 	designation: "Mohasil",
 };
 const assignment_fields = [
-	"donation_location",
+	"donation_box_location",
 	"location_type",
 	"location_name",
 	"donor_location",
@@ -99,7 +99,7 @@ frappe.ui.form.on("Box Collection", {
 		}
 	},
 
-	donation_location(frm) {
+	donation_box_location(frm) {
 		set_location_details_from_master(frm);
 	},
 });
@@ -121,12 +121,12 @@ function show_assignment_dialog(frm, title, method) {
 		title,
 		fields: [
 			{
-				fieldname: "donation_location",
+				fieldname: "donation_box_location",
 				fieldtype: "Link",
-				label: __("Donation Location"),
-				options: "Donation Location",
+				label: __("Donation Box Location"),
+				options: "Donation Box Location",
 				reqd: 1,
-				default: frm.doc.donation_location,
+				default: frm.doc.donation_box_location,
 				onchange: () => set_dialog_location_details(dialog),
 			},
 			{
@@ -247,7 +247,7 @@ function show_cancel_dialog(frm) {
 }
 
 function set_location_details_from_master(frm) {
-	if (!frm.doc.donation_location) {
+	if (!frm.doc.donation_box_location) {
 		["location_type", "location_name", "donor_location", "contact", "contact_number", "care_of_trustee", "care_of_donor"].forEach(
 			(fieldname) => frm.set_value(fieldname, "")
 		);
@@ -255,23 +255,20 @@ function set_location_details_from_master(frm) {
 	}
 
 	frappe.db
-		.get_value("Donation Location", frm.doc.donation_location, [
+		.get_value("Donation Box Location", frm.doc.donation_box_location, [
 			"location_type",
-			"contact",
-			"contact_person",
+			"location_name",
+			"address",
 			"responsible_person",
 			"care_of_trustee",
 			"care_of_donor",
-			"shophouse_name",
-			"address",
 		])
 		.then((response) => {
 			const location = response.message || {};
 			frm.set_value({
 				location_type: location.location_type || "",
-				contact_number: location.contact || "",
-				contact: location.responsible_person || location.contact_person || "",
-				location_name: location.shophouse_name || "",
+				contact: location.responsible_person || "",
+				location_name: location.location_name || "",
 				donor_location: location.address || "",
 				care_of_trustee: location.care_of_trustee || "",
 				care_of_donor: location.care_of_donor || "",
@@ -280,8 +277,8 @@ function set_location_details_from_master(frm) {
 }
 
 function set_dialog_location_details(dialog) {
-	const donation_location = dialog.get_value("donation_location");
-	if (!donation_location) {
+	const donation_box_location = dialog.get_value("donation_box_location");
+	if (!donation_box_location) {
 		["location_type", "location_name", "donor_location", "contact", "contact_number", "care_of_trustee", "care_of_donor"].forEach(
 			(fieldname) => dialog.set_value(fieldname, "")
 		);
@@ -289,22 +286,19 @@ function set_dialog_location_details(dialog) {
 	}
 
 	frappe.db
-		.get_value("Donation Location", donation_location, [
+		.get_value("Donation Box Location", donation_box_location, [
 			"location_type",
-			"contact",
-			"contact_person",
+			"location_name",
+			"address",
 			"responsible_person",
 			"care_of_trustee",
 			"care_of_donor",
-			"shophouse_name",
-			"address",
 		])
 		.then((response) => {
 			const location = response.message || {};
 			dialog.set_value("location_type", location.location_type || "");
-			dialog.set_value("contact_number", location.contact || "");
-			dialog.set_value("contact", location.responsible_person || location.contact_person || "");
-			dialog.set_value("location_name", location.shophouse_name || "");
+			dialog.set_value("contact", location.responsible_person || "");
+			dialog.set_value("location_name", location.location_name || "");
 			dialog.set_value("donor_location", location.address || "");
 			dialog.set_value("care_of_trustee", location.care_of_trustee || "");
 			dialog.set_value("care_of_donor", location.care_of_donor || "");

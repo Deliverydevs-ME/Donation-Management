@@ -20,17 +20,16 @@ class TestBoxCollection(FrappeTestCase):
 		box.submit()
 		return box
 
-	def make_donation_location(self):
+	def make_donation_box_location(self):
 		location_type = frappe.db.get_value("Location Type", {"location": "Office"}, "name")
 		if not location_type:
 			location_type = frappe.get_doc({"doctype": "Location Type", "location": "Office"}).insert().name
 
 		location = frappe.get_doc(
 			{
-				"doctype": "Donation Location",
+				"doctype": "Donation Box Location",
 				"location_name": f"TEST-LOC-{frappe.generate_hash(length=8)}",
 				"location_type": location_type,
-				"shophouse_name": "Test Shop",
 				"address": "Test Address",
 			}
 		)
@@ -125,10 +124,10 @@ class TestBoxCollection(FrappeTestCase):
 	def test_issuance_while_issued_is_blocked(self):
 		box = self.make_donation_box()
 		box_collection = self.get_box_collection(box)
-		donation_location = self.make_donation_location()
+		donation_box_location = self.make_donation_box_location()
 		dispatcher = self.make_mohasil_employee("Dispatcher")
 		box_collection.set_issuance_date(
-			donation_location=donation_location,
+			donation_box_location=donation_box_location,
 			location_type="Office",
 			location_name="Test Shop",
 			donor_location="Test Address",
@@ -149,11 +148,11 @@ class TestBoxCollection(FrappeTestCase):
 	def test_denomination_total_mismatch_is_blocked(self):
 		box = self.make_donation_box()
 		box_collection = self.get_box_collection(box)
-		donation_location = self.make_donation_location()
+		donation_box_location = self.make_donation_box_location()
 		dispatcher = self.make_mohasil_employee("Dispatcher")
 		collector = self.make_mohasil_employee("Collector")
 		box_collection.set_issuance_date(
-			donation_location=donation_location,
+			donation_box_location=donation_box_location,
 			location_type="Office",
 			location_name="Test Shop",
 			donor_location="Test Address",
@@ -174,11 +173,11 @@ class TestBoxCollection(FrappeTestCase):
 		self.ensure_box_collection_mapping()
 		box = self.make_donation_box()
 		box_collection = self.get_box_collection(box)
-		donation_location = self.make_donation_location()
+		donation_box_location = self.make_donation_box_location()
 		dispatcher = self.make_mohasil_employee("Dispatcher")
 		collector = self.make_mohasil_employee("Collector")
 		box_collection.set_issuance_date(
-			donation_location=donation_location,
+			donation_box_location=donation_box_location,
 			location_type="Office",
 			location_name="Test Shop",
 			donor_location="Test Address",

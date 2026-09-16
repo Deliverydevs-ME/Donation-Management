@@ -203,6 +203,7 @@ class DonationOrder(Document):
 				"donor_email",
 				"donor_phone_number",
 				"donor_phone_digits",
+				"primary_address",
 				"referred_by_trustee",
 				"mohasil",
 				"customer_pos_id",
@@ -234,6 +235,8 @@ class DonationOrder(Document):
 
 		self.donor_email = donor.donor_email or self.donor_email
 		self.donor_phone_number = donor.donor_phone_number
+		if self.meta.has_field("donor_primary_address"):
+			self.donor_primary_address = donor.primary_address
 		self.referred_by_trustee = donor.referred_by_trustee
 		if hasattr(self, "donor_pos_id"):
 			self.donor_pos_id = donor.customer_pos_id

@@ -12,16 +12,15 @@
   "box_shape",
   "status",
   "section_break_gjgj",
+  "donation_box_location",
   "donation_location",
   "care_of_section",
   "care_of_trustee",
   "care_of_donor",
-  "column_break_guwg",
   "assignment_date",
   "collection_date",
   "manual_receipt_date",
   "deployment_officer",
-  "column_break_nypz",
   "collection_office",
   "amended_from",
   "donor_location",
@@ -49,9 +48,7 @@
   "cancelled_on",
   "cancellation_reason",
   "donation_order",
-  "column_break_zbat",
-  "contact_number",
-  "column_break_jdck"
+  "contact_number"
  ],
  "fields": [
   {
@@ -107,11 +104,19 @@
   },
   {
    "allow_on_submit": 1,
-   "fieldname": "donation_location",
+   "fieldname": "donation_box_location",
    "fieldtype": "Link",
    "in_list_view": 1,
    "in_standard_filter": 1,
-   "label": "Donation Location",
+   "label": "Donation Box Location",
+   "options": "Donation Box Location"
+  },
+  {
+   "allow_on_submit": 1,
+   "fieldname": "donation_location",
+   "fieldtype": "Link",
+   "hidden": 1,
+   "label": "Legacy Donation Location",
    "options": "Donation Location"
   },
   {
@@ -134,10 +139,6 @@
    "fieldtype": "Link",
    "label": "Care Of Donor",
    "options": "Donor"
-  },
-  {
-   "fieldname": "column_break_guwg",
-   "fieldtype": "Column Break"
   },
   {
    "allow_on_submit": 1,
@@ -166,10 +167,6 @@
    "in_list_view": 1,
    "label": "Delivery Staff",
    "options": "Employee"
-  },
-  {
-   "fieldname": "column_break_nypz",
-   "fieldtype": "Column Break"
   },
   {
    "allow_on_submit": 1,
@@ -371,19 +368,12 @@
    "allow_on_submit": 1
   },
   {
-   "fieldname": "column_break_zbat",
-   "fieldtype": "Column Break"
-  },
-  {
    "allow_on_submit": 1,
    "fieldname": "contact_number",
    "fieldtype": "Phone",
    "label": "Contact Number"
-  },
-  {
-   "fieldname": "column_break_jdck",
-   "fieldtype": "Column Break"
   }
+
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,

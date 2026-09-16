@@ -90,7 +90,8 @@ class BoxCollection(Document):
 			return
 
 		locked_fields = (
-			("donation_location", "Donation Location"),
+			("donation_box_location", "Donation Box Location"),
+			("donation_location", "Legacy Donation Location"),
 			("location_type", "Location Type"),
 			("location_name", "Shop/House Name"),
 			("donor_location", "Address for Box Delivery"),
@@ -119,6 +120,7 @@ class BoxCollection(Document):
 	def set_issuance_date(
 		self,
 		donation_location=None,
+		donation_box_location=None,
 		location_type=None,
 		location_name=None,
 		donor_location=None,
@@ -132,6 +134,7 @@ class BoxCollection(Document):
 	):
 		self.issue_box(
 			action_type="Issuance",
+			donation_box_location=donation_box_location or donation_location,
 			donation_location=donation_location,
 			location_type=location_type,
 			location_name=location_name,
@@ -150,6 +153,7 @@ class BoxCollection(Document):
 	def set_reissuance_date(
 		self,
 		donation_location=None,
+		donation_box_location=None,
 		location_type=None,
 		location_name=None,
 		donor_location=None,
@@ -163,6 +167,7 @@ class BoxCollection(Document):
 	):
 		self.issue_box(
 			action_type="Reissuance",
+			donation_box_location=donation_box_location or donation_location,
 			donation_location=donation_location,
 			location_type=location_type,
 			location_name=location_name,
@@ -181,6 +186,7 @@ class BoxCollection(Document):
 		self,
 		action_type,
 		donation_location=None,
+		donation_box_location=None,
 		location_type=None,
 		location_name=None,
 		donor_location=None,
@@ -200,7 +206,8 @@ class BoxCollection(Document):
 		if action_type == "Reissuance" and self.status != "Collected":
 			frappe.throw(frappe._("Only Collected boxes can be reissued."))
 
-		previous_location = self.donation_location
+		previous_location = self.donation_box_location or self.donation_location
+		self.donation_box_location = donation_box_location or self.donation_box_location
 		self.donation_location = donation_location or self.donation_location
 		self.location_type = location_type or self.location_type
 		self.location_name = location_name or self.location_name
@@ -234,7 +241,8 @@ class BoxCollection(Document):
 	def requires_issue_approval(self, action_type, previous_location=None):
 		if action_type == "Issuance":
 			return True
-		return bool(previous_location and self.donation_location and previous_location != self.donation_location)
+		current_location = self.donation_box_location or self.donation_location
+		return bool(previous_location and current_location and previous_location != current_location)
 
 	@frappe.whitelist()
 	def set_collection_date(
@@ -368,8 +376,8 @@ class BoxCollection(Document):
 
 	def validate_assignment_details(self):
 		missing_fields = []
-		if not self.donation_location:
-			missing_fields.append("Donation Location")
+		if not (self.donation_box_location or self.donation_location):
+			missing_fields.append("Donation Box Location")
 		if not self.deployment_officer:
 			missing_fields.append("Delivery Staff")
 
@@ -404,37 +412,55 @@ class BoxCollection(Document):
 			)
 
 	def populate_location_from_master(self, force=False):
-		if not self.donation_location:
+		location_name = self.donation_box_location or self.donation_location
+		if not location_name:
 			return
 
-		if not force and not (self.is_new() or self.has_value_changed("donation_location")):
+		if not force and not (
+			self.is_new()
+			or self.has_value_changed("donation_box_location")
+			or self.has_value_changed("donation_location")
+		):
 			return
 
-		location = frappe.db.get_value(
-			"Donation Location",
-			self.donation_location,
-			[
-				"location_type",
-				"contact",
-				"contact_person",
-				"shophouse_name",
-				"address",
-				"care_of_trustee",
-				"care_of_donor",
-				"responsible_person",
-			],
-			as_dict=True,
-		)
+		if self.donation_box_location:
+			location = frappe.db.get_value(
+				"Donation Box Location",
+				self.donation_box_location,
+				[
+					"location_type",
+					"location_name",
+					"address",
+					"care_of_trustee",
+					"care_of_donor",
+					"responsible_person",
+				],
+				as_dict=True,
+			)
+		else:
+			location = frappe.db.get_value(
+				"Donation Location",
+				self.donation_location,
+				[
+					"location_type",
+					"contact",
+					"contact_person",
+					"shophouse_name",
+					"address",
+				],
+				as_dict=True,
+			)
 		if not location:
 			return
 
 		self.location_type = location.location_type
-		self.contact_number = location.contact
-		self.contact = location.responsible_person or location.contact_person
-		self.location_name = location.shophouse_name
+		if "contact" in location:
+			self.contact_number = location.get("contact")
+		self.contact = location.get("responsible_person") or location.get("contact_person")
+		self.location_name = location.get("location_name") or location.get("shophouse_name")
 		self.donor_location = location.address
-		self.care_of_trustee = location.care_of_trustee
-		self.care_of_donor = location.care_of_donor
+		self.care_of_trustee = location.get("care_of_trustee")
+		self.care_of_donor = location.get("care_of_donor")
 
 	def get_denomination_rows(self, denominations):
 		denominations = frappe.parse_json(denominations) if isinstance(denominations, str) else denominations
