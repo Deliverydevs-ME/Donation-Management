@@ -547,56 +547,15 @@ def issue_book(book):
 		frappe.throw(frappe._("Only unissued Books can be issued."))
 	if doc.stock_entry:
 		frappe.throw(frappe._("Book {0} is already linked with historical Stock Entry {1}.").format(doc.name, doc.stock_entry))
-	if doc.custody_transfer:
-		frappe.throw(
-			frappe._("Book {0} is already linked with Custody Transfer {1}.").format(
-				doc.name,
-				doc.custody_transfer,
-			)
-		)
 
 	doc.validate_book_stock_details()
 	if doc.is_donation_book():
 		doc.validate_assigned_books()
 	else:
 		doc.validate_book_serial_no()
-	custody_transfer = create_book_custody_transfer(doc)
-	doc.custody_transfer = custody_transfer.name
 	doc.status = "Issued"
 	doc.save()
 	return doc.as_dict()
-
-
-def create_book_custody_transfer(doc):
-	serial_numbers = ", ".join(get_book_issue_serial_numbers(doc))
-	custody_transfer = frappe.get_doc(
-		{
-			"doctype": "Donation Book Custody Transfer",
-			"book": doc.name,
-			"book_type": doc.book_type,
-			"issued_to_employee": doc.issued_to_employee,
-			"warehouse": doc.warehouse,
-			"transfer_date": today(),
-			"serial_numbers": serial_numbers,
-			"remarks": "Book custody issued: {0} | Type: {1} | Serial No: {2} | Issued To: {3}".format(
-				doc.name,
-				doc.book_type,
-				serial_numbers,
-				doc.issued_to_employee,
-			),
-		}
-	)
-	custody_transfer.flags.ignore_permissions = True
-	custody_transfer.insert(ignore_permissions=True)
-	custody_transfer.submit()
-	return custody_transfer
-
-
-def get_book_issue_serial_numbers(doc):
-	if doc.is_donation_book() and doc.assigned_books:
-		return [row.book_serial_no for row in doc.assigned_books if row.book_serial_no]
-
-	return [doc.book_serial_no] if doc.book_serial_no else []
 
 
 @frappe.whitelist()
@@ -1164,7 +1123,6 @@ def refresh_donation_book_leaf_usage(book):
 		update `tabDonation Book Leaf`
 		set status = 'Pending',
 			donor = null,
-			donation_order = null,
 			payment_mode = null,
 			manual_receipt_date = null,
 			journal_entry = null,
@@ -1177,7 +1135,6 @@ def refresh_donation_book_leaf_usage(book):
 	used_rows = frappe.db.sql(
 		"""
 		select
-			parent.name as donation_order,
 			parent.donor_name as donor,
 			parent.mode_of_payment as payment_mode,
 			parent.manual_receipt_date,
@@ -1193,7 +1150,6 @@ def refresh_donation_book_leaf_usage(book):
 			and ifnull(detail.manual_receipt_number, '') != ''
 		union
 		select
-			parent.name as donation_order,
 			parent.donor_name as donor,
 			parent.mode_of_payment as payment_mode,
 			parent.manual_receipt_date,
@@ -1220,7 +1176,6 @@ def refresh_donation_book_leaf_usage(book):
 			{
 				"status": "Used",
 				"donor": row.donor,
-				"donation_order": row.donation_order,
 				"payment_mode": row.payment_mode,
 				"manual_receipt_date": row.manual_receipt_date,
 				"journal_entry": row.journal_entry,

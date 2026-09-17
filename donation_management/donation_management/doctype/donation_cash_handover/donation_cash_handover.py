@@ -21,10 +21,7 @@ class DonationCashHandover(Document):
 		if not self.destination:
 			self.destination = frappe.db.get_single_value("Donation Settings", "cash_handover_destination")
 
-		if (
-			frappe.db.get_single_value("Donation Settings", "require_cash_handover_proof")
-			and not self.proof
-		):
+		if not self.proof:
 			frappe.throw(frappe._("Proof is required for Cash Handover."))
 
 		self.variance = flt(self.amount) - flt(self.received_amount)

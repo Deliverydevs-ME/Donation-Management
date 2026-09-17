@@ -2,6 +2,24 @@
 // For license information, please see license.txt
 
 frappe.listview_settings["Box Collection"] = {
+	get_indicator(doc) {
+		const status = doc.status || (doc.docstatus === 2 ? "Cancelled" : "Draft");
+		const colors = {
+			Available: "gray",
+			Occupied: "orange",
+			Issued: "blue",
+			"Pending Receipt": "orange",
+			"Under Collection": "orange",
+			Collected: "purple",
+			Received: "green",
+			Returned: "gray",
+			Closed: "green",
+			Cancelled: "red",
+		};
+
+		return [__(status), colors[status] || "gray", `status,=,${status}`];
+	},
+
 	onload(listview) {
 		hide_box_collection_create_button(listview);
 	},

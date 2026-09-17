@@ -54,7 +54,7 @@ class DonationBookCollection(Document):
 		if not self.collection_date:
 			self.collection_date = today()
 		if self.manual_receipt_number and not self.manual_receipt_date:
-			self.manual_receipt_date = self.collection_date
+			frappe.throw(frappe._("Manual Receipt Date is required when Manual Receipt Number is entered."))
 
 	def validate_book(self):
 		book = frappe.db.get_value(

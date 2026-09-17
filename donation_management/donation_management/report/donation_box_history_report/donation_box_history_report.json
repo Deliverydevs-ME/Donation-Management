@@ -1,17 +1,22 @@
 {
  "add_total_row": 0,
- "creation": "2026-09-07 00:00:00.000000",
- "disable_prepared_report": 0,
+ "add_translate_data": 0,
+ "columns": [],
+ "creation": "2026-09-07 00:00:00",
+ "disabled": 0,
+ "docstatus": 0,
  "doctype": "Report",
+ "filters": [],
  "idx": 0,
  "is_standard": "Yes",
- "modified": "2026-09-07 00:00:00.000000",
+ "letter_head": null,
+ "modified": "2026-09-17 14:06:24.567177",
  "modified_by": "Administrator",
  "module": "Donation Management",
  "name": "Donation Box History Report",
  "owner": "Administrator",
  "prepared_report": 0,
- "ref_doctype": "Donation Order",
+ "ref_doctype": "Box Collection",
  "report_name": "Donation Box History Report",
  "report_type": "Script Report",
  "roles": [
@@ -21,5 +26,6 @@
   {
    "role": "System Manager"
   }
- ]
+ ],
+ "timeout": 0
 }

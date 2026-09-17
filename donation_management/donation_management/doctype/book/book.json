@@ -16,7 +16,6 @@
   "status",
   "book_serial_numbers",
   "stock_entry",
-  "custody_transfer",
   "column_break_book",
   "warehouse",
   "issued_to_employee",
@@ -133,13 +132,6 @@
    "fieldtype": "Link",
    "label": "Stock Entry",
    "options": "Stock Entry",
-   "read_only": 1
-  },
-  {
-   "fieldname": "custody_transfer",
-   "fieldtype": "Link",
-   "label": "Custody Transfer",
-   "options": "Donation Book Custody Transfer",
    "read_only": 1
   },
   {
@@ -362,7 +354,8 @@
   {
    "fieldname": "reopen_section",
    "fieldtype": "Section Break",
-   "label": "Reopen Controls"
+   "label": "Reopen Controls",
+   "depends_on": "eval:doc.reopen_count || doc.reopened_by || doc.reopened_on || doc.reopen_reason"
   },
   {
    "fieldname": "reopen_reason",

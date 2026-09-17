@@ -35,7 +35,7 @@
   {"fieldname": "amount", "fieldtype": "Currency", "label": "Amount", "non_negative": 1, "reqd": 1},
   {"fieldname": "received_amount", "fieldtype": "Currency", "label": "Received Amount", "non_negative": 1},
   {"fieldname": "variance", "fieldtype": "Currency", "label": "Variance", "read_only": 1},
-  {"fieldname": "proof", "fieldtype": "Attach", "label": "Proof"},
+  {"fieldname": "proof", "fieldtype": "Attach", "label": "Proof", "reqd": 1},
   {"fieldname": "reference", "fieldtype": "Data", "label": "Reference"},
   {"default": "Draft", "fieldname": "status", "fieldtype": "Select", "label": "Status", "options": "Draft\nReceived\nCancelled", "read_only": 1},
   {"fieldname": "remarks", "fieldtype": "Small Text", "label": "Remarks"},

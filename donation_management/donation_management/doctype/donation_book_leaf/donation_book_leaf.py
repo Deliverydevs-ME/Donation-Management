@@ -17,8 +17,8 @@ class DonationBookLeaf(Document):
 		missing = []
 		if not self.donor:
 			missing.append(frappe._("Donor"))
-		if not self.donation_order:
-			missing.append(frappe._("Donation Order"))
+		if not self.manual_receipt_date:
+			missing.append(frappe._("Manual Receipt Date"))
 		if missing:
 			frappe.throw(
 				frappe._("{0} is required when Donation Book Leaf is marked Used.").format(

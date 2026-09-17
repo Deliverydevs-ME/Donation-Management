@@ -11,11 +11,16 @@ class DonationBox(Document):
 		self.set_defaults()
 		self.set_box_shape()
 		self.set_box_code()
+		self.validate_zone_manager_and_mohasil()
 		self.validate_unique_box_number()
 
 	def validate_box_number(self):
 		if str(self.box_number or "").strip().startswith("-"):
 			frappe.throw(frappe._("Box Number cannot be negative."))
+
+	def validate_zone_manager_and_mohasil(self):
+		if self.zone_manager and self.mohasil and self.zone_manager == self.mohasil:
+			frappe.throw(frappe._("Zone Manager and Mohasil cannot be the same employee."))
 
 	def on_submit(self):
 		self.create_box_collection()

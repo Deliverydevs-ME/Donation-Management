@@ -68,7 +68,8 @@
   {
    "fieldname": "manual_receipt_date",
    "fieldtype": "Date",
-   "label": "Manual Receipt Date"
+   "label": "Manual Receipt Date",
+   "mandatory_depends_on": "eval:doc.manual_receipt_number"
   },
   {
    "fieldname": "employee",
