@@ -446,16 +446,25 @@ function set_donor_from_email(frm) {
 		return;
 	}
 
+	if (frm.doc.donor_name) {
+		return;
+	}
+
 	if (!frm.doc.donor_email.includes("@")) {
 		return;
 	}
 
+	const lookup_email = frm.doc.donor_email.trim().toLowerCase();
 	frappe.call({
 		method: "donation_management.donation_management.api.get_donor_by_email",
 		args: {
 			donor_email: frm.doc.donor_email,
 		},
 		callback(response) {
+			if (frm.doc.donor_name || (frm.doc.donor_email || "").trim().toLowerCase() !== lookup_email) {
+				return;
+			}
+
 			const donor = response.message || {};
 			if (donor.invalid) {
 				return;
@@ -1165,6 +1174,10 @@ function update_total_amount_from_purpose_details(frm) {
 }
 
 function set_donor_from_phone(frm) {
+	if (frm.doc.donor_name) {
+		return;
+	}
+
 	if (!frm.doc.donor_phone_number) {
 		clear_donor_details(frm);
 		return;
@@ -1181,6 +1194,10 @@ function set_donor_from_phone(frm) {
 			donor_phone_number: frm.doc.donor_phone_number,
 		},
 		callback(response) {
+			if (frm.doc.donor_name || get_phone_digits(frm.doc.donor_phone_number) !== phone_digits) {
+				return;
+			}
+
 			const donor = response.message || {};
 			if (donor.invalid) {
 				return;
@@ -1232,11 +1249,16 @@ function show_duplicate_donor_message_once(frm, donors, contact_type, contact_va
 		return;
 	}
 
+	if (frm.__awaiting_manual_donor_selection) {
+		return;
+	}
+
 	frm.__duplicate_donor_warning_keys = frm.__duplicate_donor_warning_keys || {};
 	if (frm.__duplicate_donor_warning_keys[normalized_contact]) {
 		return;
 	}
 
+	frm.__awaiting_manual_donor_selection = true;
 	frm.__duplicate_donor_warning_keys[normalized_contact] = true;
 	show_duplicate_donor_message(donors);
 }
@@ -1338,7 +1360,12 @@ function set_donor_details_from_name(frm) {
 			donor: frm.doc.donor_name,
 		},
 		callback(response) {
+			if (!frm.doc.donor_name) {
+				return;
+			}
+
 			const donor = response.message || {};
+			frm.__awaiting_manual_donor_selection = false;
 			frm.__setting_selected_donor_details = true;
 			set_value_if_changed(frm, "donor_email", donor.donor_email || "");
 			set_value_if_changed(frm, "donor_phone_number", donor.donor_phone_number || "");
