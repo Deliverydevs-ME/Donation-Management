@@ -68,6 +68,12 @@ fixtures = [
 			["field_name", "=", "account_type"],
 		],
 	},
+	{
+		"dt": "Print Format",
+		"filters": [
+			["name", "=", "Donation Receipt"],
+		],
+	},
 ]
 
 # Svg Icons
