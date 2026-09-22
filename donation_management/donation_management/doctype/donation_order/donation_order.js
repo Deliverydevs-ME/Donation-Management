@@ -224,10 +224,16 @@ frappe.ui.form.on("Donation Order", {
 	},
 
 	donor_email(frm) {
+		if (frm.__setting_selected_donor_details) {
+			return;
+		}
 		set_donor_from_email(frm);
 	},
 
 	donor_phone_number(frm) {
+		if (frm.__setting_selected_donor_details) {
+			return;
+		}
 		set_donor_from_phone(frm);
 	},
 
@@ -456,7 +462,7 @@ function set_donor_from_email(frm) {
 			}
 
 			if (donor.multiple) {
-				show_duplicate_phone_donor_message(frm, donor.donors || []);
+				show_duplicate_donor_message_once(frm, donor.donors || [], "email", frm.doc.donor_email);
 				set_value_if_changed(frm, "donor_name", "");
 				return;
 			}
@@ -1180,6 +1186,16 @@ function set_donor_from_phone(frm) {
 				return;
 			}
 
+			if (donor.multiple) {
+				show_duplicate_donor_message_once(frm, donor.donors || [], "phone", frm.doc.donor_phone_number);
+				set_value_if_changed(frm, "donor_name", "");
+				set_value_if_changed(frm, "name_on_donation_slip", "");
+				set_value_if_changed(frm, "referred_by_trustee", "");
+				set_previous_sponsorship_balance(frm);
+				render_donor_program_enrollments(frm);
+				return;
+			}
+
 			if (!donor.name) {
 				show_create_donor_message(frm, {
 					donor_email: frm.doc.donor_email,
@@ -1210,7 +1226,34 @@ function set_donor_from_phone(frm) {
 	});
 }
 
-function show_duplicate_phone_donor_message(frm, donors) {
+function show_duplicate_donor_message_once(frm, donors, contact_type, contact_value) {
+	const normalized_contact = get_duplicate_donor_contact_key(contact_type, contact_value);
+	if (!normalized_contact) {
+		return;
+	}
+
+	frm.__duplicate_donor_warning_keys = frm.__duplicate_donor_warning_keys || {};
+	if (frm.__duplicate_donor_warning_keys[normalized_contact]) {
+		return;
+	}
+
+	frm.__duplicate_donor_warning_keys[normalized_contact] = true;
+	show_duplicate_donor_message(donors);
+}
+
+function get_duplicate_donor_contact_key(contact_type, contact_value) {
+	if (!contact_value) {
+		return "";
+	}
+
+	if (contact_type === "phone") {
+		return `phone:${get_phone_digits(contact_value)}`;
+	}
+
+	return `${contact_type}:${String(contact_value).trim().toLowerCase()}`;
+}
+
+function show_duplicate_donor_message(donors) {
 	const donor_rows = donors.map((donor) => {
 		const address = donor.primary_address ? ` - ${escape_html(donor.primary_address)}` : "";
 		return `<li><b>${escape_html(donor.name)}</b> - ${escape_html(donor.customer_name || "")}${address}</li>`;
@@ -1296,6 +1339,7 @@ function set_donor_details_from_name(frm) {
 		},
 		callback(response) {
 			const donor = response.message || {};
+			frm.__setting_selected_donor_details = true;
 			set_value_if_changed(frm, "donor_email", donor.donor_email || "");
 			set_value_if_changed(frm, "donor_phone_number", donor.donor_phone_number || "");
 			set_value_if_changed(frm, "referred_by_trustee", donor.referred_by_trustee || "");
@@ -1311,6 +1355,9 @@ function set_donor_details_from_name(frm) {
 			}
 			set_previous_sponsorship_balance(frm);
 			render_donor_program_enrollments(frm);
+			frappe.after_ajax(() => {
+				frm.__setting_selected_donor_details = false;
+			});
 		}
 	});
 }
