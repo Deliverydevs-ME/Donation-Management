@@ -23,7 +23,6 @@ VALID_DONOR_TYPES = (
 	"General Donor",
 	"Sub Key Donor",
 )
-GROUP_DONOR_TYPES = ("General Donor", "Key Donor", "Sub Key Donor")
 TRUSTEE_BRANCH = "Branch:Refered by Trustee"
 DONOR_TYPE_BRANCH_PREFIX = "Branch:Donor Type:"
 DONOR_NODE_PREFIX = "Donor:"
@@ -44,7 +43,6 @@ class Donor(NestedSet):
 	def validate(self):
 		self.set_naming_series()
 		self.set_donor_type()
-		self.set_group_for_donor_type()
 		self.set_trustee_reference()
 		self.validate_parent_donor()
 		self.set_donor_phone_digits()
@@ -70,10 +68,6 @@ class Donor(NestedSet):
 					", ".join(VALID_DONOR_TYPES)
 				)
 			)
-
-	def set_group_for_donor_type(self):
-		if self.customer_type in GROUP_DONOR_TYPES:
-			self.is_group = 1
 
 	def set_naming_series(self):
 		if self.is_new() and self.naming_series != "DONOR-.YYYY.-":
