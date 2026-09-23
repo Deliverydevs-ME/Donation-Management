@@ -12,6 +12,7 @@ from donation_management.donation_management.doctype.donation_settings.donation_
 	is_donor_contact_required,
 	is_duplicate_donor_phone_allowed,
 )
+from donation_management.donation_management.confidential import has_confidential_access
 from donation_management.donation_management.validations import validate_unique_field
 
 
@@ -77,6 +78,11 @@ class Donor(NestedSet):
 		if self.customer_type != "Refered by Trustee":
 			self.referred_by_trustee = None
 			return
+
+		if not has_confidential_access():
+			frappe.throw(
+				frappe._("Only users with confidential reference access can create or update trustee-referred donors.")
+			)
 
 		self.parent_donor = None
 

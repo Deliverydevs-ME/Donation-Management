@@ -9,6 +9,7 @@ const donor_types = [
 	"General Donor",
 	"Sub Key Donor",
 ];
+const confidential_reference_roles = ["Donation Confidential Reference User", "System Manager"];
 const mohasil_employee_filters = {
 	status: "Active",
 	designation: "Mohasil",
@@ -16,7 +17,7 @@ const mohasil_employee_filters = {
 
 frappe.ui.form.on("Donor", {
 	setup(frm) {
-		frm.set_df_property("customer_type", "options", ["", ...donor_types].join("\n"));
+		set_donor_type_options(frm);
 
 		frm.set_query("parent_donor", () => ({
 			filters: {
@@ -37,6 +38,7 @@ frappe.ui.form.on("Donor", {
 	},
 
 	refresh(frm) {
+		set_donor_type_options(frm);
 		toggle_donor_reference_fields(frm);
 		show_donor_information_request_audit_fields(frm);
 		toggle_donor_contact_requirement(frm);
@@ -58,8 +60,20 @@ frappe.ui.form.on("Donor", {
 	},
 });
 
+function has_confidential_reference_access() {
+	return confidential_reference_roles.some((role) => frappe.user.has_role(role));
+}
+
+function set_donor_type_options(frm) {
+	const options = has_confidential_reference_access()
+		? donor_types
+		: donor_types.filter((type) => type !== "Refered by Trustee");
+	frm.set_df_property("customer_type", "options", ["", ...options].join("\n"));
+}
+
 function toggle_donor_reference_fields(frm) {
-	const is_referred_by_trustee = frm.doc.customer_type === "Refered by Trustee";
+	const is_referred_by_trustee =
+		frm.doc.customer_type === "Refered by Trustee" && has_confidential_reference_access();
 	frm.toggle_display("referred_by_trustee", is_referred_by_trustee);
 	frm.toggle_reqd("referred_by_trustee", is_referred_by_trustee);
 	frm.toggle_display("parent_donor", !is_referred_by_trustee);

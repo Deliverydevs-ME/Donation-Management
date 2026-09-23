@@ -7,7 +7,6 @@ from frappe.utils import now_datetime
 
 CONFIDENTIAL_ROLES = {
 	"Donation Confidential Reference User",
-	"Donation Manager",
 	"System Manager",
 }
 
