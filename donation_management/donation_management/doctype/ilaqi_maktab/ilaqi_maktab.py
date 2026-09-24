@@ -102,6 +102,7 @@ def generate_payment_schedule(ilaqi_maktab, from_date=None, to_date=None):
 				{
 					"doctype": "Maktab Payment Schedule",
 					"ilaqi_maktab": doc.name,
+					"frequency": doc.frequency,
 					"due_date": due_date,
 					"due_amount": doc.fixed_contribution,
 					"outstanding_amount": doc.fixed_contribution,
