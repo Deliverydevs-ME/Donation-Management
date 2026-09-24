@@ -10,9 +10,10 @@ class MaktabPayment(Document):
 	def validate(self):
 		if not self.posting_date:
 			self.posting_date = today()
+		self.set_reference_details()
 		if flt(self.amount) <= 0:
 			frappe.throw(frappe._("Amount must be greater than zero."))
-		self.set_reference_details()
+		self.validate_accounts()
 		self.validate_schedule()
 
 	def on_submit(self):
@@ -58,7 +59,7 @@ class MaktabPayment(Document):
 		order = frappe.db.get_value(
 			"Donation Order",
 			self.donation_order,
-			["mode_of_payment", "mohasil"],
+			["mode_of_payment", "mohasil", "debit_account", "credit_account", "donation_amount"],
 			as_dict=True,
 		)
 		if not order:
@@ -66,6 +67,21 @@ class MaktabPayment(Document):
 
 		self.mode_of_payment = self.mode_of_payment or order.mode_of_payment
 		self.collection_person = self.collection_person or order.mohasil
+		self.debit_account = self.debit_account or order.debit_account
+		self.credit_account = self.credit_account or order.credit_account
+		self.amount = flt(self.amount) or flt(order.donation_amount)
+
+	def validate_accounts(self):
+		for fieldname, label in (("debit_account", "Debit Account"), ("credit_account", "Credit Account")):
+			account = self.get(fieldname)
+			if not account:
+				continue
+
+			is_group = frappe.db.get_value("Account", account, "is_group")
+			if is_group is None:
+				frappe.throw(frappe._("{0} {1} was not found.").format(label, account))
+			if is_group:
+				frappe.throw(frappe._("{0} cannot be a group account.").format(label))
 
 	def apply_to_schedule(self, reverse=False):
 		if not self.payment_schedule:

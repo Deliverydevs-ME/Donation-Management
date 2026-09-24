@@ -1,4 +1,8 @@
 frappe.ui.form.on("Maktab Payment", {
+	setup(frm) {
+		set_account_queries(frm);
+	},
+
 	payment_schedule(frm) {
 		fetch_schedule_details(frm);
 	},
@@ -13,6 +17,16 @@ frappe.ui.form.on("Maktab Payment", {
 		}
 	},
 });
+
+function set_account_queries(frm) {
+	["debit_account", "credit_account"].forEach((fieldname) => {
+		frm.set_query(fieldname, () => ({
+			filters: {
+				is_group: 0,
+			},
+		}));
+	});
+}
 
 function set_value_if_changed(frm, fieldname, value) {
 	if (frm.doc[fieldname] !== value) {
@@ -61,9 +75,22 @@ function fetch_donation_order_details(frm) {
 		return;
 	}
 
-	frappe.db.get_value("Donation Order", frm.doc.donation_order, ["mode_of_payment", "mohasil"]).then((response) => {
-		const values = response.message || {};
-		set_value_if_changed(frm, "mode_of_payment", values.mode_of_payment || "");
-		set_value_if_changed(frm, "collection_person", values.mohasil || "");
-	});
+	frappe.db
+		.get_value("Donation Order", frm.doc.donation_order, [
+			"mode_of_payment",
+			"mohasil",
+			"debit_account",
+			"credit_account",
+			"donation_amount",
+		])
+		.then((response) => {
+			const values = response.message || {};
+			set_value_if_changed(frm, "mode_of_payment", values.mode_of_payment || "");
+			set_value_if_changed(frm, "collection_person", values.mohasil || "");
+			set_value_if_changed(frm, "debit_account", values.debit_account || "");
+			set_value_if_changed(frm, "credit_account", values.credit_account || "");
+			if (!frm.doc.amount) {
+				set_value_if_changed(frm, "amount", values.donation_amount || 0);
+			}
+		});
 }
