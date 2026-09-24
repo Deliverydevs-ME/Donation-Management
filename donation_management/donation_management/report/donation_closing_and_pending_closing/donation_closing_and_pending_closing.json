@@ -11,7 +11,7 @@
  "name": "Donation Closing and Pending Closing",
  "owner": "Administrator",
  "prepared_report": 0,
- "ref_doctype": "Donation Order",
+ "ref_doctype": "Donation Closing",
  "report_name": "Donation Closing and Pending Closing",
  "report_type": "Script Report",
  "roles": [

@@ -11,7 +11,7 @@
  "name": "Ilaqi Maktab Financial Summary",
  "owner": "Administrator",
  "prepared_report": 0,
- "ref_doctype": "Donation Order",
+ "ref_doctype": "Ilaqi Maktab",
  "report_name": "Ilaqi Maktab Financial Summary",
  "report_type": "Script Report",
  "roles": [
