@@ -3,7 +3,7 @@
 
 import frappe
 from frappe.model.document import Document
-from frappe.utils import add_months, flt, getdate, today
+from frappe.utils import add_months, cint, flt, getdate, today
 
 from donation_management.donation_management.validations import validate_unique_field
 
@@ -18,6 +18,19 @@ class IlaqiMaktab(Document):
 			frappe.throw(frappe._("Expected Monthly Cost cannot be negative."))
 		if not self.status:
 			self.status = "Active"
+		self.validate_head_count_capacity()
+
+	def validate_head_count_capacity(self):
+		if self.is_new():
+			return
+
+		active_assignments = get_active_assignment_count(self.name)
+		if active_assignments > cint(self.head_count):
+			frappe.throw(
+				frappe._(
+					"Head Count cannot be less than active assigned employees. Current active assignments: {0}."
+				).format(active_assignments)
+			)
 
 
 def get_frequency_months(frequency):
@@ -27,6 +40,40 @@ def get_frequency_months(frequency):
 		"Half Yearly": 6,
 		"Yearly": 12,
 	}.get(frequency or "Monthly", 1)
+
+
+def get_active_assignment_count(ilaqi_maktab, exclude_assignment=None):
+	if not ilaqi_maktab:
+		return 0
+
+	filters = {
+		"ilaqi_maktab": ilaqi_maktab,
+		"status": "Active",
+	}
+	if exclude_assignment:
+		filters["name"] = ["!=", exclude_assignment]
+
+	return frappe.db.count("Maktab Employee Assignment", filters)
+
+
+@frappe.whitelist()
+def get_assigned_employees(ilaqi_maktab):
+	if not ilaqi_maktab:
+		return []
+
+	doc = frappe.get_doc("Ilaqi Maktab", ilaqi_maktab)
+	doc.check_permission("read")
+
+	assignments = frappe.get_all(
+		"Maktab Employee Assignment",
+		filters={"ilaqi_maktab": ilaqi_maktab},
+		fields=["name", "employee", "start_date", "end_date", "salary_cost", "status"],
+		order_by="status asc, start_date desc, modified desc",
+	)
+	for assignment in assignments:
+		assignment.employee_name = frappe.db.get_value("Employee", assignment.employee, "employee_name")
+
+	return assignments
 
 
 @frappe.whitelist()
