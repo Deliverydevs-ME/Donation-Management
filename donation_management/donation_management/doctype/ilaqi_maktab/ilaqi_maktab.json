@@ -12,12 +12,12 @@
   "responsible_person",
   "head_count",
   "status",
-  "assigned_employees_section",
-  "assigned_employees_html",
   "financial_section",
   "fixed_contribution",
   "frequency",
-  "expected_monthly_cost"
+  "expected_monthly_cost",
+  "assigned_employees_section",
+  "assigned_employees_html"
  ],
  "fields": [
   {"fieldname": "maktab_name", "fieldtype": "Data", "label": "Maktab Name", "reqd": 1, "unique": 1},
@@ -26,12 +26,12 @@
   {"fieldname": "responsible_person", "fieldtype": "Link", "label": "Responsible Person", "options": "Employee"},
   {"fieldname": "head_count", "fieldtype": "Int", "label": "Head Count", "non_negative": 1},
   {"default": "Active", "fieldname": "status", "fieldtype": "Select", "label": "Status", "options": "Active\nInactive\nClosed"},
-  {"fieldname": "assigned_employees_section", "fieldtype": "Section Break", "label": "Assigned Employees"},
-  {"fieldname": "assigned_employees_html", "fieldtype": "HTML", "label": "Assigned Employees"},
   {"fieldname": "financial_section", "fieldtype": "Section Break", "label": "Financials"},
   {"fieldname": "fixed_contribution", "fieldtype": "Currency", "label": "Fixed Contribution", "non_negative": 1},
   {"default": "Monthly", "fieldname": "frequency", "fieldtype": "Select", "label": "Frequency", "options": "Monthly\nQuarterly\nHalf Yearly\nYearly"},
-  {"fieldname": "expected_monthly_cost", "fieldtype": "Currency", "label": "Expected Monthly Cost", "non_negative": 1}
+  {"fieldname": "expected_monthly_cost", "fieldtype": "Currency", "label": "Expected Monthly Cost", "non_negative": 1},
+  {"fieldname": "assigned_employees_section", "fieldtype": "Section Break", "label": "Assigned Employees"},
+  {"fieldname": "assigned_employees_html", "fieldtype": "HTML", "label": "Assigned Employees"}
  ],
  "links": [],
  "modified": "2026-09-07 00:00:00.000000",
