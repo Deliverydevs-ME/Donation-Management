@@ -31,7 +31,7 @@ def get_data(filters):
 		conditions["coupon_type"] = filters.coupon_type
 
 	books = frappe.get_all(
-		"Book",
+		"Book Assignment",
 		filters=conditions,
 		fields=[
 			"volunteer_name",

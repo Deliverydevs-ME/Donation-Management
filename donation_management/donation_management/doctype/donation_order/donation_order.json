@@ -31,6 +31,7 @@
   "mohasil_section",
   "mohasil",
   "donation_book_serial_no",
+  "donation_book_leaf",
   "donation_book",
   "manual_receipt_number",
   "mohasil_column_break",
@@ -310,11 +311,18 @@
   },
   {
    "depends_on": "eval:doc.is_mohasil_collection",
+   "fieldname": "donation_book_leaf",
+   "fieldtype": "Link",
+   "label": "Donation Book Leaf",
+   "options": "Donation Book Leaf"
+  },
+  {
+   "depends_on": "eval:doc.is_mohasil_collection",
    "fieldname": "donation_book",
    "fieldtype": "Link",
    "hidden": 1,
    "label": "Donation Book ID",
-   "options": "Book"
+   "options": "Book Assignment"
   },
   {
    "depends_on": "eval:doc.is_mohasil_collection",
@@ -402,9 +410,11 @@
   {
    "fieldname": "esaal_e_sawab_section",
    "fieldtype": "Section Break",
+   "depends_on": "eval:doc.requires_esaal_e_sawab",
    "label": "Esaal e Sawab"
   },
   {
+   "depends_on": "eval:doc.requires_esaal_e_sawab",
    "fieldname": "esaal_e_sawab",
    "fieldtype": "Table",
    "label": "Esaal e Sawab",
@@ -796,6 +806,14 @@
    "fieldtype": "Check",
    "hidden": 1,
    "label": "Requires Prisoner",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "requires_esaal_e_sawab",
+   "fieldtype": "Check",
+   "hidden": 1,
+   "label": "Requires Esaal e Sawab",
    "read_only": 1
   },
   {

@@ -388,7 +388,7 @@ def get_pending_books(company, closing_date=None, exclude_closing=None, cashier=
 			book.collected_amount,
 			book.coupon_type,
 			journal_entry.posting_date
-		from `tabBook` book
+		from `tabBook Assignment` book
 		inner join `tabJournal Entry` journal_entry
 			on journal_entry.name = book.journal_entry
 			and journal_entry.docstatus = 1
@@ -406,11 +406,11 @@ def get_pending_books(company, closing_date=None, exclude_closing=None, cashier=
 
 	result = []
 	for book in books:
-		if is_source_in_active_closing("Book", book.name, exclude=exclude_closing):
+		if is_source_in_active_closing("Book Assignment", book.name, exclude=exclude_closing):
 			continue
 		result.append(
 			{
-				"source_doctype": "Book",
+				"source_doctype": "Book Assignment",
 				"source_name": book.name,
 				"donation_type": book.coupon_type,
 				"amount": book.collected_amount,

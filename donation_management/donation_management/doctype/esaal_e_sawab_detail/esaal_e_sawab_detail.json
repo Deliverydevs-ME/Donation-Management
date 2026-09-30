@@ -12,16 +12,19 @@
  "fields": [
   {
    "fieldname": "person_name",
-   "fieldtype": "Data",
+   "fieldtype": "Link",
    "in_list_view": 1,
    "label": "Person Name",
+   "options": "Donor",
    "reqd": 1
   },
   {
    "fieldname": "relationship",
-   "fieldtype": "Data",
+   "fieldtype": "Select",
    "in_list_view": 1,
-   "label": "Relationship"
+   "label": "Relationship",
+   "options": "\nFather\nMother\nBrother\nSister\nGrand Father\nGrand Mother\nPaternal Uncle\nPaternal Aunt\nMaternal Uncle\nMaternal Aunt",
+   "reqd": 1
   },
   {
    "fieldname": "remarks",

@@ -1,8 +1,54 @@
 # Copyright (c) 2026, osama.ahmed@deliverydevs.com and Contributors
 # See license.txt
 
-import frappe
 from frappe.tests.utils import FrappeTestCase
+from unittest.mock import patch
+
+import frappe
+
+from donation_management.donation_management.doctype.donor.donor import Donor
+
+
+class TestDonorEsaalRelationships(FrappeTestCase):
+	def make_donor(self, rows):
+		return Donor(
+			{
+				"doctype": "Donor",
+				"name": "DN-TEST",
+				"esaal_e_sawab": rows,
+			}
+		)
+
+	def test_islamic_relationship_limits(self):
+		with patch.object(frappe.db, "exists", return_value=True):
+			with self.assertRaises(frappe.ValidationError):
+				self.make_donor(
+					[
+						{"person_name": "DN-1", "relationship": "Father"},
+						{"person_name": "DN-2", "relationship": "Father"},
+					]
+				).validate_esaal_e_sawab_relationships()
+
+			with self.assertRaises(frappe.ValidationError):
+				self.make_donor(
+					[
+						{"person_name": "DN-{0}".format(index), "relationship": "Mother"}
+						for index in range(1, 6)
+					]
+				).validate_esaal_e_sawab_relationships()
+
+	def test_siblings_and_paternal_relations_are_unlimited(self):
+		rows = [
+			{"person_name": "DN-{0}".format(index), "relationship": "Brother"}
+			for index in range(1, 8)
+		]
+		rows.extend(
+			{"person_name": "DN-A{0}".format(index), "relationship": "Paternal Aunt"}
+			for index in range(1, 8)
+		)
+
+		with patch.object(frappe.db, "exists", return_value=True):
+			self.make_donor(rows).validate_esaal_e_sawab_relationships()
 
 from donation_management.donation_management.doctype.donor.donor import get_donor_tree_title
 

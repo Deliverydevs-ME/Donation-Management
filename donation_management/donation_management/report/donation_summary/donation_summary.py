@@ -269,7 +269,7 @@ def get_coupon_receipts(company, from_date, to_date, accounting_status):
 			journal_entry.posting_date as journal_posting_date,
 			journal_entry.docstatus as journal_docstatus
 		from `tabCoupon` coupon
-		inner join `tabBook` book
+		inner join `tabBook Assignment` book
 			on book.name = coupon.book
 		left join `tabJournal Entry` journal_entry
 			on journal_entry.name = book.journal_entry
@@ -328,7 +328,7 @@ def get_coupon_receipts(company, from_date, to_date, accounting_status):
 		receipts.append(receipt)
 		add_reconciliation(
 			reconciliations,
-			source_type="Book",
+			source_type="Book Assignment",
 			source_name=row.book,
 			journal_entry=row.journal_entry,
 			amount=row.book_collected_amount,

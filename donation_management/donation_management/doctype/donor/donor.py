@@ -36,6 +36,24 @@ DONOR_TREE_BRANCH_TYPES = (
 	"Sub Key Donor",
 )
 MOHASIL_DESIGNATION = "Mohasil"
+ESAAL_RELATIONSHIPS = (
+	"Father",
+	"Mother",
+	"Brother",
+	"Sister",
+	"Grand Father",
+	"Grand Mother",
+	"Paternal Uncle",
+	"Paternal Aunt",
+	"Maternal Uncle",
+	"Maternal Aunt",
+)
+ESAAL_RELATIONSHIP_LIMITS = {
+	"Father": 1,
+	"Mother": 4,
+	"Grand Father": 1,
+	"Grand Mother": 4,
+}
 
 
 class Donor(NestedSet):
@@ -55,6 +73,7 @@ class Donor(NestedSet):
 		self.validate_unique_donor_email()
 		self.validate_unique_donor_uid()
 		self.validate_mohasil()
+		self.validate_esaal_e_sawab_relationships()
 		self.set_whatsapp_digits()
 		self.set_donor_information_request_audit()
 
@@ -190,6 +209,47 @@ class Donor(NestedSet):
 			return
 
 		validate_mohasil_employee(self.mohasil, "Mohasil")
+
+	def validate_esaal_e_sawab_relationships(self):
+		seen = set()
+		counts = {}
+
+		for row in self.get("esaal_e_sawab", []):
+			if not row.person_name and not row.relationship:
+				continue
+
+			if not row.person_name:
+				frappe.throw(frappe._("Person Name is required in Esaal e Sawab row {0}.").format(row.idx))
+			if not row.relationship:
+				frappe.throw(frappe._("Relationship is required in Esaal e Sawab row {0}.").format(row.idx))
+			if row.relationship not in ESAAL_RELATIONSHIPS:
+				frappe.throw(
+					frappe._("Relationship {0} is not an allowed Esaal e Sawab relationship.").format(
+						row.relationship
+					)
+				)
+			if not frappe.db.exists("Donor", row.person_name):
+				frappe.throw(frappe._("Esaal e Sawab person {0} must be an existing Donor.").format(row.person_name))
+
+			key = (str(row.person_name).strip().casefold(), str(row.relationship).strip().casefold())
+			if key in seen:
+				frappe.throw(
+					frappe._("Esaal e Sawab person {0} with relationship {1} is entered more than once.").format(
+						row.person_name,
+						row.relationship,
+					)
+				)
+			seen.add(key)
+			counts[row.relationship] = counts.get(row.relationship, 0) + 1
+
+			limit = ESAAL_RELATIONSHIP_LIMITS.get(row.relationship)
+			if limit and counts[row.relationship] > limit:
+				frappe.throw(
+					frappe._("Only {0} {1} relationship(s) are allowed in Esaal e Sawab.").format(
+						limit,
+						row.relationship,
+					)
+				)
 
 	def set_whatsapp_digits(self):
 		if self.whatsapp_number:

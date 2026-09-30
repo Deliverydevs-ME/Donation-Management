@@ -7,6 +7,7 @@
  "engine": "InnoDB",
  "field_order": [
   "book",
+  "book_serial_no",
   "adjustment_type",
   "affected_pages",
   "column_break_adj",
@@ -29,9 +30,16 @@
    "fieldtype": "Link",
    "in_list_view": 1,
    "in_standard_filter": 1,
-   "label": "Book",
-   "options": "Book",
+   "label": "Book Assignment",
+   "options": "Book Assignment",
    "reqd": 1
+  },
+  {
+   "fieldname": "book_serial_no",
+   "fieldtype": "Link",
+   "label": "Book Serial No",
+   "mandatory_depends_on": "eval:doc.book",
+   "options": "Serial No"
   },
   {
    "fieldname": "adjustment_type",

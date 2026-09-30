@@ -6,9 +6,9 @@ frappe.query_reports["Book Leaves Status Report"] = {
 	filters: [
 		{
 			fieldname: "book",
-			label: __("Book"),
+			label: __("Book Assignment"),
 			fieldtype: "Link",
-			options: "Book",
+			options: "Book Assignment",
 		},
 		{
 			fieldname: "book_serial_no",

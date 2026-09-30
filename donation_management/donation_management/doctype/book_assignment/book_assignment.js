@@ -10,22 +10,23 @@ const coupon_colors = {
 const denominations = [10, 20, 50, 100, 500, 1000, 5000];
 const book_type_coupon = "Coupon Book";
 const book_type_donation = "Donation Book";
+const book_type_mixed = "Mixed";
 const mohasil_employee_filters = {
 	status: "Active",
 	designation: "Mohasil",
 };
 
-frappe.ui.form.on("Book", {
+frappe.ui.form.on("Book Assignment", {
 	setup(frm) {
 		frm.set_query("item", () => ({
-			query: "donation_management.donation_management.doctype.book.book.get_book_items",
+			query: "donation_management.donation_management.doctype.book_assignment.book_assignment.get_book_items",
 			filters: {
 				book_type: frm.doc.book_type,
 			},
 		}));
 
 		frm.set_query("book_serial_no", () => ({
-			query: "donation_management.donation_management.doctype.book.book.get_available_book_serial_nos",
+			query: "donation_management.donation_management.doctype.book_assignment.book_assignment.get_available_book_serial_nos",
 			filters: {
 				item: frm.doc.item,
 				warehouse: frm.doc.warehouse,
@@ -52,12 +53,19 @@ frappe.ui.form.on("Book", {
 		});
 
 		frm.set_query("book_serial_no", "assigned_books", (doc, cdt, cdn) => ({
-			query: "donation_management.donation_management.doctype.book.book.get_available_book_serial_nos",
+			query: "donation_management.donation_management.doctype.book_assignment.book_assignment.get_available_book_serial_nos",
 			filters: {
-				item: frm.doc.item,
-				warehouse: frm.doc.warehouse,
+				item: locals[cdt][cdn].item || frm.doc.item,
+				warehouse: locals[cdt][cdn].warehouse || frm.doc.warehouse,
 				book: frm.doc.name,
 				selected_serials: get_selected_assigned_serials(frm, cdn),
+			},
+		}));
+
+		frm.set_query("item", "assigned_books", (doc, cdt, cdn) => ({
+			query: "donation_management.donation_management.doctype.book_assignment.book_assignment.get_book_items",
+			filters: {
+				book_type: get_assigned_book_type(frm, cdt, cdn),
 			},
 		}));
 
@@ -94,27 +102,38 @@ frappe.ui.form.on("Book", {
 	},
 
 	refresh(frm) {
+		frm.__previous_book_type = frm.doc.book_type;
 		set_book_type_visibility(frm);
+		set_assigned_book_grid_properties(frm);
 		set_collection_visibility(frm);
 		add_action_buttons(frm);
 	},
 
 	book_type(frm) {
+		const previous_book_type = frm.__previous_book_type;
+		if (frm.doc.book_type === book_type_mixed && [book_type_coupon, book_type_donation].includes(previous_book_type)) {
+			(frm.doc.assigned_books || []).forEach((row) => {
+				row.book_type = row.book_type || previous_book_type;
+			});
+		} else if ([book_type_coupon, book_type_donation].includes(frm.doc.book_type)) {
+			(frm.doc.assigned_books || []).forEach((row) => {
+				row.book_type = frm.doc.book_type;
+			});
+		}
+
 		set_book_type_visibility(frm);
 		set_coupon_color(frm);
 		frm.set_value("item", "");
 		frm.set_value("book_serial_no", "");
 		frm.set_value("issued_to_employee", "");
-		frm.clear_table("assigned_books");
 		frm.refresh_field("assigned_books");
-		check_available_stock(frm);
+		set_assigned_book_grid_properties(frm);
+		frm.__previous_book_type = frm.doc.book_type;
 	},
 
 	item(frm) {
 		frm.set_value("book_serial_no", "");
-		clear_assigned_books(frm);
 		set_coupon_type_from_item(frm);
-		check_available_stock(frm);
 	},
 
 	volunteer_name(frm) {
@@ -123,18 +142,22 @@ frappe.ui.form.on("Book", {
 
 	coupon_type(frm) {
 		set_coupon_color(frm);
-		check_available_stock(frm);
 	},
 
 	warehouse(frm) {
 		frm.set_value("book_serial_no", "");
-		clear_assigned_books(frm);
-		check_available_stock(frm);
 	},
 
 	issued_to_employee(frm) {
-		frm.clear_table("assigned_books");
-		frm.refresh_field("assigned_books");
+		set_assigned_book_grid_properties(frm);
+	},
+
+	assigned_books_add(frm, cdt, cdn) {
+		const row = locals[cdt][cdn];
+		if ([book_type_coupon, book_type_donation].includes(frm.doc.book_type)) {
+			frappe.model.set_value(cdt, cdn, "book_type", frm.doc.book_type);
+		}
+		set_assigned_book_grid_properties(frm);
 	},
 
 	status(frm) {
@@ -159,6 +182,36 @@ frappe.ui.form.on("Book", {
 });
 
 frappe.ui.form.on("Book Assignment Detail", {
+	book_type(frm, cdt, cdn) {
+		const row = locals[cdt][cdn];
+		frappe.model.set_value(cdt, cdn, "item", "");
+		frappe.model.set_value(cdt, cdn, "book_serial_no", "");
+		clear_assigned_coupon_fields(cdt, cdn);
+		frappe.model.set_value(cdt, cdn, "available_stock", 0);
+		if (row.book_type === book_type_donation) {
+			frappe.model.set_value(cdt, cdn, "total_pages", 0);
+		}
+		set_assigned_book_row_visibility(frm, cdt, cdn);
+		set_assigned_book_grid_properties(frm);
+	},
+
+	item(frm, cdt, cdn) {
+		const row = locals[cdt][cdn];
+		fetch_assigned_book_stock(frm, cdt, cdn);
+		if (row.book_type !== book_type_coupon || !row.item) {
+			clear_assigned_coupon_fields(cdt, cdn);
+			return;
+		}
+		frappe.call({
+			method: "donation_management.donation_management.doctype.book_assignment.book_assignment.get_coupon_type_for_item",
+			args: { item: row.item },
+			callback(response) {
+				frappe.model.set_value(cdt, cdn, "coupon_type", response.message || "");
+				fetch_assigned_book_stock(frm, cdt, cdn);
+			},
+		});
+	},
+
 	book_serial_no(frm, cdt, cdn) {
 		const row = locals[cdt][cdn];
 		if (!row.book_serial_no) {
@@ -175,7 +228,36 @@ frappe.ui.form.on("Book Assignment Detail", {
 			frappe.model.set_value(cdt, cdn, "item", values.item_code || "");
 			frappe.model.set_value(cdt, cdn, "warehouse", values.warehouse || "");
 			frappe.model.set_value(cdt, cdn, "status", frm.doc.status || "");
+			fetch_assigned_book_stock(frm, cdt, cdn);
 		});
+	},
+
+	warehouse(frm, cdt, cdn) {
+		fetch_assigned_book_stock(frm, cdt, cdn);
+	},
+
+	receipt_format(frm, cdt, cdn) {
+		update_assigned_receipt_count(cdt, cdn);
+	},
+
+	from_receipt_no(frm, cdt, cdn) {
+		update_assigned_receipt_count(cdt, cdn);
+	},
+
+	to_receipt_no(frm, cdt, cdn) {
+		update_assigned_receipt_count(cdt, cdn);
+	},
+
+	total_pages(frm, cdt, cdn) {
+		update_assigned_page_count(cdt, cdn);
+	},
+
+	used_pages(frm, cdt, cdn) {
+		update_assigned_page_count(cdt, cdn);
+	},
+
+	form_render(frm, cdt, cdn) {
+		set_assigned_book_row_visibility(frm, cdt, cdn);
 	},
 });
 
@@ -201,11 +283,41 @@ function clear_assigned_book_row(cdt, cdn) {
 	frappe.model.set_value(cdt, cdn, "item", "");
 	frappe.model.set_value(cdt, cdn, "warehouse", "");
 	frappe.model.set_value(cdt, cdn, "status", "");
+	frappe.model.set_value(cdt, cdn, "available_stock", 0);
 }
 
-function clear_assigned_books(frm) {
-	frm.clear_table("assigned_books");
-	frm.refresh_field("assigned_books");
+function clear_assigned_coupon_fields(cdt, cdn) {
+	frappe.model.set_value(cdt, cdn, "coupon_type", "");
+	frappe.model.set_value(cdt, cdn, "coupon_value", "");
+	frappe.model.set_value(cdt, cdn, "coupon_color", "");
+}
+
+function update_assigned_receipt_count(cdt, cdn) {
+	const row = locals[cdt][cdn];
+	const from = get_receipt_serial_number(row.from_receipt_no);
+	const to = get_receipt_serial_number(row.to_receipt_no);
+	if (Number.isInteger(from) && Number.isInteger(to) && to >= from) {
+		const total = to - from + 1;
+		const remaining = Math.max(total - cint(row.used_receipts), 0);
+		frappe.model.set_value(cdt, cdn, "remaining_receipts", remaining);
+		if (row.book_type === book_type_donation) {
+			frappe.model.set_value(cdt, cdn, "total_pages", total);
+			frappe.model.set_value(cdt, cdn, "used_pages", cint(row.used_receipts));
+			frappe.model.set_value(cdt, cdn, "remaining_pages", remaining);
+		}
+	} else {
+		frappe.model.set_value(cdt, cdn, "remaining_receipts", 0);
+		if (row.book_type === book_type_donation) {
+			frappe.model.set_value(cdt, cdn, "total_pages", 0);
+			frappe.model.set_value(cdt, cdn, "used_pages", 0);
+			frappe.model.set_value(cdt, cdn, "remaining_pages", 0);
+		}
+	}
+}
+
+function update_assigned_page_count(cdt, cdn) {
+	const row = locals[cdt][cdn];
+	frappe.model.set_value(cdt, cdn, "remaining_pages", Math.max(cint(row.total_pages) - cint(row.used_pages), 0));
 }
 
 function get_selected_assigned_serials(frm, current_row_name) {
@@ -214,35 +326,36 @@ function get_selected_assigned_serials(frm, current_row_name) {
 		.map((row) => row.book_serial_no);
 }
 
-function check_available_stock(frm) {
-	if (![book_type_coupon, book_type_donation].includes(frm.doc.book_type) || !frm.doc.item || !frm.doc.warehouse || frm.doc.status) {
+function get_assigned_book_type(frm, cdt, cdn) {
+	const parent_book_type = frm.doc.book_type;
+	if ([book_type_coupon, book_type_donation].includes(parent_book_type)) {
+		return parent_book_type;
+	}
+	return locals[cdt][cdn].book_type || "";
+}
+
+function fetch_assigned_book_stock(frm, cdt, cdn) {
+	const row = locals[cdt][cdn];
+	if (!row.item || !row.warehouse) {
+		frappe.model.set_value(cdt, cdn, "available_stock", 0);
 		return;
 	}
 
 	frappe.call({
-		method: "donation_management.donation_management.doctype.book.book.get_book_stock_qty",
+		method: "donation_management.donation_management.doctype.book_assignment.book_assignment.get_book_stock_qty",
 		args: {
-			item: frm.doc.item,
-			warehouse: frm.doc.warehouse,
+			item: row.item,
+			warehouse: row.warehouse,
 		},
 		callback(response) {
-			const available_stock = cint(response.message);
-			if (available_stock <= 0) {
-				frappe.msgprint(
-					__("No stock is available for Item {0} in Warehouse {1}.", [
-						frm.doc.item,
-						frm.doc.warehouse,
-					])
-				);
-				return;
-			}
-
-			frappe.show_alert({
-				message: __("Available stock: {0}", [available_stock]),
-				indicator: "green",
-			});
+			frappe.model.set_value(cdt, cdn, "available_stock", flt(response.message));
 		},
 	});
+}
+
+function get_receipt_serial_number(value) {
+	const match = String(value || "").match(/(\d+)$/);
+	return match ? parseInt(match[1], 10) : null;
 }
 
 function set_remaining_pages(frm) {
@@ -258,14 +371,13 @@ function set_coupon_type_from_item(frm) {
 	}
 
 	frappe.call({
-		method: "donation_management.donation_management.doctype.book.book.get_coupon_type_for_item",
+		method: "donation_management.donation_management.doctype.book_assignment.book_assignment.get_coupon_type_for_item",
 		args: {
 			item: frm.doc.item,
 		},
 		callback(response) {
 			frm.set_value("coupon_type", response.message || "");
 			set_coupon_color(frm);
-			check_available_stock(frm);
 		},
 	});
 }
@@ -285,7 +397,7 @@ function update_denomination_rows(frm) {
 
 function set_collection_visibility(frm) {
 	const show_collection =
-		[book_type_coupon, book_type_donation].includes(frm.doc.book_type)
+		[book_type_coupon, book_type_donation, book_type_mixed].includes(frm.doc.book_type)
 		&& ["Returned", "Closed"].includes(frm.doc.status);
 	frm.toggle_display("collection_section", show_collection);
 	frm.toggle_reqd("collected_amount", show_collection);
@@ -297,38 +409,104 @@ function set_collection_visibility(frm) {
 function set_book_type_visibility(frm) {
 	const is_coupon_book = frm.doc.book_type === book_type_coupon;
 	const is_donation_book = frm.doc.book_type === book_type_donation;
+	const is_mixed = frm.doc.book_type === book_type_mixed;
 
-	frm.toggle_reqd("item", is_coupon_book || is_donation_book);
-	frm.toggle_reqd("book_serial_no", is_coupon_book);
-	frm.toggle_reqd("issued_to_employee", is_coupon_book || is_donation_book);
-	frm.toggle_reqd("coupon_value", is_coupon_book);
-	frm.toggle_reqd("warehouse", is_coupon_book || is_donation_book);
-	frm.toggle_reqd("total_pages", is_coupon_book);
-	frm.toggle_reqd("assigned_books", is_donation_book);
-	frm.toggle_display("book_serial_no", is_coupon_book);
+	frm.toggle_reqd("item", false);
+	frm.toggle_reqd("book_serial_no", false);
+	frm.toggle_reqd("issued_to_employee", is_coupon_book || is_donation_book || is_mixed);
+	frm.toggle_reqd("coupon_value", false);
+	frm.toggle_reqd("warehouse", false);
+	frm.toggle_reqd("total_pages", false);
+	frm.toggle_reqd("assigned_books", is_coupon_book || is_donation_book || frm.doc.book_type === book_type_mixed);
+	frm.toggle_display("assigned_books_section", is_coupon_book || is_donation_book || frm.doc.book_type === book_type_mixed);
+	frm.toggle_display("item", false);
+	frm.toggle_display("book_serial_no", false);
+	frm.toggle_display("coupon_type", false);
+	frm.toggle_display("coupon_value", false);
+	frm.toggle_display("coupon_color", false);
+	frm.toggle_display("warehouse", false);
 
 	frm.toggle_reqd("from_receipt_no", false);
 	frm.toggle_reqd("to_receipt_no", false);
 }
 
-function add_action_buttons(frm) {
-	if (frm.is_new()) {
+function set_assigned_book_grid_properties(frm) {
+	const grid_field = frm.fields_dict.assigned_books;
+	if (!grid_field || !grid_field.grid) {
 		return;
 	}
 
-	if (!frm.doc.status && frappe.user.has_role("Finance Manager")) {
-		frm.add_custom_button(__("Issue"), () => issue_book(frm), __("Actions"));
-	} else if (frm.doc.status === "Issued" && frm.doc.book_type === book_type_coupon) {
+	const hide_book_type = [book_type_coupon, book_type_donation].includes(frm.doc.book_type);
+	grid_field.grid.update_docfield_property("book_type", "hidden", hide_book_type ? 1 : 0);
+	if (grid_field.grid.set_column_disp) {
+		grid_field.grid.set_column_disp("book_type", !hide_book_type);
+	}
+	grid_field.grid.update_docfield_property(
+		"total_pages",
+		"read_only",
+		[book_type_coupon, book_type_donation].includes(frm.doc.book_type) ? 1 : 0,
+	);
+	grid_field.grid.update_docfield_property("warehouse", "in_list_view", 1);
+	grid_field.grid.update_docfield_property("available_stock", "in_list_view", 1);
+	const show_receipt_fields = [book_type_coupon, book_type_donation, book_type_mixed].includes(frm.doc.book_type);
+	const show_coupon_fields = [book_type_coupon, book_type_mixed].includes(frm.doc.book_type);
+	["receipt_format", "from_receipt_no", "to_receipt_no"].forEach((fieldname) => {
+		grid_field.grid.update_docfield_property(fieldname, "hidden", show_receipt_fields ? 0 : 1);
+		if (grid_field.grid.set_column_disp) {
+			grid_field.grid.set_column_disp(fieldname, show_receipt_fields);
+		}
+	});
+	["coupon_type", "coupon_value", "coupon_color"].forEach((fieldname) => {
+		grid_field.grid.update_docfield_property(fieldname, "hidden", show_coupon_fields ? 0 : 1);
+		if (grid_field.grid.set_column_disp) {
+			grid_field.grid.set_column_disp(fieldname, show_coupon_fields);
+		}
+	});
+	(frm.doc.assigned_books || []).forEach((row) => {
+		if (hide_book_type && row.book_type !== frm.doc.book_type) {
+			row.book_type = frm.doc.book_type;
+		}
+		set_assigned_book_row_visibility(frm, "Book Assignment Detail", row.name);
+	});
+	frm.refresh_field("assigned_books");
+}
+
+function set_assigned_book_row_visibility(frm, cdt, cdn) {
+	const row = locals[cdt] && locals[cdt][cdn];
+	const grid = frm.fields_dict.assigned_books && frm.fields_dict.assigned_books.grid;
+	const grid_row = grid && grid.grid_rows_by_docname && grid.grid_rows_by_docname[cdn];
+	if (!row || !grid_row) {
+		return;
+	}
+
+	const show_book_type = frm.doc.book_type === book_type_mixed;
+	const show_coupon_fields = row.book_type === book_type_coupon;
+	const show_receipt_fields = [book_type_coupon, book_type_donation].includes(row.book_type);
+	grid_row.toggle_display("book_type", show_book_type);
+	grid_row.toggle_display("receipt_format", show_receipt_fields);
+	grid_row.toggle_display("from_receipt_no", show_receipt_fields);
+	grid_row.toggle_display("to_receipt_no", show_receipt_fields);
+	grid_row.toggle_display("coupon_type", show_coupon_fields);
+	grid_row.toggle_display("coupon_value", show_coupon_fields);
+	grid_row.toggle_display("coupon_color", show_coupon_fields);
+}
+
+function add_action_buttons(frm) {
+	if (frm.is_new() || !frm.doc.docstatus) {
+		return;
+	}
+
+	if (frm.doc.status === "Issued" && frm.doc.book_type === book_type_coupon) {
 		frm.add_custom_button(__("Return"), () => show_return_dialog(frm), __("Actions"));
 		frm.add_custom_button(__("Request Page Adjustment"), () => create_page_adjustment(frm), __("Actions"));
-	} else if (frm.doc.status === "Issued" && frm.doc.book_type === book_type_donation) {
+	} else if (frm.doc.status === "Issued" && [book_type_donation, book_type_mixed].includes(frm.doc.book_type)) {
 		frm.add_custom_button(__("Return"), () => show_donation_book_return_dialog(frm), __("Actions"));
 	} else if (frm.doc.status === "Returned") {
 		frm.add_custom_button(__("Close"), () => close_book(frm), __("Actions"));
-		if (frm.doc.book_type === book_type_coupon) {
+		if ([book_type_coupon, book_type_mixed].includes(frm.doc.book_type)) {
 			frm.add_custom_button(__("Request Page Adjustment"), () => create_page_adjustment(frm), __("Actions"));
 		}
-	} else if (frm.doc.status === "Closed" && frappe.user.has_role("Finance Manager")) {
+	} else if (frm.doc.status === "Closed" && frm.has_perm("write")) {
 		frm.add_custom_button(__("Reopen"), () => show_reopen_dialog(frm), __("Actions"));
 	}
 }
@@ -347,7 +525,7 @@ function show_reopen_dialog(frm) {
 		primary_action_label: __("Reopen"),
 		primary_action(values) {
 			frappe.call({
-				method: "donation_management.donation_management.doctype.book.book.reopen_book",
+				method: "donation_management.donation_management.doctype.book_assignment.book_assignment.reopen_book",
 				args: {
 					book: frm.doc.name,
 					reason: values.reason,
@@ -371,7 +549,7 @@ function create_page_adjustment(frm) {
 
 function issue_book(frm) {
 	frappe.call({
-		method: "donation_management.donation_management.doctype.book.book.issue_book",
+		method: "donation_management.donation_management.doctype.book_assignment.book_assignment.issue_book",
 		args: {
 			book: frm.doc.name,
 		},
@@ -460,7 +638,7 @@ function show_donation_book_return_dialog(frm) {
 			const book_collections = get_donation_book_return_collections(values, assigned_books);
 
 			frappe.call({
-				method: "donation_management.donation_management.doctype.book.book.return_donation_book",
+				method: "donation_management.donation_management.doctype.book_assignment.book_assignment.return_donation_book",
 				args: {
 					book: frm.doc.name,
 					book_collections,
@@ -485,7 +663,7 @@ function set_volunteer_area(frm) {
 	}
 
 	frappe.call({
-		method: "donation_management.donation_management.doctype.book.book.get_volunteer_area",
+		method: "donation_management.donation_management.doctype.book_assignment.book_assignment.get_volunteer_area",
 		args: {
 			volunteer_name: frm.doc.volunteer_name,
 		},
@@ -499,7 +677,7 @@ function show_return_dialog(frm) {
 	frappe.call({
 		method: "donation_management.donation_management.api.get_collection_cash_accounting_defaults",
 		args: {
-			source_type: "Book",
+			source_type: "Book Assignment",
 			donation_type: frm.doc.coupon_type,
 		},
 		callback(response) {
@@ -617,7 +795,7 @@ function build_return_dialog(frm, accounting_defaults) {
 			}));
 
 			frappe.call({
-				method: "donation_management.donation_management.doctype.book.book.return_book",
+				method: "donation_management.donation_management.doctype.book_assignment.book_assignment.return_book",
 			args: {
 				book: frm.doc.name,
 				collected_amount: values.collected_amount,
@@ -769,7 +947,7 @@ function get_donation_book_return_collections(values, assigned_books) {
 
 function close_book(frm) {
 	frappe.call({
-		method: "donation_management.donation_management.doctype.book.book.close_book",
+		method: "donation_management.donation_management.doctype.book_assignment.book_assignment.close_book",
 		args: {
 			book: frm.doc.name,
 		},

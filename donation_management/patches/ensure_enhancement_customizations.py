@@ -5,10 +5,14 @@ ITEM_COUPON_VALUES = "\n10\n50\n100\n500\n1000\n5000"
 
 
 def execute():
+	from donation_management.patches.ensure_donation_order_layout_fields import execute as ensure_donation_order_layout
+
 	ensure_roles()
 	ensure_item_coupon_value_field()
 	ensure_box_shapes()
 	ensure_donation_settings()
+	ensure_esaal_e_sawab_purpose()
+	ensure_donation_order_layout()
 
 
 def ensure_roles():
@@ -70,3 +74,19 @@ def ensure_donation_settings():
 		settings.insert(ignore_permissions=True)
 
 	frappe.db.set_single_value("Donation Settings", "allow_duplicate_donor_phone", 1)
+
+
+def ensure_esaal_e_sawab_purpose():
+	if frappe.db.exists("Donation Purpose", "Esaal e Sawab"):
+		return
+
+	doc = frappe.get_doc(
+		{
+			"doctype": "Donation Purpose",
+			"purpose_name": "Esaal e Sawab",
+			"purpose_group": "General",
+			"is_group": 0,
+		}
+	)
+	doc.flags.ignore_permissions = True
+	doc.insert()

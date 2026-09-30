@@ -41,9 +41,22 @@ frappe.ui.form.on("Donation Order", {
 		frm.set_query("donation_location", () => ({}));
 
 		frm.set_query("donation_book_serial_no", () => ({
-			query: "donation_management.donation_management.doctype.book.book.get_mohasil_donation_book_serials",
+			query: "donation_management.donation_management.doctype.book_assignment.book_assignment.get_mohasil_donation_book_serials",
 			filters: {
 				mohasil: frm.doc.mohasil || "",
+			},
+		}));
+
+		frm.set_query("donation_book_leaf", () => ({
+			query: "donation_management.donation_management.doctype.book_assignment.book_assignment.get_mohasil_donation_book_leaves",
+			filters: {
+				mohasil: frm.doc.mohasil || "",
+			},
+		}));
+
+		frm.set_query("person_name", "esaal_e_sawab", () => ({
+			filters: {
+				name: ["in", frm.__donor_esaal_persons || [""]],
 			},
 		}));
 
@@ -158,6 +171,7 @@ frappe.ui.form.on("Donation Order", {
 		render_donor_program_enrollments(frm);
 		apply_sponsorship_table_rules(frm);
 		toggle_mohasil_details(frm);
+		load_esaal_e_sawab_options(frm);
 
 		if (frm.doc.docstatus === 1) {
 			return;
@@ -175,11 +189,32 @@ frappe.ui.form.on("Donation Order", {
 	},
 
 	before_cancel(frm) {
-		if (frm.doc.cancellation_status === "Approved" && frm.doc.cancellation_approved_by) {
+		if (frm.__cancellation_flow_active) {
 			return;
 		}
 
-		frappe.throw(__("Please request and approve cancellation before cancelling this Donation Order."));
+		if (frm.doc.cancellation_status === "Approved" && frm.doc.cancellation_approved_by) {
+			if (!frappe.user.has_role("Donation Cancellation Approver")) {
+				frappe.validated = false;
+				frappe.msgprint({
+					title: __("Cancellation Approval Required"),
+					indicator: "red",
+					message: __("Only a Donation Cancellation Approver can complete this cancellation."),
+				});
+			}
+			return;
+		}
+
+		frappe.validated = false;
+		if (frm.doc.cancellation_status === "Pending Approval") {
+			frappe.msgprint({
+				title: __("Cancellation Approval Pending"),
+				indicator: "orange",
+				message: __("This Donation Order is already waiting for cancellation approval."),
+			});
+			return;
+		}
+		prompt_cancellation_request(frm);
 	},
 
 	company(frm) {
@@ -260,11 +295,19 @@ frappe.ui.form.on("Donation Order", {
 		if (frm.doc.donation_book) {
 			frm.set_value("donation_book", "");
 		}
+		if (frm.doc.donation_book_leaf) {
+			frm.set_value("donation_book_leaf", "");
+		}
 		set_effective_donation_location(frm);
 	},
 
 	donation_book_serial_no(frm) {
 		set_donation_book_from_serial(frm);
+		check_all_manual_receipt_duplicates(frm);
+	},
+
+	donation_book_leaf(frm) {
+		set_donation_book_from_leaf(frm);
 		check_all_manual_receipt_duplicates(frm);
 	},
 
@@ -300,6 +343,7 @@ frappe.ui.form.on("Donation Order", {
 				"purpose_path",
 				"requires_student",
 				"requires_prisoner",
+				"purpose_name",
 				"student_mode",
 			])
 			.then((response) => {
@@ -307,6 +351,11 @@ frappe.ui.form.on("Donation Order", {
 				set_value_if_changed(frm, "purpose_path", purpose.purpose_path || "");
 				set_value_if_changed(frm, "requires_student", purpose.requires_student || 0);
 				set_value_if_changed(frm, "requires_prisoner", purpose.requires_prisoner || 0);
+				set_value_if_changed(
+					frm,
+					"requires_esaal_e_sawab",
+					purpose.purpose_name === "Esaal e Sawab" ? 1 : 0
+				);
 				set_value_if_changed(frm, "student_mode", purpose.student_mode || "");
 				update_beneficiary_fields(frm, true);
 				set_previous_sponsorship_balance(frm);
@@ -352,16 +401,8 @@ function add_esaal_e_sawab_action(frm) {
 		return;
 	}
 
-	frm.add_custom_button(__("Refresh from Donor"), () => {
-		if ((frm.doc.esaal_e_sawab || []).length) {
-			frappe.confirm(
-				__("Existing Esaal e Sawab rows will be replaced from the selected Donor. Continue?"),
-				() => load_esaal_e_sawab_from_donor(frm, true)
-			);
-			return;
-		}
-
-		load_esaal_e_sawab_from_donor(frm, true);
+	frm.add_custom_button(__("Refresh People List"), () => {
+		load_esaal_e_sawab_options(frm);
 	}, __("Esaal e Sawab"));
 }
 
@@ -829,13 +870,6 @@ function add_cancellation_action_buttons(frm) {
 	}
 
 	const action_group = __("Cancellation");
-
-	if (frm.doc.cancellation_status !== "Approved") {
-		frm.add_custom_button(__("Request Cancellation"), () => {
-			prompt_cancellation_request(frm);
-		}, action_group);
-	}
-
 	if (frm.doc.cancellation_status === "Pending Approval" && frappe.user.has_role("Donation Cancellation Approver")) {
 		frm.add_custom_button(__("Approve Cancellation"), () => {
 			approve_cancellation_request(frm);
@@ -1075,6 +1109,7 @@ function update_purpose_row_details(frm, cdt, cdn) {
 			"purpose_group",
 			"requires_student",
 			"requires_prisoner",
+			"purpose_name",
 			"student_mode",
 		])
 		.then((purpose_response) => {
@@ -1102,6 +1137,7 @@ function update_purpose_row_details(frm, cdt, cdn) {
 			set_child_value_if_changed(cdt, cdn, "purpose_path", purpose.purpose_path || "");
 			frm.doc.requires_student = purpose.requires_student || 0;
 			frm.doc.requires_prisoner = purpose.requires_prisoner || 0;
+			frm.doc.requires_esaal_e_sawab = purpose.purpose_name === "Esaal e Sawab" ? 1 : 0;
 			frm.doc.student_mode = purpose.student_mode || "";
 
 			frappe.call({
@@ -1348,6 +1384,7 @@ function get_phone_digits(phone_number) {
 
 function set_donor_details_from_name(frm) {
 	if (!frm.doc.donor_name) {
+		frm.__donor_esaal_persons = [];
 		set_value_if_changed(frm, "referred_by_trustee", "");
 		set_previous_sponsorship_balance(frm);
 		render_donor_program_enrollments(frm);
@@ -1373,7 +1410,7 @@ function set_donor_details_from_name(frm) {
 			set_value_if_changed(frm, "donor_pos_id", donor.donor_pos_id || "");
 			set_value_if_changed(frm, "party", donor.party || "");
 			set_value_if_changed(frm, "confidential_ref_co", donor.confidential_ref_co || "");
-			load_esaal_e_sawab_from_donor(frm, false);
+			load_esaal_e_sawab_options(frm);
 			if (frm.doc.is_mohasil_collection && !frm.doc.mohasil) {
 				set_value_if_changed(frm, "mohasil", donor.mohasil || "");
 			}
@@ -1394,12 +1431,14 @@ function toggle_mohasil_details(frm) {
 	frm.toggle_display("mohasil_section", show_mohasil_details);
 	frm.toggle_reqd("mohasil", show_mohasil_details);
 	frm.toggle_reqd("donation_book_serial_no", show_mohasil_details);
+	frm.toggle_reqd("donation_book_leaf", show_mohasil_details);
 	frm.toggle_reqd("cash_denominations", false);
 	toggle_purpose_receipt_number_column(frm, show_mohasil_details);
 
 	if (!show_mohasil_details) {
 		set_value_if_changed(frm, "mohasil", "");
 		set_value_if_changed(frm, "donation_book_serial_no", "");
+		set_value_if_changed(frm, "donation_book_leaf", "");
 		set_value_if_changed(frm, "donation_book", "");
 		set_value_if_changed(frm, "manual_receipt_number", "");
 		set_value_if_changed(frm, "manual_receipt_date", "");
@@ -1413,11 +1452,12 @@ function toggle_mohasil_details(frm) {
 function set_donation_book_from_serial(frm) {
 	if (!frm.doc.donation_book_serial_no) {
 		set_value_if_changed(frm, "donation_book", "");
+		set_value_if_changed(frm, "donation_book_leaf", "");
 		return;
 	}
 
 	frappe.call({
-		method: "donation_management.donation_management.doctype.book.book.get_donation_book_for_serial",
+		method: "donation_management.donation_management.doctype.book_assignment.book_assignment.get_donation_book_for_serial",
 		args: {
 			book_serial_no: frm.doc.donation_book_serial_no,
 			mohasil: frm.doc.mohasil,
@@ -1426,6 +1466,39 @@ function set_donation_book_from_serial(frm) {
 			const book = response.message || {};
 			set_value_if_changed(frm, "donation_book", book.name || "");
 			check_all_manual_receipt_duplicates(frm);
+		},
+	});
+}
+
+function set_donation_book_from_leaf(frm) {
+	if (!frm.doc.donation_book_leaf) {
+		return;
+	}
+
+	frappe.call({
+		method: "donation_management.donation_management.doctype.donation_order.donation_order.get_donation_book_leaf_details",
+		args: {
+			leaf: frm.doc.donation_book_leaf,
+			mohasil: frm.doc.mohasil,
+		},
+		callback(response) {
+			const leaf = response.message || {};
+			if (!leaf.name) {
+				return;
+			}
+
+			set_value_if_changed(frm, "donation_book_serial_no", leaf.book_serial_no || "");
+			set_value_if_changed(frm, "donation_book", leaf.book || "");
+			set_value_if_changed(frm, "manual_receipt_number", leaf.receipt_number || "");
+			if ((frm.doc.purpose_details || []).length === 1) {
+				set_child_value_if_changed(
+					frm.doc.purpose_details[0].doctype,
+					frm.doc.purpose_details[0].name,
+					"manual_receipt_number",
+					leaf.receipt_number || ""
+				);
+				frm.refresh_field("purpose_details");
+			}
 		},
 	});
 }
@@ -1546,12 +1619,9 @@ function set_effective_donation_location(frm) {
 	});
 }
 
-function load_esaal_e_sawab_from_donor(frm, force) {
+function load_esaal_e_sawab_options(frm) {
 	if (!frm.doc.donor_name || frm.doc.docstatus !== 0) {
-		return;
-	}
-
-	if (!force && (frm.doc.esaal_e_sawab || []).length) {
+		frm.__donor_esaal_persons = [];
 		return;
 	}
 
@@ -1562,13 +1632,7 @@ function load_esaal_e_sawab_from_donor(frm, force) {
 		},
 		callback(response) {
 			const rows = response.message || [];
-			frm.clear_table("esaal_e_sawab");
-			rows.forEach((row) => {
-				const child = frm.add_child("esaal_e_sawab");
-				child.person_name = row.person_name;
-				child.relationship = row.relationship;
-				child.remarks = row.remarks;
-			});
+			frm.__donor_esaal_persons = rows.map((row) => row.person_name).filter(Boolean);
 			frm.refresh_field("esaal_e_sawab");
 		},
 	});
@@ -1590,6 +1654,7 @@ function update_cash_denomination_rows(frm) {
 function update_beneficiary_fields(frm, clear_hidden_values) {
 	const requires_student = cint(frm.doc.requires_student);
 	const requires_prisoner = cint(frm.doc.requires_prisoner);
+	const requires_esaal_e_sawab = is_esaal_e_sawab_order(frm);
 	const sponsorship_purpose_rows = (frm.doc.purpose_details || []).filter(
 		(row) => row.donation_category === "Sponsorship" && row.donation_purpose
 	);
@@ -1609,7 +1674,14 @@ function update_beneficiary_fields(frm, clear_hidden_values) {
 	frm.toggle_reqd("prisoner_name", requires_prisoner && !is_sponsorship);
 	frm.toggle_display("sponsorship_section", show_sponsorship_allocation);
 	frm.toggle_display("sponsorship_students", show_sponsorship_allocation);
+	frm.toggle_display("esaal_e_sawab_section", requires_esaal_e_sawab);
+	frm.toggle_display("esaal_e_sawab", requires_esaal_e_sawab);
 	apply_sponsorship_table_rules(frm);
+
+	if (clear_hidden_values && !requires_esaal_e_sawab && frm.doc.docstatus === 0) {
+		frm.clear_table("esaal_e_sawab");
+		frm.refresh_field("esaal_e_sawab");
+	}
 
 	if (clear_hidden_values && (!requires_student || is_sponsorship)) {
 		set_value_if_changed(frm, "student_name", "");
@@ -1631,6 +1703,12 @@ function update_beneficiary_fields(frm, clear_hidden_values) {
 	}
 
 	set_sponsorship_totals(frm);
+}
+
+function is_esaal_e_sawab_order(frm) {
+	return (frm.doc.purpose_details || []).some(
+		(row) => row.donation_purpose === "Esaal e Sawab"
+	) || frm.doc.donation_purpose === "Esaal e Sawab";
 }
 
 function apply_sponsorship_table_rules(frm) {

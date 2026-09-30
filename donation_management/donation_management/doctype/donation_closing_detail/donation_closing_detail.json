@@ -19,7 +19,7 @@
    "fieldtype": "Select",
    "in_list_view": 1,
    "label": "Source DocType",
-   "options": "\nDonation Order\nBox Collection\nBox Collection Log\nBook",
+   "options": "\nDonation Order\nBox Collection\nBox Collection Log\nBook Assignment",
    "reqd": 1
   },
   {

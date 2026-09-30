@@ -1,5 +1,5 @@
 from frappe.model.document import Document
 
 
-class BookReturnCollection(Document):
+class DonationBookCollectionDetail(Document):
 	pass

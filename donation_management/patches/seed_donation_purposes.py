@@ -9,6 +9,7 @@ PURPOSES = [
 	("General - Orphan Aid - Personage", "General - Orphan Aid", 0, "General", 0, 0, None),
 	("General - Food", "General", 0, "General", 0, 0, None),
 	("General - Relief", "General", 0, "General", 0, 0, None),
+	("Esaal e Sawab", None, 0, "General", 0, 0, None),
 	("Sponsorship", None, 1, "Sponsorship", 0, 0, None),
 	("Sponsorship - Student", "Sponsorship", 0, "Sponsorship", 1, 0, None),
 	("Sponsorship - Prisoner", "Sponsorship", 0, "Sponsorship", 0, 1, None),

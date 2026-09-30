@@ -1,13 +1,14 @@
 {
  "actions": [],
  "allow_rename": 1,
- "autoname": "COP-.########",
+ "autoname": "COP-.####",
  "creation": "2026-05-08 18:51:37.993594",
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
   "coupon_detail_section",
   "book",
+  "book_serial_no",
   "coupon_color",
   "coupon_number",
   "column_break_coupon",
@@ -58,9 +59,16 @@
    "fieldname": "book",
    "fieldtype": "Link",
    "in_list_view": 1,
-   "label": "Book",
-   "options": "Book",
+   "label": "Book Assignment",
+   "options": "Book Assignment",
    "reqd": 1
+  },
+  {
+   "fieldname": "book_serial_no",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Book Serial No",
+   "options": "Serial No"
   },
   {
    "fetch_from": "book.warehouse",
@@ -157,6 +165,7 @@
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
+ "is_submittable": 1,
  "links": [],
  "modified": "2026-05-11 17:42:25.701933",
  "modified_by": "Administrator",

@@ -5,14 +5,15 @@ def get_data():
 	return {
 		"fieldname": "book",
 		"non_standard_fieldnames": {
-			"Donation Order": "donation_book",
+			"Material Request": "custom_book_assignment",
+			"Purchase Receipt": "custom_book_assignment",
 		},
 		"internal_links": {
 			"Journal Entry": "journal_entry",
+			"Stock Entry": "stock_entry",
 		},
 		"transactions": [
-			{"label": _("Coupons"), "items": ["Coupon"]},
-			{"label": _("Donation Orders"), "items": ["Donation Order"]},
+			{"label": _("Purchase Sources"), "items": ["Material Request", "Purchase Receipt", "Stock Entry"]},
 			{"label": _("Accounting"), "items": ["Journal Entry"]},
 		],
 	}

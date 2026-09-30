@@ -13,7 +13,7 @@
  "name": "Volunteer Coupon Assignment Report",
  "owner": "Administrator",
  "prepared_report": 0,
- "ref_doctype": "Book",
+ "ref_doctype": "Book Assignment",
  "report_name": "Volunteer Coupon Assignment Report",
  "report_type": "Script Report",
  "roles": [

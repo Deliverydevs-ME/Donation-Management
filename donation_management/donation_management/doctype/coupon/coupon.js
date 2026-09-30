@@ -6,6 +6,10 @@ frappe.ui.form.on("Coupon", {
 		frm.set_query("book", () => ({
 			query: "donation_management.donation_management.doctype.coupon.coupon.get_available_books",
 		}));
+		frm.set_query("book_serial_no", () => ({
+			query: "donation_management.donation_management.doctype.coupon.coupon.get_available_coupon_serials",
+			filters: { book: frm.doc.book },
+		}));
 	},
 
 	refresh(frm) {
@@ -29,7 +33,7 @@ function set_coupon_book_details(frm) {
 	}
 
 	frappe.db
-		.get_value("Book", frm.doc.book, [
+		.get_value("Book Assignment", frm.doc.book, [
 			"coupon_type",
 			"coupon_color",
 			"volunteer_name",

@@ -23,7 +23,7 @@ from donation_management.donation_management.api import (
 	get_mode_of_payment_account,
 	get_receiving_account_donation_type,
 )
-from donation_management.donation_management.doctype.book.book import (
+from donation_management.donation_management.doctype.book_assignment.book_assignment import (
 	get_donation_book_order_total,
 	get_donation_book_used_receipts,
 	get_receipt_range_count,
@@ -51,6 +51,7 @@ PDC_STATUS_DEPOSITED = "Deposited"
 CANCELLATION_STATUS_PENDING = "Pending Approval"
 CANCELLATION_STATUS_APPROVED = "Approved"
 CANCELLATION_APPROVER_ROLE = "Donation Cancellation Approver"
+ESAAL_E_SAWAB_PURPOSE = "Esaal e Sawab"
 
 
 def format_sponsorship_duration(total_days):
@@ -76,10 +77,12 @@ class DonationOrder(Document):
 
 		self.set_company_defaults()
 		self.set_donor_details()
+		self.set_donation_book_leaf_details()
 		self.validate_mohasil_details()
 		self.set_and_validate_donation_location()
-		self.set_esaal_e_sawab_snapshot()
 		self.set_purpose_details()
+		self.apply_selected_leaf_receipt_to_purpose()
+		self.validate_esaal_e_sawab_selection()
 		self.validate_donation_book_receipts()
 		self.validate_manual_receipt_uniqueness()
 		self.set_previous_sponsorship_balance()
@@ -115,14 +118,17 @@ class DonationOrder(Document):
 			self.accounting_status = "Not Posted"
 			self.db_set("accounting_status", "Not Posted", update_modified=False)
 			self.set_receipt_status()
+			self.update_linked_donation_book_usage()
 			return
 		self.set_bank_deposit_status()
 		self.create_journal_entry()
+		self.update_linked_donation_book_usage()
 		self.update_donor_program_enrollments()
 		self.set_receipt_status()
 
 	def on_cancel(self):
 		self.cancel_linked_journal_entry()
+		self.cancel_linked_donation_book_leaf()
 		self.update_linked_donation_book_usage()
 		if self.meta.has_field("receipt_status"):
 			self.db_set("receipt_status", "Cancelled", update_modified=False)
@@ -132,6 +138,13 @@ class DonationOrder(Document):
 
 	def on_trash(self):
 		self.cancel_linked_journal_entry()
+
+	def cancel_linked_donation_book_leaf(self):
+		from donation_management.donation_management.doctype.donation_book_leaf.donation_book_leaf import (
+			cancel_leaf_for_donation_order,
+		)
+
+		cancel_leaf_for_donation_order(self.name, clear_journal_entry=True)
 
 	def is_sponsorship(self):
 		return any(row.donation_category == SPONSORSHIP_PURPOSE for row in self.get("purpose_details", []))
@@ -282,29 +295,72 @@ class DonationOrder(Document):
 		if not self.donation_location:
 			frappe.throw(frappe._("Donation Location is required."))
 
-	def set_esaal_e_sawab_snapshot(self):
-		if not self.donor_name or self.get("esaal_e_sawab"):
+	def set_donation_book_leaf_details(self):
+		if not self.donation_book_leaf:
 			return
 
-		rows = frappe.get_all(
+		if not self.mohasil:
+			frappe.throw(frappe._("Mohasil is required before selecting a Donation Book Leaf."))
+
+		leaf = _get_donation_book_leaf_for_mohasil(
+			self.donation_book_leaf,
+			self.mohasil,
+			current_order=self.name,
+		)
+		if self.donation_book_serial_no and self.donation_book_serial_no != leaf.book_serial_no:
+			frappe.throw(frappe._("Selected Donation Book Leaf does not belong to the selected Donation Book."))
+
+		self.is_mohasil_collection = 1
+		self.donation_book = leaf.book
+		self.donation_book_serial_no = leaf.book_serial_no
+		self.manual_receipt_number = leaf.receipt_number
+
+	def apply_selected_leaf_receipt_to_purpose(self):
+		if not self.donation_book_leaf or len(self.get("purpose_details", [])) != 1:
+			return
+
+		row = self.purpose_details[0]
+		if not row.manual_receipt_number:
+			row.manual_receipt_number = self.manual_receipt_number
+
+	def validate_esaal_e_sawab_selection(self):
+		if not self.is_esaal_e_sawab_order():
+			if self.docstatus == 0:
+				self.set("esaal_e_sawab", [])
+			return
+
+		if not self.donor_name:
+			frappe.throw(frappe._("Donor is required before selecting Esaal e Sawab people."))
+
+		registered_rows = frappe.get_all(
 			"Esaal E Sawab Detail",
 			filters={
 				"parenttype": "Donor",
 				"parent": self.donor_name,
 				"parentfield": "esaal_e_sawab",
 			},
-			fields=["person_name", "relationship", "remarks"],
-			order_by="idx asc",
+			fields=["person_name", "relationship"],
 		)
-		for row in rows:
-			self.append(
-				"esaal_e_sawab",
-				{
-					"person_name": row.person_name,
-					"relationship": row.relationship,
-					"remarks": row.remarks,
-				},
-			)
+		registered_keys = {
+			get_esaal_e_sawab_key(row.person_name, row.relationship) for row in registered_rows
+		}
+		selected_keys = set()
+
+		for row in self.get("esaal_e_sawab", []):
+			if not row.person_name or not row.relationship:
+				frappe.throw(frappe._("Person Name and Relationship are required in Esaal e Sawab row {0}.").format(row.idx))
+
+			key = get_esaal_e_sawab_key(row.person_name, row.relationship)
+			if key in selected_keys:
+				frappe.throw(frappe._("Esaal e Sawab row {0} is duplicated.").format(row.idx))
+			if key not in registered_keys:
+				frappe.throw(
+					frappe._("{0} with relationship {1} is not registered under the selected Donor.").format(
+						row.person_name,
+						row.relationship,
+					)
+				)
+			selected_keys.add(key)
 
 	def validate_mohasil_details(self):
 		if self.manual_receipt_number:
@@ -350,14 +406,15 @@ class DonationOrder(Document):
 			"""
 			select book.name
 			from `tabBook Assignment Detail` detail
-			inner join `tabBook` book
+			inner join `tabBook Assignment` book
 				on book.name = detail.parent
 			where detail.book_serial_no = %(book_serial_no)s
-				and book.book_type = 'Donation Book'
+				and book.book_type in ('Donation Book', 'Mixed')
 				and book.status = 'Returned'
 				and book.issued_to_employee = %(mohasil)s
 				and book.docstatus != 2
-				and detail.parentfield = 'assigned_books'
+			and detail.parentfield = 'assigned_books'
+			and detail.book_type = 'Donation Book'
 			limit 1
 			""",
 			{
@@ -376,7 +433,7 @@ class DonationOrder(Document):
 
 	def validate_donation_book_for_mohasil(self):
 		book = frappe.db.get_value(
-			"Book",
+			"Book Assignment",
 			self.donation_book,
 			[
 				"book_type",
@@ -391,7 +448,7 @@ class DonationOrder(Document):
 		)
 		if not book:
 			frappe.throw(frappe._("Donation Book {0} was not found.").format(self.donation_book))
-		if book.book_type != "Donation Book":
+		if book.book_type not in ("Donation Book", "Mixed"):
 			frappe.throw(frappe._("Book {0} is not a Donation Book.").format(self.donation_book))
 		if book.status != "Returned":
 			frappe.throw(
@@ -447,6 +504,14 @@ class DonationOrder(Document):
 
 		book = self.validate_donation_book_for_mohasil()
 		receipt_numbers = self.get_purpose_receipt_numbers()
+		if self.donation_book_leaf:
+			leaf_receipt = frappe.db.get_value("Donation Book Leaf", self.donation_book_leaf, "receipt_number")
+			if leaf_receipt not in receipt_numbers:
+				frappe.throw(
+					frappe._("Selected Donation Book Leaf receipt {0} must be used in the Purpose Details.").format(
+						leaf_receipt
+					)
+				)
 
 		for row in self.get("purpose_details", []):
 			if not row.manual_receipt_number:
@@ -508,9 +573,10 @@ class DonationOrder(Document):
 				"Book Assignment Detail",
 				{
 					"parent": self.donation_book,
-					"parenttype": "Book",
+					"parenttype": "Book Assignment",
 					"parentfield": "assigned_books",
 					"book_serial_no": self.donation_book_serial_no,
+					"book_type": "Donation Book",
 				},
 				["from_receipt_no", "to_receipt_no"],
 				as_dict=True,
@@ -522,8 +588,9 @@ class DonationOrder(Document):
 			"Book Assignment Detail",
 			filters={
 				"parent": self.donation_book,
-				"parenttype": "Book",
+				"parenttype": "Book Assignment",
 				"parentfield": "assigned_books",
+				"book_type": "Donation Book",
 			},
 			fields=["from_receipt_no", "to_receipt_no"],
 			order_by="idx asc",
@@ -644,21 +711,7 @@ class DonationOrder(Document):
 			)
 
 	def get_donation_book_returned_amount(self):
-		if self.donation_book_serial_no:
-			serial_amount = frappe.db.get_value(
-				"Book Return Collection",
-				{
-					"parent": self.donation_book,
-					"parenttype": "Book",
-					"parentfield": "return_collections",
-					"book_serial_no": self.donation_book_serial_no,
-				},
-				"collected_amount",
-			)
-			if serial_amount is not None:
-				return flt(serial_amount)
-
-		return flt(frappe.db.get_value("Book", self.donation_book, "collected_amount"))
+		return flt(frappe.db.get_value("Book Assignment", self.donation_book, "collected_amount"))
 
 	def update_linked_donation_book_usage(self):
 		books = set()
@@ -828,6 +881,7 @@ class DonationOrder(Document):
 		if not self.donation_purpose:
 			self.requires_student = 0
 			self.requires_prisoner = 0
+			self.requires_esaal_e_sawab = 0
 			self.student_mode = None
 			self.purpose_path = None
 			return
@@ -836,9 +890,24 @@ class DonationOrder(Document):
 			frappe.get_cached_doc("Donation Purpose", row.donation_purpose)
 			for row in (sponsorship_rows or [primary_row])
 		]
+		all_purposes = [
+			frappe.get_cached_doc("Donation Purpose", row.donation_purpose)
+			for row in self.purpose_details
+			if row.donation_purpose
+		]
 		self.requires_student = 1 if any(cint(purpose.requires_student) for purpose in purposes) else 0
 		self.requires_prisoner = 1 if any(cint(purpose.requires_prisoner) for purpose in purposes) else 0
+		self.requires_esaal_e_sawab = (
+			1 if any(purpose.purpose_name == ESAAL_E_SAWAB_PURPOSE for purpose in all_purposes) else 0
+		)
 		self.student_mode = purposes[0].student_mode
+
+	def is_esaal_e_sawab_order(self):
+		return any(
+			row.donation_purpose == ESAAL_E_SAWAB_PURPOSE
+			for row in self.get("purpose_details", [])
+			if row.donation_purpose
+		) or self.donation_purpose == ESAAL_E_SAWAB_PURPOSE
 
 	def add_legacy_purpose_row_if_needed(self):
 		if self.purpose_details or not (self.donation_type and self.purpose_of_donation and self.donation_purpose):
@@ -1947,7 +2016,7 @@ def check_manual_receipt_duplicate(
 			"Book Assignment Detail",
 			{
 				"book_serial_no": donation_book_serial_no,
-				"parenttype": "Book",
+				"parenttype": "Book Assignment",
 				"parentfield": "assigned_books",
 			},
 			"parent",
@@ -2025,6 +2094,76 @@ def get_esaal_e_sawab_key(person_name, relationship=None):
 	return (person_name, relationship)
 
 
+def _get_donation_book_leaf_for_mohasil(leaf_name, mohasil, current_order=None):
+	leaf = frappe.db.get_value(
+		"Donation Book Leaf",
+		leaf_name,
+		["name", "book", "book_serial_no", "receipt_number", "status", "donation_order"],
+		as_dict=True,
+	)
+	if not leaf:
+		frappe.throw(frappe._("Donation Book Leaf {0} was not found.").format(leaf_name))
+
+	if leaf.status in ("Used", "Cancelled", "Destroyed", "Missing"):
+		frappe.throw(frappe._("Donation Book Leaf {0} is already {1}.").format(leaf.name, leaf.status))
+	if leaf.donation_order and leaf.donation_order != current_order:
+		frappe.throw(
+			frappe._("Donation Book Leaf {0} is already linked to Donation Order {1}.").format(
+				leaf.name,
+				leaf.donation_order,
+			)
+		)
+
+	assignment = frappe.db.sql(
+		"""
+		select
+			book.name as book,
+			book.status as book_status,
+			book.issued_to_employee,
+			detail.book_type
+		from `tabBook Assignment Detail` detail
+		inner join `tabBook Assignment` book on book.name = detail.parent
+		where detail.parentfield = 'assigned_books'
+			and detail.parent = %(book)s
+			and detail.book_serial_no = %(book_serial_no)s
+		limit 1
+		""",
+		{"book": leaf.book, "book_serial_no": leaf.book_serial_no},
+		as_dict=True,
+	)
+	if not assignment:
+		frappe.throw(frappe._("Donation Book Leaf {0} is not linked to an assigned Donation Book.").format(leaf.name))
+
+	assignment = assignment[0]
+	if assignment.book_type != "Donation Book":
+		frappe.throw(frappe._("Donation Book Leaf {0} is not a Donation Book leaf.").format(leaf.name))
+	if assignment.book_status != "Returned":
+		frappe.throw(frappe._("Donation Book {0} must be Returned before its leaf can be used.").format(leaf.book))
+	if assignment.issued_to_employee != mohasil:
+		frappe.throw(
+			frappe._("Donation Book Leaf {0} is not assigned to selected Mohasil {1}.").format(
+				leaf.name,
+				mohasil,
+			)
+		)
+
+	return leaf
+
+
+@frappe.whitelist()
+def get_donation_book_leaf_details(leaf, mohasil=None):
+	if not leaf or not mohasil:
+		return {}
+
+	leaf_doc = _get_donation_book_leaf_for_mohasil(leaf, mohasil)
+	return {
+		"name": leaf_doc.name,
+		"book": leaf_doc.book,
+		"book_serial_no": leaf_doc.book_serial_no,
+		"receipt_number": leaf_doc.receipt_number,
+	}
+
+
 def user_has_cancellation_approver_role(user):
 	if not user:
 		return False
@@ -2055,8 +2194,42 @@ def request_donation_order_cancellation(donation_order, reason):
 			"cancellation_approved_on": None,
 		},
 	)
+	notify_cancellation_approvers(doc, reason)
 
 	return {"status": CANCELLATION_STATUS_PENDING}
+
+
+def notify_cancellation_approvers(doc, reason):
+	approvers = frappe.get_all(
+		"Has Role",
+		filters={"role": CANCELLATION_APPROVER_ROLE, "parenttype": "User"},
+		pluck="parent",
+		ignore_permissions=True,
+	)
+	approvers = [
+		user
+		for user in approvers
+		if user != "Guest" and frappe.db.get_value("User", user, "enabled")
+	]
+	if not approvers:
+		return
+
+	message = frappe._(
+		"Donation Order {0} requires cancellation approval. Reason: {1}"
+	).format(doc.name, reason)
+	for user in approvers:
+		frappe.publish_realtime(
+			"donation_order_cancellation_requested",
+			{"name": doc.name, "message": message},
+			user=user,
+		)
+
+	frappe.sendmail(
+		recipients=approvers,
+		subject=frappe._("Donation Order Cancellation Approval: {0}").format(doc.name),
+		message=message,
+		now=False,
+	)
 
 
 @frappe.whitelist()

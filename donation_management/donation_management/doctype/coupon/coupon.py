@@ -12,17 +12,13 @@ from donation_management.donation_management.validations import validate_unique_
 
 COUPON_COLORS = {
 	"Zakat": "Green",
+	"Sadqa": "Blue",
 	"Atiya": "Blue",
 	"Fitra": "Purple",
 	"Fidya": "Orange",
 }
 
-COUPON_SERIES = {
-	"Zakat": "ZKT-.#####",
-	"Atiya": "ATI-.#####",
-	"Fitra": "FTR-.#####",
-	"Fidya": "FDY-.#####",
-}
+COUPON_SERIES = "COP-.####"
 
 
 class Coupon(Document):
@@ -40,21 +36,21 @@ class Coupon(Document):
 
 	def on_update(self):
 		previous_doc = self.get_doc_before_save()
-		if previous_doc and previous_doc.book and previous_doc.book != self.book:
-			sync_book_page_counts(previous_doc.book)
+		if previous_doc and previous_doc.book:
+			sync_book_page_counts(previous_doc.book, book_serial_no=previous_doc.book_serial_no)
 
 		self.sync_book_pages()
 
 	def on_trash(self):
 		if self.book:
-			sync_book_page_counts(self.book, exclude_coupon=self.name)
+			sync_book_page_counts(self.book, exclude_coupon=self.name, book_serial_no=self.book_serial_no)
 
 	def set_coupon_book_details(self):
 		if not self.book:
 			frappe.throw(frappe._("Book is required."))
 
 		book = frappe.db.get_value(
-			"Book",
+			"Book Assignment",
 			self.book,
 			[
 				"coupon_type",
@@ -71,8 +67,26 @@ class Coupon(Document):
 		if not book:
 			frappe.throw(frappe._("Book {0} was not found.").format(self.book))
 
-		if book.book_type != "Coupon Book":
+		if book.book_type not in ("Coupon Book", "Mixed"):
 			frappe.throw(frappe._("Coupons can only be created against Coupon Book records."))
+
+		if book.book_type == "Mixed":
+			if not self.book_serial_no:
+				frappe.throw(frappe._("Book Serial No is required for a Mixed Book Assignment."))
+			row = frappe.db.get_value(
+				"Book Assignment Detail",
+				{
+					"parent": self.book,
+					"parenttype": "Book Assignment",
+					"parentfield": "assigned_books",
+					"book_serial_no": self.book_serial_no,
+				},
+				["book_type", "coupon_type", "coupon_value", "coupon_color", "warehouse", "total_pages", "remaining_pages"],
+				as_dict=True,
+			)
+			if not row or row.book_type != "Coupon Book":
+				frappe.throw(frappe._("Book Serial No {0} is not a Coupon Book in this assignment.").format(self.book_serial_no))
+			book.update(row)
 
 		if self.is_new() and book.status != "Issued":
 			frappe.throw(frappe._("Book {0} must be Issued before creating a Coupon.").format(self.book))
@@ -89,18 +103,18 @@ class Coupon(Document):
 		return book
 
 	def validate_number_of_pages(self):
-		if not cint(self.number_of_pages):
+		if self.number_of_pages in (None, ""):
 			self.number_of_pages = 1
 
 		if cint(self.number_of_pages) <= 0:
-			frappe.throw(frappe._("Number of Pages must be greater than zero."))
+			frappe.throw(frappe._("Number of Pages must be greater than zero. Enter a positive number."))
 
 	def validate_book_page_available(self):
 		if not self.book:
 			return
 
 		book = frappe.db.get_value(
-			"Book",
+			"Book Assignment",
 			self.book,
 			["total_pages", "remaining_pages"],
 			as_dict=True,
@@ -115,15 +129,26 @@ class Coupon(Document):
 				"book": self.book,
 			},
 		)
+		if frappe.db.get_value("Book Assignment", self.book, "book_type") == "Mixed":
+			book = frappe.db.get_value(
+				"Book Assignment Detail",
+				{"parent": self.book, "book_serial_no": self.book_serial_no, "book_type": "Coupon Book"},
+				["total_pages", "remaining_pages"],
+				as_dict=True,
+			)
+			if not book:
+				return
+
 		used_coupon_pages = get_used_coupon_pages(
 			self.book,
 			exclude_coupon=self.name if is_existing_coupon else None,
+			book_serial_no=self.book_serial_no,
 		)
 
 		if used_coupon_pages + cint(self.number_of_pages) > cint(book.total_pages):
 			frappe.throw(
 				frappe._(
-					"Only {0} pages are available for Book {1}. You entered {2} pages."
+					"Only {0} unused page(s) are available for Book {1}. You entered {2}. Please enter a number within the available pages."
 				).format(
 					max(cint(book.total_pages) - used_coupon_pages, 0),
 					self.book,
@@ -135,33 +160,46 @@ class Coupon(Document):
 		if not self.book:
 			return
 
-		sync_book_page_counts(self.book)
+		sync_book_page_counts(self.book, book_serial_no=self.book_serial_no)
 
 	def set_coupon_color(self):
 		coupon_type = self.get_coupon_type()
 		self.coupon_color = COUPON_COLORS.get(coupon_type)
 
 	def set_coupon_number(self):
-		coupon_type = self.get_coupon_type()
-		self.coupon_number = make_autoname(COUPON_SERIES[coupon_type])
+		self.coupon_number = make_autoname(COUPON_SERIES)
 
 	def get_coupon_type(self):
 		if not self.book:
 			frappe.throw(frappe._("Book is required before generating Coupon Number."))
 
-		coupon_type = frappe.db.get_value("Book", self.book, "coupon_type")
+		coupon_type = frappe.db.get_value("Book Assignment", self.book, "coupon_type")
+		if frappe.db.get_value("Book Assignment", self.book, "book_type") == "Mixed":
+			coupon_type = frappe.db.get_value(
+				"Book Assignment Detail",
+				{
+					"parent": self.book,
+					"parenttype": "Book Assignment",
+					"book_serial_no": self.book_serial_no,
+					"book_type": "Coupon Book",
+				},
+				"coupon_type",
+			)
 		if coupon_type not in COUPON_COLORS:
-			frappe.throw(frappe._("Coupon Type must be Zakat, Atiya, Fitra, or Fidya."))
+			frappe.throw(frappe._("Coupon Type must be Zakat, Sadqa, Atiya, Fitra, or Fidya."))
 
 		return coupon_type
 
 
-def get_used_coupon_pages(book, exclude_coupon=None):
+def get_used_coupon_pages(book, exclude_coupon=None, book_serial_no=None):
 	conditions = ["book = %(book)s", "docstatus != 2"]
 	params = {"book": book}
 	if exclude_coupon:
 		conditions.append("name != %(exclude_coupon)s")
 		params["exclude_coupon"] = exclude_coupon
+	if book_serial_no:
+		conditions.append("book_serial_no = %(book_serial_no)s")
+		params["book_serial_no"] = book_serial_no
 
 	return cint(
 		frappe.db.sql(
@@ -175,15 +213,37 @@ def get_used_coupon_pages(book, exclude_coupon=None):
 	)
 
 
-def sync_book_page_counts(book, exclude_coupon=None):
-	total_pages = frappe.db.get_value("Book", book, "total_pages")
+def sync_book_page_counts(book, exclude_coupon=None, book_serial_no=None):
+	book_type = frappe.db.get_value("Book Assignment", book, "book_type")
+	if book_type == "Mixed":
+		if not book_serial_no:
+			return
+		row = frappe.db.get_value(
+			"Book Assignment Detail",
+			{"parent": book, "book_serial_no": book_serial_no, "book_type": "Coupon Book"},
+			["name", "total_pages"],
+			as_dict=True,
+		)
+		if not row:
+			return
+		total_pages = row.total_pages
+		used_pages = get_used_coupon_pages(book, exclude_coupon=exclude_coupon, book_serial_no=book_serial_no)
+		frappe.db.set_value(
+			"Book Assignment Detail",
+			row.name,
+			{"used_pages": used_pages, "remaining_pages": max(cint(total_pages) - used_pages, 0)},
+			update_modified=False,
+		)
+		return
+
+	total_pages = frappe.db.get_value("Book Assignment", book, "total_pages")
 	if total_pages is None:
 		return
 
 	used_pages = get_used_coupon_pages(book, exclude_coupon=exclude_coupon)
 	remaining_pages = max(cint(total_pages) - used_pages, 0)
 	frappe.db.set_value(
-		"Book",
+		"Book Assignment",
 		book,
 		{
 			"used_pages": used_pages,
@@ -203,12 +263,18 @@ def get_available_books(doctype, txt, searchfield, start, page_len, filters):
 			coupon_type,
 			warehouse,
 			remaining_pages
-		from `tabBook`
+		from `tabBook Assignment`
 		where
 			docstatus < 2
-			and book_type = 'Coupon Book'
 			and status = 'Issued'
-			and ifnull(remaining_pages, 0) > 0
+			and (
+				(book_type = 'Coupon Book' and ifnull(remaining_pages, 0) > 0)
+				or exists (
+					select detail.name from `tabBook Assignment Detail` detail
+					where detail.parent = `tabBook Assignment`.name and detail.parenttype = 'Book Assignment'
+					and detail.book_type = 'Coupon Book' and ifnull(detail.remaining_pages, 0) > 0
+				)
+			)
 			and (
 				name like %(txt)s
 				or coupon_type like %(txt)s
@@ -217,10 +283,29 @@ def get_available_books(doctype, txt, searchfield, start, page_len, filters):
 			{match_cond}
 		order by modified desc
 		limit %(page_len)s offset %(start)s
-		""".format(match_cond=get_match_cond("Book")),
+		""".format(match_cond=get_match_cond("Book Assignment")),
 		{
 			"txt": f"%{txt}%",
 			"start": start,
 			"page_len": page_len,
 		},
+	)
+
+
+@frappe.whitelist()
+@frappe.validate_and_sanitize_search_inputs
+def get_available_coupon_serials(doctype, txt, searchfield, start, page_len, filters):
+	filters = frappe._dict(filters or {})
+	if not filters.get("book"):
+		return []
+	return frappe.db.sql(
+		"""
+		select book_serial_no, book_serial_no
+		from `tabBook Assignment Detail`
+		where parent = %(book)s and parenttype = 'Book Assignment'
+			and book_type = 'Coupon Book' and ifnull(remaining_pages, 0) > 0
+			and book_serial_no like %(txt)s
+		order by idx limit %(start)s, %(page_len)s
+		""",
+		{"book": filters.book, "txt": f"%{txt}%", "start": start, "page_len": page_len},
 	)

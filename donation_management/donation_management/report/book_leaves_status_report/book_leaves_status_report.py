@@ -11,7 +11,7 @@ def execute(filters=None):
 
 def get_columns():
 	return [
-		{"label": _("Book"), "fieldname": "book", "fieldtype": "Link", "options": "Book", "width": 150},
+		{"label": _("Book Assignment"), "fieldname": "book", "fieldtype": "Link", "options": "Book Assignment", "width": 150},
 		{"label": _("Book Serial No"), "fieldname": "book_serial_no", "fieldtype": "Link", "options": "Serial No", "width": 145},
 		{"label": _("Receipt Number"), "fieldname": "receipt_number", "fieldtype": "Data", "width": 125},
 		{"label": _("Status"), "fieldname": "status", "fieldtype": "Data", "width": 130},
@@ -60,7 +60,7 @@ def get_data(filters):
 			leaf.journal_entry,
 			leaf.accounting_status
 		from `tabDonation Book Leaf` leaf
-		left join `tabBook` book
+		left join `tabBook Assignment` book
 			on book.name = leaf.book
 		{where_clause}
 		order by leaf.book, cast(leaf.receipt_number as unsigned), leaf.receipt_number
