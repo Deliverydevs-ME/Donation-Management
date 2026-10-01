@@ -2,11 +2,14 @@
 # See license.txt
 
 import frappe
+from unittest.mock import patch
 from frappe.tests.utils import FrappeTestCase
 
 from donation_management.donation_management.doctype.book_assignment.book_assignment import (
 	BookAssignment,
 	format_receipt_number,
+	get_book_item_details,
+	get_book_items,
 	get_receipt_range_count,
 	receipt_number_in_range,
 	receipt_series_prefix,
@@ -41,3 +44,30 @@ class TestBookAssignment(FrappeTestCase):
 		self.assertFalse(book.is_exhausted())
 		book.assigned_books[1].remaining_receipts = 0
 		self.assertTrue(book.is_exhausted())
+
+	def test_mixed_item_query_includes_coupon_and_donation_items(self):
+		with patch.object(frappe.db, "exists", return_value=True), patch.object(
+			frappe.db, "sql", return_value=[]
+		) as sql:
+			get_book_items("Item", "", "name", 0, 20, {"book_type": "Mixed"})
+
+		query = next(call.args[0] for call in sql.call_args_list if "tabItem" in call.args[0])
+		self.assertIn("Coupon", query)
+		self.assertIn("Donation Book", query)
+
+	def test_coupon_item_details_return_type_and_configured_value(self):
+		with patch(
+			"donation_management.donation_management.doctype.book_assignment.book_assignment.is_coupon_item",
+			return_value=True,
+		), patch(
+			"donation_management.donation_management.doctype.book_assignment.book_assignment.get_coupon_type_from_item",
+			return_value="Sadqa",
+		), patch(
+			"donation_management.donation_management.doctype.book_assignment.book_assignment.get_coupon_value_from_item",
+			return_value=100,
+		):
+			details = get_book_item_details("Sadqa Coupon Book")
+
+		self.assertEqual(details["book_type"], "Coupon Book")
+		self.assertEqual(details["coupon_type"], "Sadqa")
+		self.assertEqual(details["coupon_value"], 100)

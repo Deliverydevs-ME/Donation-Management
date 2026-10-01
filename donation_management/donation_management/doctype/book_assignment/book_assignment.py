@@ -1557,7 +1557,7 @@ def is_donation_book_item(item):
 @frappe.validate_and_sanitize_search_inputs
 def get_book_items(doctype, txt, searchfield, start, page_len, filters):
 	filters = frappe._dict(filters or {})
-	if filters.get("book_type") not in (BOOK_TYPE_COUPON, BOOK_TYPE_DONATION):
+	if filters.get("book_type") not in (BOOK_TYPE_COUPON, BOOK_TYPE_DONATION, BOOK_TYPE_MIXED):
 		return []
 	search = "%%%s%%" % txt
 	book_type_condition = ""
@@ -1597,6 +1597,43 @@ def get_book_items(doctype, txt, searchfield, start, page_len, filters):
 				or item.item_code like '%%DonationBook%%'
 				or item.item_name like '%%DonationBook%%'
 				or item.item_group like '%%DonationBook%%'
+			)
+		"""
+	else:
+		book_type_condition = """
+			and (
+				(
+					item.name like '%%Coupon%%'
+					or item.item_code like '%%Coupon%%'
+					or item.item_name like '%%Coupon%%'
+					or item.item_group like '%%Coupon%%'
+					or item.name like '%%Zakat%%'
+					or item.item_code like '%%Zakat%%'
+					or item.item_name like '%%Zakat%%'
+					or item.item_group like '%%Zakat%%'
+					or item.name like '%%Atiya%%'
+					or item.item_code like '%%Atiya%%'
+					or item.item_name like '%%Atiya%%'
+					or item.item_group like '%%Atiya%%'
+					or item.name like '%%Fitra%%'
+					or item.item_code like '%%Fitra%%'
+					or item.item_name like '%%Fitra%%'
+					or item.item_group like '%%Fitra%%'
+					or item.name like '%%Fidya%%'
+					or item.item_code like '%%Fidya%%'
+					or item.item_name like '%%Fidya%%'
+					or item.item_group like '%%Fidya%%'
+				)
+				or (
+					item.name like '%%Donation Book%%'
+					or item.item_code like '%%Donation Book%%'
+					or item.item_name like '%%Donation Book%%'
+					or item.item_group like '%%Donation Book%%'
+					or item.name like '%%DonationBook%%'
+					or item.item_code like '%%DonationBook%%'
+					or item.item_name like '%%DonationBook%%'
+					or item.item_group like '%%DonationBook%%'
+				)
 			)
 		"""
 
@@ -1889,3 +1926,16 @@ def get_coupon_type_for_item(item):
 			).format(item)
 		)
 	return coupon_type
+
+
+@frappe.whitelist()
+def get_book_item_details(item):
+	if is_coupon_item(item):
+		return {
+			"book_type": BOOK_TYPE_COUPON,
+			"coupon_type": get_coupon_type_from_item(item),
+			"coupon_value": get_coupon_value_from_item(item),
+		}
+	if is_donation_book_item(item):
+		return {"book_type": BOOK_TYPE_DONATION}
+	return {"book_type": None}
