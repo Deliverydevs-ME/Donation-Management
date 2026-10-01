@@ -64,3 +64,17 @@ class TestCoupon(FrappeTestCase):
 		self.assertEqual(book.remaining_pages, 999)
 		self.assertEqual(book.coupon_type, "Sadqa")
 		self.assertEqual(book.volunteer_name, "HR-EMP-01094")
+
+	def test_parent_assignment_lookup_does_not_require_child_receipt_columns(self):
+		parent = frappe._dict(book_type="Mixed", status="Issued", remaining_pages=0)
+		with patch.object(frappe.db, "get_value", return_value=parent) as get_value, patch.object(
+			frappe.db, "exists", return_value=True
+		) as exists:
+			book = _get_coupon_book_details("BK-00000001", allow_missing_serial=True)
+
+		fields = get_value.call_args.args[2]
+		self.assertNotIn("receipt_format", fields)
+		self.assertNotIn("from_receipt_no", fields)
+		self.assertNotIn("to_receipt_no", fields)
+		self.assertEqual(book.requires_book_serial_no, 1)
+		exists.assert_called_once()

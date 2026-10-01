@@ -88,9 +88,9 @@ class CouponEntry(Document):
 		self.volunteer_name = book.volunteer_name
 		self.area = book.volunteer_area
 		self.warehouse = book.warehouse
-		self.receipt_format = book.receipt_format
-		self.from_receipt_no = book.from_receipt_no
-		self.to_receipt_no = book.to_receipt_no
+		self.receipt_format = book.get("receipt_format")
+		self.from_receipt_no = book.get("from_receipt_no")
+		self.to_receipt_no = book.get("to_receipt_no")
 		if not self.company:
 			self.company = get_default_company()
 
@@ -247,9 +247,6 @@ def _get_coupon_book_details(book_name, book_serial_no=None, allow_missing_seria
 			"status",
 			"book_type",
 			"remaining_pages",
-			"receipt_format",
-			"from_receipt_no",
-			"to_receipt_no",
 		],
 		as_dict=True,
 	)
