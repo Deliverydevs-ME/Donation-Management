@@ -19,7 +19,7 @@ PREFERRED_TRANSACTION_TYPES = (
 	"Card Payment",
 	"Wire Transfer",
 	"Box Collection",
-	"Coupon",
+	"Coupon Entry",
 )
 
 
@@ -262,21 +262,16 @@ def get_coupon_receipts(company, from_date, to_date, accounting_status):
 			coupon.posting_date as operational_date,
 			coupon.book,
 			coupon.amount,
-			book.coupon_type,
-			book.collected_amount as book_collected_amount,
-			book.accounting_status,
-			book.journal_entry,
+			coupon.coupon_type,
+			coupon.accounting_status,
+			coupon.journal_entry,
 			journal_entry.posting_date as journal_posting_date,
 			journal_entry.docstatus as journal_docstatus
-		from `tabCoupon` coupon
-		inner join `tabBook Assignment` book
-			on book.name = coupon.book
+		from `tabCoupon Entry` coupon
 		left join `tabJournal Entry` journal_entry
-			on journal_entry.name = book.journal_entry
-		where book.company = %(company)s
-			and book.book_type = 'Coupon Book'
-			and book.status in ('Returned', 'Closed')
-			and coupon.docstatus != 2
+			on journal_entry.name = coupon.journal_entry
+		where coupon.company = %(company)s
+			and coupon.docstatus = 1
 		""",
 		"coupon.posting_date",
 		company,
@@ -287,37 +282,16 @@ def get_coupon_receipts(company, from_date, to_date, accounting_status):
 	if not rows:
 		return [], {}
 
-	book_names = list({row.book for row in rows})
-	book_coupon_totals = {
-		row.book: flt(row.total_amount)
-		for row in frappe.db.sql(
-			"""
-			select book, sum(amount) as total_amount
-			from `tabCoupon`
-			where book in %(book_names)s
-				and docstatus != 2
-			group by book
-			""",
-			{"book_names": tuple(book_names)},
-			as_dict=True,
-		)
-	}
-
 	receipts = []
 	reconciliations = {}
 	for row in rows:
 		status = get_row_accounting_status(row)
-		assert_amount_matches(
-			book_coupon_totals.get(row.book, 0),
-			row.book_collected_amount,
-			_("Book {0} coupon total").format(row.book),
-		)
 
 		receipt = {
-			"receipt_id": "Coupon:{0}".format(row.name),
-			"source_type": "Coupon",
+			"receipt_id": "Coupon Entry:{0}".format(row.name),
+			"source_type": "Coupon Entry",
 			"source_name": row.name,
-			"transaction_type": "Coupon",
+			"transaction_type": "Coupon Entry",
 			"territory": None,
 			"amount": flt(row.amount),
 			"donation_allocations": {row.coupon_type: flt(row.amount)},
@@ -328,10 +302,10 @@ def get_coupon_receipts(company, from_date, to_date, accounting_status):
 		receipts.append(receipt)
 		add_reconciliation(
 			reconciliations,
-			source_type="Book Assignment",
-			source_name=row.book,
+			source_type="Coupon Entry",
+			source_name=row.name,
 			journal_entry=row.journal_entry,
-			amount=row.book_collected_amount,
+			amount=row.amount,
 			status=status,
 		)
 

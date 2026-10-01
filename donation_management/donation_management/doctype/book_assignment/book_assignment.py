@@ -69,6 +69,12 @@ class BookAssignment(Document):
 	def on_update(self):
 		if self.docstatus == 1 and (self.is_donation_book() or self.has_donation_rows()):
 			sync_donation_book_leaves(self.name)
+		if self.docstatus == 1 and (self.is_coupon_book() or self.has_coupon_rows()):
+			from donation_management.donation_management.doctype.coupon_book_leaf.coupon_book_leaf import (
+				sync_coupon_book_leaves,
+			)
+
+			sync_coupon_book_leaves(self.name)
 		if self.docstatus == 1 and self.is_coupon_book():
 			self.create_journal_entry_for_return()
 		if self.docstatus == 1:
@@ -79,8 +85,12 @@ class BookAssignment(Document):
 		from donation_management.donation_management.doctype.donation_book_leaf.donation_book_leaf import (
 			cancel_leaves_for_book_assignment,
 		)
+		from donation_management.donation_management.doctype.coupon_book_leaf.coupon_book_leaf import (
+			cancel_leaves_for_book_assignment as cancel_coupon_book_leaves,
+		)
 
 		cancel_leaves_for_book_assignment(self.name)
+		cancel_coupon_book_leaves(self.name)
 
 	def on_submit(self):
 		self.status = "Issued"
@@ -99,6 +109,12 @@ class BookAssignment(Document):
 		for row in self.assigned_books or []:
 			if row.name:
 				frappe.db.set_value("Book Assignment Detail", row.name, "status", "Issued", update_modified=False)
+		if self.is_coupon_book() or self.has_coupon_rows():
+			from donation_management.donation_management.doctype.coupon_book_leaf.coupon_book_leaf import (
+				sync_coupon_book_leaves,
+			)
+
+			sync_coupon_book_leaves(self.name)
 		sync_assigned_book_stock(self.name)
 
 	def set_defaults(self):
@@ -901,7 +917,7 @@ def generate_return_coupons(doc, used_pages):
 	for _counter in range(used_pages - existing_coupon_pages):
 		coupon = frappe.get_doc(
 			{
-				"doctype": "Coupon",
+				"doctype": "Coupon Entry",
 				"book": doc.name,
 				"number_of_pages": 1,
 				"posting_date": today(),
@@ -919,7 +935,7 @@ def get_book_collected_amount(book):
 
 	return flt(
 		frappe.db.get_value(
-			"Coupon",
+			"Coupon Entry",
 			{
 				"book": book,
 				"docstatus": ["!=", 2],
@@ -937,9 +953,8 @@ def get_book_used_pages(book):
 		frappe.db.sql(
 			"""
 			select sum(ifnull(number_of_pages, 1))
-			from `tabCoupon`
+			from `tabCoupon Entry`
 			where book = %(book)s
-				and docstatus != 2
 			""",
 			{"book": book},
 		)[0][0]
@@ -954,10 +969,9 @@ def get_assigned_coupon_used_pages(book, book_serial_no):
 		frappe.db.sql(
 			"""
 			select sum(ifnull(number_of_pages, 1))
-			from `tabCoupon`
+			from `tabCoupon Entry`
 			where book = %(book)s
 				and book_serial_no = %(book_serial_no)s
-				and docstatus != 2
 			""",
 			{"book": book, "book_serial_no": book_serial_no},
 		)[0][0]

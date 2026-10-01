@@ -19,7 +19,7 @@
    "fieldtype": "Select",
    "in_list_view": 1,
    "label": "Source Type",
-   "options": "\nBox Collection\nBook Assignment\nDonation Book Collection",
+ "options": "\nBox Collection\nBook Assignment\nCoupon Entry\nDonation Book Collection",
    "reqd": 1
   },
   {

@@ -251,6 +251,7 @@ def get_pending_cash_donations(company=None, closing_date=None, exclude_closing=
 	pending = []
 	pending.extend(get_pending_donation_orders(company, closing_date, exclude_closing, cashier=cashier))
 	pending.extend(get_pending_box_collections(company, closing_date, exclude_closing, cashier=cashier))
+	pending.extend(get_pending_coupon_entries(company, closing_date, exclude_closing, cashier=cashier))
 	pending.extend(get_pending_books(company, closing_date, exclude_closing, cashier=cashier))
 	return pending
 
@@ -369,6 +370,41 @@ def get_pending_box_collections(company, closing_date=None, exclude_closing=None
 				"amount": collection.collected_amount,
 				"posting_date": getdate(collection.action_date),
 				"remarks": "{0} | {1}".format(collection.box_collection, collection.name),
+			}
+		)
+	return result
+
+
+def get_pending_coupon_entries(company, closing_date=None, exclude_closing=None, cashier=None):
+	filters = {
+		"docstatus": 1,
+		"company": company,
+		"mode_of_payment_type": "Cash",
+		"accounting_status": "Posted",
+	}
+	if closing_date:
+		filters["posting_date"] = closing_date
+	if cashier:
+		filters["owner"] = cashier
+
+	entries = frappe.get_all(
+		"Coupon Entry",
+		filters=filters,
+		fields=["name", "coupon_type", "amount", "posting_date"],
+		order_by="posting_date asc, creation asc",
+	)
+	result = []
+	for entry in entries:
+		if is_source_in_active_closing("Coupon Entry", entry.name, exclude=exclude_closing):
+			continue
+		result.append(
+			{
+				"source_doctype": "Coupon Entry",
+				"source_name": entry.name,
+				"donation_type": entry.coupon_type,
+				"amount": entry.amount,
+				"posting_date": getdate(entry.posting_date),
+				"remarks": entry.name,
 			}
 		)
 	return result

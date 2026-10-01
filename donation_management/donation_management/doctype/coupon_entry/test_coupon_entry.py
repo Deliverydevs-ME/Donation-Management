@@ -9,7 +9,7 @@ from frappe.tests.utils import FrappeTestCase
 from donation_management.donation_management.doctype.book_assignment.book_assignment import (
 	get_coupon_type_from_item,
 )
-from donation_management.donation_management.doctype.coupon.coupon import (
+from donation_management.donation_management.doctype.coupon_entry.coupon_entry import (
 	COUPON_SERIES,
 	Coupon,
 	_get_coupon_book_details,
@@ -18,13 +18,14 @@ from donation_management.donation_management.doctype.coupon.coupon import (
 
 class TestCoupon(FrappeTestCase):
 	def test_coupon_is_submittable_and_uses_short_series(self):
-		self.assertTrue(frappe.get_meta("Coupon").is_submittable)
+		self.assertTrue(frappe.get_meta("Coupon Entry").is_submittable)
 		self.assertEqual(COUPON_SERIES, "COP-.####")
-		self.assertTrue(all(permission.get("submit") for permission in frappe.get_meta("Coupon").permissions))
+		self.assertTrue(all(permission.get("submit") for permission in frappe.get_meta("Coupon Entry").permissions))
+		self.assertTrue(all(permission.get("cancel") for permission in frappe.get_meta("Coupon Entry").permissions))
 
 	def test_zero_and_negative_pages_are_rejected(self):
 		for pages in (0, -1):
-			coupon = Coupon({"doctype": "Coupon", "number_of_pages": pages})
+			coupon = Coupon({"doctype": "Coupon Entry", "number_of_pages": pages})
 			with self.assertRaisesRegex(frappe.ValidationError, "greater than zero"):
 				coupon.validate_number_of_pages()
 

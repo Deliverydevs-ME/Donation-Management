@@ -396,7 +396,8 @@
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [
-  {"group": "Transactions", "link_doctype": "Coupon", "link_fieldname": "book"},
+  {"group": "Transactions", "link_doctype": "Coupon Entry", "link_fieldname": "book"},
+  {"group": "Transactions", "link_doctype": "Coupon Book Leaf", "link_fieldname": "book"},
   {"group": "Transactions", "link_doctype": "Donation Book Leaf", "link_fieldname": "book"},
   {"group": "Transactions", "link_doctype": "Donation Book Collection", "link_fieldname": "book"},
   {"group": "Adjustments", "link_doctype": "Book Page Adjustment", "link_fieldname": "book"},

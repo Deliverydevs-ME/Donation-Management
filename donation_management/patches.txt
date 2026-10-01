@@ -4,6 +4,7 @@
 donation_management.patches.rename_coupon_book_inventory_doctype
 donation_management.patches.refactor_coupon_book_to_book
 donation_management.patches.rename_book_to_book_assignment
+donation_management.patches.rename_coupon_to_coupon_entry
 
 [post_model_sync]
 # Patches added in this section will be executed after doctypes are migrated
@@ -51,3 +52,5 @@ donation_management.patches.normalize_esaal_relationships
 donation_management.patches.ensure_donation_order_layout_fields
 donation_management.patches.complete_book_leaf_and_workflow
 donation_management.patches.ensure_book_assignment_grid_defaults
+donation_management.patches.backfill_coupon_book_leaves
+donation_management.patches.backfill_coupon_entry_leaves

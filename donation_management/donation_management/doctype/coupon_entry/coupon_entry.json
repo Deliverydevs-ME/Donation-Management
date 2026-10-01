@@ -9,10 +9,15 @@
   "coupon_detail_section",
   "book",
   "book_serial_no",
+  "coupon_type",
+  "coupon_value",
   "coupon_color",
   "coupon_number",
   "column_break_coupon",
   "warehouse",
+  "receipt_format",
+  "from_receipt_no",
+  "to_receipt_no",
   "donor_detail_section",
   "donor_name",
   "cnic",
@@ -27,7 +32,16 @@
   "posting_date",
   "section_break_miro",
   "number_of_pages",
-  "amount"
+  "amount",
+  "accounting_section",
+  "company",
+  "mode_of_payment",
+  "mode_of_payment_type",
+  "debit_account",
+  "credit_account",
+  "accounting_cost_center",
+  "journal_entry",
+  "accounting_status"
  ],
  "fields": [
   {
@@ -40,6 +54,19 @@
    "fieldtype": "Data",
    "in_list_view": 1,
    "label": "Coupon Color",
+   "read_only": 1
+  },
+  {
+   "fieldname": "coupon_type",
+   "fieldtype": "Select",
+   "label": "Coupon Type",
+   "options": "\nZakat\nSadqa\nAtiya\nFitra\nFidya",
+   "read_only": 1
+  },
+  {
+   "fieldname": "coupon_value",
+   "fieldtype": "Currency",
+   "label": "Coupon Value",
    "read_only": 1
   },
   {
@@ -76,6 +103,24 @@
    "fieldtype": "Link",
    "label": "Warehouse",
    "options": "Warehouse",
+   "read_only": 1
+  },
+  {
+   "fieldname": "receipt_format",
+   "fieldtype": "Data",
+   "label": "Receipt Format",
+   "read_only": 1
+  },
+  {
+   "fieldname": "from_receipt_no",
+   "fieldtype": "Data",
+   "label": "From Receipt No",
+   "read_only": 1
+  },
+  {
+   "fieldname": "to_receipt_no",
+   "fieldtype": "Data",
+   "label": "To Receipt No",
    "read_only": 1
   },
   {
@@ -161,20 +206,85 @@
    "label": "Total Amount",
    "non_negative": 1,
    "read_only": 1
+  },
+  {
+   "fieldname": "accounting_section",
+   "fieldtype": "Section Break",
+   "label": "Accounting"
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Company",
+   "options": "Company",
+   "reqd": 1
+  },
+  {
+   "fieldname": "mode_of_payment",
+   "fieldtype": "Link",
+   "label": "Mode of Payment",
+   "options": "Mode of Payment",
+   "read_only": 1
+  },
+  {
+   "fieldname": "mode_of_payment_type",
+   "fieldtype": "Data",
+   "label": "Mode of Payment Type",
+   "read_only": 1
+  },
+  {
+   "fieldname": "debit_account",
+   "fieldtype": "Link",
+   "label": "Debit Account",
+   "options": "Account",
+   "read_only": 1
+  },
+  {
+   "fieldname": "credit_account",
+   "fieldtype": "Link",
+   "label": "Income Account",
+   "options": "Account",
+   "read_only": 1
+  },
+  {
+   "fieldname": "accounting_cost_center",
+   "fieldtype": "Link",
+   "label": "Accounting Cost Center",
+   "options": "Cost Center",
+   "read_only": 1
+  },
+  {
+   "fieldname": "journal_entry",
+   "fieldtype": "Link",
+   "label": "Journal Entry",
+   "options": "Journal Entry",
+   "read_only": 1
+  },
+  {
+   "fieldname": "accounting_status",
+   "fieldtype": "Select",
+   "label": "Accounting Status",
+   "options": "\nNot Posted\nPosted\nCancelled",
+   "read_only": 1
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "is_submittable": 1,
- "links": [],
+ "links": [
+  {"group": "References", "link_doctype": "Book Assignment", "link_fieldname": "book"},
+  {"group": "Transactions", "link_doctype": "Coupon Book Leaf", "link_fieldname": "coupon_entry"},
+  {"group": "Accounting", "link_doctype": "Journal Entry", "link_fieldname": "journal_entry"}
+ ],
  "modified": "2026-05-11 17:42:25.701933",
  "modified_by": "Administrator",
  "module": "Donation Management",
- "name": "Coupon",
+ "name": "Coupon Entry",
  "naming_rule": "Expression",
  "owner": "Administrator",
  "permissions": [
   {
+   "cancel": 1,
    "create": 1,
    "delete": 1,
    "email": 1,
@@ -188,6 +298,7 @@
    "write": 1
   },
   {
+   "cancel": 1,
    "create": 1,
    "email": 1,
    "export": 1,

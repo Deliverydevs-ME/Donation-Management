@@ -1,13 +1,13 @@
 // Copyright (c) 2026, osama.ahmed@deliverydevs.com and contributors
 // For license information, please see license.txt
 
-frappe.ui.form.on("Coupon", {
+frappe.ui.form.on("Coupon Entry", {
 	setup(frm) {
 		frm.set_query("book", () => ({
-			query: "donation_management.donation_management.doctype.coupon.coupon.get_available_books",
+			query: "donation_management.donation_management.doctype.coupon_entry.coupon_entry.get_available_books",
 		}));
 		frm.set_query("book_serial_no", () => ({
-			query: "donation_management.donation_management.doctype.coupon.coupon.get_available_coupon_serials",
+			query: "donation_management.donation_management.doctype.coupon_entry.coupon_entry.get_available_coupon_serials",
 			filters: { book: frm.doc.book },
 		}));
 	},
@@ -38,21 +38,34 @@ function set_coupon_book_details(frm) {
 		return;
 	}
 
+	const request_id = (frm.__coupon_details_request_id || 0) + 1;
+	frm.__coupon_details_request_id = request_id;
+	const requested_book = frm.doc.book;
+	const requested_book_serial_no = frm.doc.book_serial_no;
+
 	frappe.call({
-		method: "donation_management.donation_management.doctype.coupon.coupon.get_coupon_book_details",
+		method: "donation_management.donation_management.doctype.coupon_entry.coupon_entry.get_coupon_book_details",
 		args: {
 			book: frm.doc.book,
 			book_serial_no: frm.doc.book_serial_no,
 		},
 		callback(response) {
+			if (
+				request_id !== frm.__coupon_details_request_id
+				|| frm.doc.book !== requested_book
+				|| frm.doc.book_serial_no !== requested_book_serial_no
+			) {
+				return;
+			}
+
 			const book = response.message || {};
 			if (book.requires_book_serial_no && !frm.doc.book_serial_no) {
 				frm.toggle_reqd("book_serial_no", true);
 				frm.__coupon_value = 0;
-				frm.set_value("coupon_color", "");
-				frm.set_value("volunteer_name", "");
-				frm.set_value("area", "");
-				frm.set_value("warehouse", "");
+				set_derived_value(frm, "coupon_color", "");
+				set_derived_value(frm, "volunteer_name", "");
+				set_derived_value(frm, "area", "");
+				set_derived_value(frm, "warehouse", "");
 				return;
 			}
 			frm.toggle_reqd("book_serial_no", false);
@@ -66,20 +79,20 @@ function set_coupon_book_details(frm) {
 					indicator: "red",
 				});
 				frm.set_value("book", "");
-				frm.set_value("coupon_color", "");
-				frm.set_value("volunteer_name", "");
-				frm.set_value("area", "");
-				frm.set_value("warehouse", "");
+				set_derived_value(frm, "coupon_color", "");
+				set_derived_value(frm, "volunteer_name", "");
+				set_derived_value(frm, "area", "");
+				set_derived_value(frm, "warehouse", "");
 				return;
 			}
 
-			frm.set_value("coupon_color", book.coupon_color || "");
-			frm.set_value("volunteer_name", book.volunteer_name || "");
-			frm.set_value("area", book.volunteer_area || "");
-			frm.set_value("warehouse", book.warehouse || "");
+			set_derived_value(frm, "coupon_color", book.coupon_color || "");
+			set_derived_value(frm, "volunteer_name", book.volunteer_name || "");
+			set_derived_value(frm, "area", book.volunteer_area || "");
+			set_derived_value(frm, "warehouse", book.warehouse || "");
 			frm.__coupon_value = cint(book.coupon_value);
 			if (!cint(frm.doc.number_of_pages)) {
-				frm.set_value("number_of_pages", 1);
+				set_derived_value(frm, "number_of_pages", 1);
 			}
 			set_coupon_amount(frm);
 		},
@@ -92,5 +105,9 @@ function set_coupon_amount(frm) {
 		return;
 	}
 
-	frm.set_value("amount", cint(frm.doc.number_of_pages) * coupon_value);
+	set_derived_value(frm, "amount", cint(frm.doc.number_of_pages) * coupon_value);
+}
+
+function set_derived_value(frm, fieldname, value) {
+	return frm.set_value(fieldname, value, null, true);
 }
