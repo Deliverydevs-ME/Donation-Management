@@ -129,8 +129,7 @@ frappe.ui.form.on("Book Assignment", {
 		frm.set_value("item", "");
 		frm.set_value("book_serial_no", "");
 		frm.set_value("issued_to_employee", "");
-		frm.refresh_field("assigned_books");
-		set_assigned_book_grid_properties(frm);
+		refresh_assigned_books_grid(frm);
 		frm.__previous_book_type = frm.doc.book_type;
 	},
 
@@ -188,9 +187,7 @@ frappe.ui.form.on("Book Assignment Detail", {
 	book_type(frm, cdt, cdn) {
 		const row = locals[cdt][cdn];
 		reset_assigned_book_row(row);
-		set_assigned_book_row_visibility(frm, cdt, cdn);
-		frm.refresh_field("assigned_books");
-		set_assigned_book_grid_properties(frm);
+		refresh_assigned_books_grid(frm);
 	},
 
 	item(frm, cdt, cdn) {
@@ -218,8 +215,7 @@ frappe.ui.form.on("Book Assignment Detail", {
 				} else {
 					clear_assigned_coupon_fields(cdt, cdn);
 				}
-				frm.refresh_field("assigned_books");
-				set_assigned_book_grid_properties(frm);
+				refresh_assigned_books_grid(frm);
 				fetch_assigned_book_stock(frm, cdt, cdn);
 			},
 		});
@@ -462,7 +458,32 @@ function set_book_type_visibility(frm) {
 	frm.toggle_reqd("to_receipt_no", false);
 }
 
-function set_assigned_book_grid_properties(frm) {
+function refresh_assigned_books_grid(frm) {
+	const grid_field = frm.fields_dict.assigned_books;
+	if (!grid_field || !grid_field.grid) {
+		frm.refresh_field("assigned_books");
+		return;
+	}
+
+	// Rebuild saved and unsaved child rows so the Item link controls use the
+	// current parent/row Book Type rather than a stale query context.
+	frm.refresh_field("assigned_books");
+	set_assigned_book_grid_properties(frm, true);
+
+	const grid = grid_field.grid;
+	const item_query = grid.get_field("item").get_query;
+	(grid.grid_rows || []).forEach((grid_row) => {
+		const item_field = grid_row.on_grid_fields_dict && grid_row.on_grid_fields_dict.item;
+		if (item_field && item_query) {
+			item_field.get_query = item_query;
+		}
+		if (item_field) {
+			grid_row.refresh_field("item");
+		}
+	});
+}
+
+function set_assigned_book_grid_properties(frm, refresh_grid = false) {
 	const grid_field = frm.fields_dict.assigned_books;
 	if (!grid_field || !grid_field.grid) {
 		return;
@@ -508,6 +529,12 @@ function set_assigned_book_grid_properties(frm) {
 			grid_field.grid.set_column_disp(fieldname, show_page_fields);
 		}
 	});
+	if (refresh_grid) {
+		if (grid_field.grid.debounced_refresh && grid_field.grid.debounced_refresh.cancel) {
+			grid_field.grid.debounced_refresh.cancel();
+		}
+		grid_field.grid.refresh();
+	}
 	(frm.doc.assigned_books || []).forEach((row) => {
 		if (hide_book_type && row.book_type !== frm.doc.book_type) {
 			row.book_type = frm.doc.book_type;

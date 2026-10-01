@@ -55,6 +55,20 @@ class TestBookAssignment(FrappeTestCase):
 		self.assertIn("Coupon", query)
 		self.assertIn("Donation Book", query)
 
+	def test_saved_book_type_item_queries_remain_type_specific(self):
+		for book_type, required_text, excluded_text in (
+			("Coupon Book", "Coupon", "Donation Book"),
+			("Donation Book", "Donation Book", "Coupon"),
+		):
+			with self.subTest(book_type=book_type), patch.object(frappe.db, "exists", return_value=True), patch.object(
+				frappe.db, "sql", return_value=[]
+			) as sql:
+				get_book_items("Item", "", "name", 0, 20, {"book_type": book_type})
+
+			query = next(call.args[0] for call in sql.call_args_list if "tabItem" in call.args[0])
+			self.assertIn(required_text, query)
+			self.assertNotIn(excluded_text, query)
+
 	def test_coupon_item_details_return_type_and_configured_value(self):
 		with patch(
 			"donation_management.donation_management.doctype.book_assignment.book_assignment.is_coupon_item",
