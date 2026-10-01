@@ -62,7 +62,13 @@ class CouponEntry(Document):
 			cancel_leaves_for_coupon_entry,
 		)
 
-		cancel_leaves_for_coupon_entry(self.name, self.journal_entry)
+		cancelled_receipts = cancel_leaves_for_coupon_entry(self.name, self.journal_entry)
+		if cancelled_receipts:
+			frappe.msgprint(
+				frappe._("Coupon Receipt Number(s) cancelled: {0}").format(", ".join(cancelled_receipts)),
+				title=frappe._("Coupon Receipts Cancelled"),
+				indicator="orange",
+			)
 		self.sync_book_pages()
 
 	def on_trash(self):

@@ -271,11 +271,12 @@ def cancel_leaves_for_coupon_entry(coupon_entry, journal_entry=None):
 	leaves = frappe.get_all(
 		"Coupon Book Leaf",
 		filters={"coupon_entry": coupon_entry},
-		pluck="name",
+		fields=["name", "receipt_number"],
 		ignore_permissions=True,
 	)
-	for leaf_name in leaves:
-		leaf = frappe.get_doc("Coupon Book Leaf", leaf_name)
+	cancelled_receipts = []
+	for row in leaves:
+		leaf = frappe.get_doc("Coupon Book Leaf", row.name)
 		if leaf.docstatus == 1:
 			leaf.flags.ignore_validate_update_after_submit = True
 			leaf.cancel()
@@ -285,7 +286,11 @@ def cancel_leaves_for_coupon_entry(coupon_entry, journal_entry=None):
 				update_modified=False,
 			)
 		if journal_entry:
-			frappe.db.set_value("Coupon Book Leaf", leaf_name, "journal_entry", journal_entry, update_modified=False)
+			frappe.db.set_value("Coupon Book Leaf", row.name, "journal_entry", journal_entry, update_modified=False)
+		if row.receipt_number:
+			cancelled_receipts.append(row.receipt_number)
+
+	return cancelled_receipts
 
 
 def cancel_leaves_for_book_assignment(book):

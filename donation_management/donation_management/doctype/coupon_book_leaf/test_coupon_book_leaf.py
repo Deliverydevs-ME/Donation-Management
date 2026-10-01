@@ -1,4 +1,4 @@
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import frappe
 from frappe.tests.utils import FrappeTestCase
@@ -36,3 +36,22 @@ class TestCouponBookLeaf(FrappeTestCase):
 		ranges = get_coupon_book_leaf_ranges(book)
 		self.assertEqual(len(ranges), 1)
 		self.assertEqual(ranges[0]["book_serial_no"], "CB-01")
+
+	def test_coupon_entry_cancellation_returns_receipt_numbers(self):
+		from donation_management.donation_management.doctype.coupon_book_leaf.coupon_book_leaf import (
+			cancel_leaves_for_coupon_entry,
+		)
+
+		leaf = Mock(docstatus=0, receipt_number="CP-001")
+		with patch.object(
+			frappe,
+			"get_all",
+			return_value=[frappe._dict(name="CBL-00001", receipt_number="CP-001")],
+		), patch.object(frappe, "get_doc", return_value=leaf):
+			cancelled_receipts = cancel_leaves_for_coupon_entry("COP-0001")
+
+		self.assertEqual(cancelled_receipts, ["CP-001"])
+		leaf.db_set.assert_called_once_with(
+			{"status": "Discarded", "accounting_status": "Cancelled"},
+			update_modified=False,
+		)
