@@ -777,18 +777,27 @@ function set_volunteer_area(frm) {
 
 function show_return_dialog(frm) {
 	frappe.call({
-		method: "donation_management.donation_management.api.get_collection_cash_accounting_defaults",
+		method: "donation_management.donation_management.doctype.book_assignment.book_assignment.get_book_return_details",
 		args: {
-			source_type: "Book Assignment",
-			donation_type: frm.doc.coupon_type,
+			book: frm.doc.name,
 		},
 		callback(response) {
-			build_return_dialog(frm, response.message || {});
+			const return_details = response.message || {};
+			frappe.call({
+				method: "donation_management.donation_management.api.get_collection_cash_accounting_defaults",
+				args: {
+					source_type: "Book Assignment",
+					donation_type: frm.doc.coupon_type,
+				},
+				callback(accounting_response) {
+					build_return_dialog(frm, accounting_response.message || {}, return_details);
+				},
+			});
 		},
 	});
 }
 
-function build_return_dialog(frm, accounting_defaults) {
+function build_return_dialog(frm, accounting_defaults, return_details) {
 	const fields = [
 		{
 			fieldname: "used_pages",
@@ -796,23 +805,21 @@ function build_return_dialog(frm, accounting_defaults) {
 			label: __("Used Pages"),
 			reqd: 1,
 			non_negative: 1,
-			onchange: () => {
-				update_return_collected_amount(dialog, frm);
-				update_return_denomination_total(dialog);
-			},
+			default: cint(return_details.used_pages),
+			read_only: 1,
 		},
 		{
 			fieldname: "coupon_value",
 			fieldtype: "Currency",
 			label: __("Coupon Value"),
-			default: frm.doc.coupon_value,
+			default: cint(return_details.coupon_value) || cint(frm.doc.coupon_value),
 			read_only: 1,
 		},
 		{
 			fieldname: "collected_amount",
 			fieldtype: "Currency",
 			label: __("Total Amount Collected"),
-			default: 0,
+			default: flt(return_details.total_amount),
 			read_only: 1,
 			reqd: 1,
 		},
@@ -924,7 +931,7 @@ function build_return_dialog(frm, accounting_defaults) {
 
 function update_return_collected_amount(dialog, frm) {
 	const used_pages = cint(dialog.get_value("used_pages"));
-	const coupon_value = cint(frm.doc.coupon_value);
+	const coupon_value = cint(dialog.get_value("coupon_value")) || cint(frm.doc.coupon_value);
 	dialog.set_value("collected_amount", used_pages * coupon_value);
 }
 

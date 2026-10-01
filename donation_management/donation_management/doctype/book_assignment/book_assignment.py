@@ -938,11 +938,26 @@ def get_book_collected_amount(book):
 			"Coupon Entry",
 			{
 				"book": book,
-				"docstatus": ["!=", 2],
+				"docstatus": 1,
 			},
 			"sum(amount)",
 		)
 	)
+
+
+@frappe.whitelist()
+def get_book_return_details(book):
+	"""Return submitted coupon usage and the amount needed by the Return dialog."""
+	if not book:
+		return {"used_pages": 0, "coupon_value": 0, "total_amount": 0}
+
+	coupon_value = cint(frappe.db.get_value("Book Assignment", book, "coupon_value"))
+	used_pages = get_book_used_pages(book)
+	return {
+		"used_pages": used_pages,
+		"coupon_value": coupon_value,
+		"total_amount": flt(used_pages * coupon_value),
+	}
 
 
 def get_book_used_pages(book):
@@ -954,7 +969,7 @@ def get_book_used_pages(book):
 			"""
 			select sum(ifnull(number_of_pages, 1))
 			from `tabCoupon Entry`
-			where book = %(book)s
+			where book = %(book)s and docstatus = 1
 			""",
 			{"book": book},
 		)[0][0]
@@ -972,6 +987,7 @@ def get_assigned_coupon_used_pages(book, book_serial_no):
 			from `tabCoupon Entry`
 			where book = %(book)s
 				and book_serial_no = %(book_serial_no)s
+				and docstatus = 1
 			""",
 			{"book": book, "book_serial_no": book_serial_no},
 		)[0][0]

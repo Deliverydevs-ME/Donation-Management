@@ -8,6 +8,7 @@ from frappe.tests.utils import FrappeTestCase
 from donation_management.donation_management.doctype.book_assignment.book_assignment import (
 	BookAssignment,
 	format_receipt_number,
+	get_book_return_details,
 	get_book_item_details,
 	get_book_items,
 	get_receipt_range_count,
@@ -86,6 +87,16 @@ class TestBookAssignment(FrappeTestCase):
 		self.assertEqual(details["book_type"], "Coupon Book")
 		self.assertEqual(details["coupon_type"], "Sadqa")
 		self.assertEqual(details["coupon_value"], 100)
+
+	def test_return_details_use_submitted_pages_and_coupon_value(self):
+		with patch.object(frappe.db, "get_value", return_value=100), patch.object(
+			frappe.db, "sql", return_value=[(3,)]
+		):
+			details = get_book_return_details("BA-00001")
+
+		self.assertEqual(details["used_pages"], 3)
+		self.assertEqual(details["coupon_value"], 100)
+		self.assertEqual(details["total_amount"], 300)
 
 	def test_submitted_assignment_persists_current_child_stock(self):
 		rows = [
