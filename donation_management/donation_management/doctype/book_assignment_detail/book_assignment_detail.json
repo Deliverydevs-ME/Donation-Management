@@ -120,6 +120,7 @@
    "description": "Frappe-style format, for example REC-.#### produces REC-0001.",
    "fieldname": "receipt_format",
    "fieldtype": "Data",
+   "in_list_view": 1,
    "label": "Receipt Format",
    "mandatory_depends_on": "eval:doc.book_type == 'Coupon Book' || doc.book_type == 'Donation Book'"
   },
@@ -152,6 +153,7 @@
    "default": "0",
    "fieldname": "used_receipts",
    "fieldtype": "Int",
+   "in_list_view": 1,
    "label": "Used Receipts",
    "read_only": 1
   },
@@ -159,6 +161,7 @@
    "default": "0",
    "fieldname": "remaining_receipts",
    "fieldtype": "Int",
+   "in_list_view": 1,
    "label": "Remaining Receipts",
    "read_only": 1
   },

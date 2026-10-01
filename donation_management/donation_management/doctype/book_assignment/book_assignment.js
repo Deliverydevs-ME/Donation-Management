@@ -450,6 +450,8 @@ function set_assigned_book_grid_properties(frm) {
 	grid_field.grid.update_docfield_property("available_stock", "in_list_view", 1);
 	const show_receipt_fields = [book_type_coupon, book_type_donation, book_type_mixed].includes(frm.doc.book_type);
 	const show_coupon_fields = [book_type_coupon, book_type_mixed].includes(frm.doc.book_type);
+	const show_receipt_count_fields = [book_type_donation, book_type_mixed].includes(frm.doc.book_type);
+	const show_page_fields = [book_type_coupon, book_type_mixed].includes(frm.doc.book_type);
 	["receipt_format", "from_receipt_no", "to_receipt_no"].forEach((fieldname) => {
 		grid_field.grid.update_docfield_property(fieldname, "hidden", show_receipt_fields ? 0 : 1);
 		if (grid_field.grid.set_column_disp) {
@@ -462,13 +464,24 @@ function set_assigned_book_grid_properties(frm) {
 			grid_field.grid.set_column_disp(fieldname, show_coupon_fields);
 		}
 	});
+	["used_receipts", "remaining_receipts"].forEach((fieldname) => {
+		grid_field.grid.update_docfield_property(fieldname, "hidden", show_receipt_count_fields ? 0 : 1);
+		if (grid_field.grid.set_column_disp) {
+			grid_field.grid.set_column_disp(fieldname, show_receipt_count_fields);
+		}
+	});
+	["total_pages", "used_pages", "remaining_pages"].forEach((fieldname) => {
+		grid_field.grid.update_docfield_property(fieldname, "hidden", show_page_fields ? 0 : 1);
+		if (grid_field.grid.set_column_disp) {
+			grid_field.grid.set_column_disp(fieldname, show_page_fields);
+		}
+	});
 	(frm.doc.assigned_books || []).forEach((row) => {
 		if (hide_book_type && row.book_type !== frm.doc.book_type) {
 			row.book_type = frm.doc.book_type;
 		}
 		set_assigned_book_row_visibility(frm, "Book Assignment Detail", row.name);
 	});
-	frm.refresh_field("assigned_books");
 }
 
 function set_assigned_book_row_visibility(frm, cdt, cdn) {

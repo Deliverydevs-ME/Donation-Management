@@ -22,6 +22,12 @@ frappe.ui.form.on("Coupon", {
 		set_coupon_book_details(frm);
 	},
 
+	book_serial_no(frm) {
+		if (frm.doc.book) {
+			set_coupon_book_details(frm);
+		}
+	},
+
 	number_of_pages(frm) {
 		set_coupon_amount(frm);
 	},
@@ -32,24 +38,26 @@ function set_coupon_book_details(frm) {
 		return;
 	}
 
-	frappe.db
-		.get_value("Book Assignment", frm.doc.book, [
-			"coupon_type",
-			"coupon_color",
-			"volunteer_name",
-			"volunteer_area",
-			"warehouse",
-			"remaining_pages",
-			"coupon_value",
-			"status",
-			"book_type",
-		])
-		.then((response) => {
+	frappe.call({
+		method: "donation_management.donation_management.doctype.coupon.coupon.get_coupon_book_details",
+		args: {
+			book: frm.doc.book,
+			book_serial_no: frm.doc.book_serial_no,
+		},
+		callback(response) {
 			const book = response.message || {};
-			if (
-				frm.is_new()
-				&& (book.book_type !== "Coupon Book" || book.status !== "Issued" || cint(book.remaining_pages) <= 0)
-			) {
+			if (book.requires_book_serial_no && !frm.doc.book_serial_no) {
+				frm.toggle_reqd("book_serial_no", true);
+				frm.__coupon_value = 0;
+				frm.set_value("coupon_color", "");
+				frm.set_value("volunteer_name", "");
+				frm.set_value("area", "");
+				frm.set_value("warehouse", "");
+				return;
+			}
+			frm.toggle_reqd("book_serial_no", false);
+
+			if (frm.is_new() && (book.book_type !== "Coupon Book" && book.book_type !== "Mixed" || book.status !== "Issued" || cint(book.remaining_pages) <= 0)) {
 				frappe.msgprint({
 					title: __("All Pages Used"),
 					message: __("Book {0} is not an issued Coupon Book with available pages.", [
@@ -74,7 +82,8 @@ function set_coupon_book_details(frm) {
 				frm.set_value("number_of_pages", 1);
 			}
 			set_coupon_amount(frm);
-		});
+		},
+	});
 }
 
 function set_coupon_amount(frm) {

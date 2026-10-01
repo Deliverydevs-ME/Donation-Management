@@ -49,44 +49,7 @@ class Coupon(Document):
 		if not self.book:
 			frappe.throw(frappe._("Book is required."))
 
-		book = frappe.db.get_value(
-			"Book Assignment",
-			self.book,
-			[
-				"coupon_type",
-				"coupon_color",
-				"coupon_value",
-				"volunteer_name",
-				"volunteer_area",
-				"warehouse",
-				"status",
-				"book_type",
-			],
-			as_dict=True,
-		)
-		if not book:
-			frappe.throw(frappe._("Book {0} was not found.").format(self.book))
-
-		if book.book_type not in ("Coupon Book", "Mixed"):
-			frappe.throw(frappe._("Coupons can only be created against Coupon Book records."))
-
-		if book.book_type == "Mixed":
-			if not self.book_serial_no:
-				frappe.throw(frappe._("Book Serial No is required for a Mixed Book Assignment."))
-			row = frappe.db.get_value(
-				"Book Assignment Detail",
-				{
-					"parent": self.book,
-					"parenttype": "Book Assignment",
-					"parentfield": "assigned_books",
-					"book_serial_no": self.book_serial_no,
-				},
-				["book_type", "coupon_type", "coupon_value", "coupon_color", "warehouse", "total_pages", "remaining_pages"],
-				as_dict=True,
-			)
-			if not row or row.book_type != "Coupon Book":
-				frappe.throw(frappe._("Book Serial No {0} is not a Coupon Book in this assignment.").format(self.book_serial_no))
-			book.update(row)
+		book = _get_coupon_book_details(self.book, self.book_serial_no)
 
 		if self.is_new() and book.status != "Issued":
 			frappe.throw(frappe._("Book {0} must be Issued before creating a Coupon.").format(self.book))
@@ -113,12 +76,8 @@ class Coupon(Document):
 		if not self.book:
 			return
 
-		book = frappe.db.get_value(
-			"Book Assignment",
-			self.book,
-			["total_pages", "remaining_pages"],
-			as_dict=True,
-		)
+		book_type = frappe.db.get_value("Book Assignment", self.book, "book_type")
+		book = frappe.db.get_value("Book Assignment", self.book, ["total_pages", "remaining_pages"], as_dict=True)
 		if not book:
 			return
 
@@ -129,7 +88,15 @@ class Coupon(Document):
 				"book": self.book,
 			},
 		)
-		if frappe.db.get_value("Book Assignment", self.book, "book_type") == "Mixed":
+		if frappe.db.exists(
+			"Book Assignment Detail",
+			{
+				"parent": self.book,
+				"parenttype": "Book Assignment",
+				"parentfield": "assigned_books",
+				"book_type": "Coupon Book",
+			},
+		) or book_type == "Mixed":
 			book = frappe.db.get_value(
 				"Book Assignment Detail",
 				{"parent": self.book, "book_serial_no": self.book_serial_no, "book_type": "Coupon Book"},
@@ -173,22 +140,74 @@ class Coupon(Document):
 		if not self.book:
 			frappe.throw(frappe._("Book is required before generating Coupon Number."))
 
-		coupon_type = frappe.db.get_value("Book Assignment", self.book, "coupon_type")
-		if frappe.db.get_value("Book Assignment", self.book, "book_type") == "Mixed":
-			coupon_type = frappe.db.get_value(
-				"Book Assignment Detail",
-				{
-					"parent": self.book,
-					"parenttype": "Book Assignment",
-					"book_serial_no": self.book_serial_no,
-					"book_type": "Coupon Book",
-				},
-				"coupon_type",
-			)
+		coupon_type = _get_coupon_book_details(self.book, self.book_serial_no).coupon_type
 		if coupon_type not in COUPON_COLORS:
 			frappe.throw(frappe._("Coupon Type must be Zakat, Sadqa, Atiya, Fitra, or Fidya."))
 
 		return coupon_type
+
+
+def _get_coupon_book_details(book_name, book_serial_no=None, allow_missing_serial=False):
+	book = frappe.db.get_value(
+		"Book Assignment",
+		book_name,
+		[
+			"coupon_type",
+			"coupon_color",
+			"coupon_value",
+			"volunteer_name",
+			"volunteer_area",
+			"warehouse",
+			"status",
+			"book_type",
+			"remaining_pages",
+		],
+		as_dict=True,
+	)
+	if not book:
+		frappe.throw(frappe._("Book {0} was not found.").format(book_name))
+
+	if book.book_type not in ("Coupon Book", "Mixed"):
+		frappe.throw(frappe._("Coupons can only be created against Coupon Book records."))
+
+	has_coupon_rows = frappe.db.exists(
+		"Book Assignment Detail",
+		{
+			"parent": book_name,
+			"parenttype": "Book Assignment",
+			"parentfield": "assigned_books",
+			"book_type": "Coupon Book",
+		},
+	)
+	if book.book_type == "Mixed" or has_coupon_rows:
+		if not book_serial_no:
+			if allow_missing_serial:
+				book.requires_book_serial_no = 1
+				return book
+			frappe.throw(frappe._("Book Serial No is required for this Coupon Book Assignment."))
+
+		row = frappe.db.get_value(
+			"Book Assignment Detail",
+			{
+				"parent": book_name,
+				"parenttype": "Book Assignment",
+				"parentfield": "assigned_books",
+				"book_serial_no": book_serial_no,
+				"book_type": "Coupon Book",
+			},
+			["book_type", "coupon_type", "coupon_value", "coupon_color", "warehouse", "total_pages", "remaining_pages"],
+			as_dict=True,
+		)
+		if not row:
+			frappe.throw(frappe._("Book Serial No {0} is not a Coupon Book in this assignment.").format(book_serial_no))
+		book.update(row)
+
+	return book
+
+
+@frappe.whitelist()
+def get_coupon_book_details(book, book_serial_no=None):
+	return _get_coupon_book_details(book, book_serial_no, allow_missing_serial=True)
 
 
 def get_used_coupon_pages(book, exclude_coupon=None, book_serial_no=None):
@@ -215,7 +234,16 @@ def get_used_coupon_pages(book, exclude_coupon=None, book_serial_no=None):
 
 def sync_book_page_counts(book, exclude_coupon=None, book_serial_no=None):
 	book_type = frappe.db.get_value("Book Assignment", book, "book_type")
-	if book_type == "Mixed":
+	has_coupon_rows = frappe.db.exists(
+		"Book Assignment Detail",
+		{
+			"parent": book,
+			"parenttype": "Book Assignment",
+			"parentfield": "assigned_books",
+			"book_type": "Coupon Book",
+		},
+	)
+	if book_type == "Mixed" or has_coupon_rows:
 		if not book_serial_no:
 			return
 		row = frappe.db.get_value(
