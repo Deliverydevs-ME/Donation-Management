@@ -925,6 +925,11 @@ function build_return_dialog(frm, accounting_defaults, return_details) {
 	});
 
 	dialog.show();
+	const used_pages = cint(return_details.used_pages);
+	const coupon_value = cint(return_details.coupon_value) || cint(frm.doc.coupon_value);
+	dialog.set_value("used_pages", used_pages);
+	dialog.set_value("coupon_value", coupon_value);
+	dialog.set_value("collected_amount", flt(used_pages * coupon_value));
 	update_return_collected_amount(dialog, frm);
 	update_return_denomination_total(dialog);
 }

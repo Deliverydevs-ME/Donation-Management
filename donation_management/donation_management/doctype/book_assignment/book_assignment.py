@@ -852,6 +852,8 @@ def return_book(
 	if not doc.is_coupon_book():
 		frappe.throw(frappe._("Use Return Donation Book for Donation Book records."))
 
+	coupon_value = get_coupon_value_for_book(book)
+	doc.coupon_value = coupon_value
 	used_pages = cint(used_pages)
 	if used_pages <= 0:
 		frappe.throw(frappe._("Used Pages must be greater than zero when returning a Book."))
@@ -859,10 +861,10 @@ def return_book(
 	if used_pages > cint(doc.total_pages):
 		frappe.throw(frappe._("Used Pages cannot exceed Total Pages."))
 
-	if cint(doc.coupon_value) not in COUPON_VALUES:
+	if coupon_value not in COUPON_VALUES:
 		frappe.throw(frappe._("Coupon Value must be 10, 50, 100, 500, 1000, or 5000 before returning a Book."))
 
-	calculated_collected_amount = flt(used_pages * cint(doc.coupon_value))
+	calculated_collected_amount = flt(used_pages * coupon_value)
 	if collected_amount is not None and flt(collected_amount) != calculated_collected_amount:
 		frappe.throw(frappe._("Total Amount Collected must equal Used Pages multiplied by Coupon Value."))
 

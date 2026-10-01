@@ -14,6 +14,7 @@ from donation_management.donation_management.doctype.book_assignment.book_assign
 	get_receipt_range_count,
 	receipt_number_in_range,
 	receipt_series_prefix,
+	return_book,
 	sync_assigned_book_stock,
 )
 
@@ -111,6 +112,35 @@ class TestBookAssignment(FrappeTestCase):
 
 		self.assertEqual(details["coupon_value"], 50)
 		self.assertEqual(details["total_amount"], 100)
+
+	def test_return_book_uses_coupon_row_value_for_calculation(self):
+		doc = frappe._dict(
+			status="Issued",
+			total_pages=10,
+			coupon_value=0,
+			is_coupon_book=lambda: True,
+			name="BA-00003",
+			mode_of_payment=None,
+			debit_account=None,
+			credit_account=None,
+			flags=frappe._dict(),
+		)
+		doc.set = lambda fieldname, value: setattr(doc, fieldname, value)
+		doc.save = lambda: None
+		doc.as_dict = lambda: doc
+
+		with patch(
+			"donation_management.donation_management.doctype.book_assignment.book_assignment.get_coupon_value_for_book",
+			return_value=100,
+		), patch(
+			"donation_management.donation_management.doctype.book_assignment.book_assignment.generate_return_coupons"
+		), patch.object(frappe, "get_doc", return_value=doc), patch.object(
+			frappe, "parse_json", return_value=[]
+		):
+			return_book("BA-00003", collected_amount=300, used_pages=3, denominations=[], denomination_total=300)
+
+		self.assertEqual(doc.coupon_value, 100)
+		self.assertEqual(doc.collected_amount, 300)
 
 	def test_submitted_assignment_persists_current_child_stock(self):
 		rows = [
