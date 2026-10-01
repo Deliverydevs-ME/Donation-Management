@@ -13,6 +13,7 @@ from donation_management.donation_management.doctype.book_assignment.book_assign
 	get_receipt_range_count,
 	receipt_number_in_range,
 	receipt_series_prefix,
+	sync_assigned_book_stock,
 )
 
 
@@ -85,3 +86,23 @@ class TestBookAssignment(FrappeTestCase):
 		self.assertEqual(details["book_type"], "Coupon Book")
 		self.assertEqual(details["coupon_type"], "Sadqa")
 		self.assertEqual(details["coupon_value"], 100)
+
+	def test_submitted_assignment_persists_current_child_stock(self):
+		rows = [
+			frappe._dict(name="BAD-ROW-1", item="Donation Book", warehouse="Stores - J"),
+		]
+		with patch.object(frappe.db, "exists", return_value=True), patch.object(
+			frappe, "get_all", return_value=rows
+		), patch(
+			"donation_management.donation_management.doctype.book_assignment.book_assignment.get_book_stock_qty",
+			return_value=7,
+		), patch.object(frappe.db, "set_value") as set_value:
+			sync_assigned_book_stock("BA-00001")
+
+		set_value.assert_called_once_with(
+			"Book Assignment Detail",
+			"BAD-ROW-1",
+			"available_stock",
+			7,
+			update_modified=False,
+		)

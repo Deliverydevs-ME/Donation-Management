@@ -71,6 +71,8 @@ class BookAssignment(Document):
 			sync_donation_book_leaves(self.name)
 		if self.docstatus == 1 and self.is_coupon_book():
 			self.create_journal_entry_for_return()
+		if self.docstatus == 1:
+			sync_assigned_book_stock(self.name)
 		self.notify_when_exhausted()
 
 	def on_cancel(self):
@@ -97,6 +99,7 @@ class BookAssignment(Document):
 		for row in self.assigned_books or []:
 			if row.name:
 				frappe.db.set_value("Book Assignment Detail", row.name, "status", "Issued", update_modified=False)
+		sync_assigned_book_stock(self.name)
 
 	def set_defaults(self):
 		if not self.book_type:
@@ -1914,6 +1917,30 @@ def get_book_stock_qty(item=None, warehouse=None):
 	if not item or not warehouse:
 		return 0
 	return flt(frappe.db.get_value("Bin", {"item_code": item, "warehouse": warehouse}, "actual_qty") or 0)
+
+
+def sync_assigned_book_stock(book):
+	"""Persist current Bin stock on every assigned-book row after submission."""
+	if not book or not frappe.db.exists("Book Assignment", book):
+		return
+
+	rows = frappe.get_all(
+		"Book Assignment Detail",
+		filters={
+			"parent": book,
+			"parenttype": "Book Assignment",
+			"parentfield": "assigned_books",
+		},
+		fields=["name", "item", "warehouse"],
+	)
+	for row in rows:
+		frappe.db.set_value(
+			"Book Assignment Detail",
+			row.name,
+			"available_stock",
+			get_book_stock_qty(row.item, row.warehouse),
+			update_modified=False,
+		)
 
 
 @frappe.whitelist()

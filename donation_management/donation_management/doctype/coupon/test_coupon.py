@@ -20,6 +20,7 @@ class TestCoupon(FrappeTestCase):
 	def test_coupon_is_submittable_and_uses_short_series(self):
 		self.assertTrue(frappe.get_meta("Coupon").is_submittable)
 		self.assertEqual(COUPON_SERIES, "COP-.####")
+		self.assertTrue(all(permission.get("submit") for permission in frappe.get_meta("Coupon").permissions))
 
 	def test_zero_and_negative_pages_are_rejected(self):
 		for pages in (0, -1):
@@ -36,6 +37,8 @@ class TestCoupon(FrappeTestCase):
 			book_type="Coupon Book",
 			status="Issued",
 			remaining_pages=0,
+			volunteer_name=None,
+			issued_to_employee="HR-EMP-01094",
 		)
 		child = frappe._dict(
 			book_type="Coupon Book",
@@ -59,3 +62,4 @@ class TestCoupon(FrappeTestCase):
 
 		self.assertEqual(book.remaining_pages, 999)
 		self.assertEqual(book.coupon_type, "Sadqa")
+		self.assertEqual(book.volunteer_name, "HR-EMP-01094")

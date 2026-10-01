@@ -105,6 +105,7 @@ frappe.ui.form.on("Book Assignment", {
 		frm.__previous_book_type = frm.doc.book_type;
 		set_book_type_visibility(frm);
 		set_assigned_book_grid_properties(frm);
+		refresh_assigned_book_stock(frm);
 		set_collection_visibility(frm);
 		add_action_buttons(frm);
 	},
@@ -378,6 +379,35 @@ function fetch_assigned_book_stock(frm, cdt, cdn) {
 		callback(response) {
 			frappe.model.set_value(cdt, cdn, "available_stock", flt(response.message));
 		},
+	});
+}
+
+function refresh_assigned_book_stock(frm) {
+	(frm.doc.assigned_books || []).forEach((row) => {
+		const update_row_stock = (stock) => {
+			row.available_stock = flt(stock || 0);
+			const grid = frm.fields_dict.assigned_books && frm.fields_dict.assigned_books.grid;
+			const grid_row = grid && grid.grid_rows_by_docname && grid.grid_rows_by_docname[row.name];
+			if (grid_row) {
+				grid_row.refresh_field("available_stock", row.available_stock);
+			}
+		};
+
+		if (!row.item || !row.warehouse) {
+			update_row_stock(0);
+			return;
+		}
+
+		frappe.call({
+			method: "donation_management.donation_management.doctype.book_assignment.book_assignment.get_book_stock_qty",
+			args: {
+				item: row.item,
+				warehouse: row.warehouse,
+			},
+			callback(response) {
+				update_row_stock(response.message);
+			},
+		});
 	});
 }
 

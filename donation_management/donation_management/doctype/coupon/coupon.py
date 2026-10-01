@@ -156,6 +156,7 @@ def _get_coupon_book_details(book_name, book_serial_no=None, allow_missing_seria
 			"coupon_color",
 			"coupon_value",
 			"volunteer_name",
+			"issued_to_employee",
 			"volunteer_area",
 			"warehouse",
 			"status",
@@ -201,6 +202,12 @@ def _get_coupon_book_details(book_name, book_serial_no=None, allow_missing_seria
 		if not row:
 			frappe.throw(frappe._("Book Serial No {0} is not a Coupon Book in this assignment.").format(book_serial_no))
 		book.update(row)
+
+	# Mixed assignments keep the issuing employee in issued_to_employee while
+	# volunteer_name is hidden on the parent form. Coupons should still inherit
+	# that employee from the selected Book Assignment.
+	if not book.volunteer_name:
+		book.volunteer_name = book.issued_to_employee
 
 	return book
 

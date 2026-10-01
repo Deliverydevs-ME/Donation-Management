@@ -184,6 +184,7 @@
    "report": 1,
    "role": "System Manager",
    "share": 1,
+   "submit": 1,
    "write": 1
   },
   {
@@ -195,6 +196,7 @@
    "report": 1,
    "role": "Finance Manager",
    "share": 1,
+   "submit": 1,
    "write": 1
   }
  ],
