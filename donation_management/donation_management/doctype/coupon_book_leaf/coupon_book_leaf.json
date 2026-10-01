@@ -29,11 +29,7 @@
   {"fieldname": "remarks", "fieldtype": "Small Text", "label": "Remarks"}
  ],
  "is_submittable": 1,
- "links": [
-  {"group": "References", "link_doctype": "Book Assignment", "link_fieldname": "book"},
-  {"group": "Transactions", "link_doctype": "Coupon Entry", "link_fieldname": "coupon_entry"},
-  {"group": "Accounting", "link_doctype": "Journal Entry", "link_fieldname": "journal_entry"}
- ],
+ "links": [],
  "module": "Donation Management",
  "name": "Coupon Book Leaf",
  "permissions": [

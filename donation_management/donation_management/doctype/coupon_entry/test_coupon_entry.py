@@ -23,6 +23,15 @@ class TestCoupon(FrappeTestCase):
 		self.assertTrue(all(permission.get("submit") for permission in frappe.get_meta("Coupon Entry").permissions))
 		self.assertTrue(all(permission.get("cancel") for permission in frappe.get_meta("Coupon Entry").permissions))
 
+	def test_connections_use_existing_target_fields(self):
+		dashboard = frappe.get_meta("Coupon Entry").get_dashboard_data()
+		self.assertEqual(dashboard.internal_links["Book Assignment"], "book")
+		self.assertEqual(dashboard.internal_links["Journal Entry"], "journal_entry")
+		self.assertEqual(dashboard.non_standard_fieldnames["Coupon Book Leaf"], "coupon_entry")
+		self.assertTrue(frappe.get_meta("Coupon Entry").has_field("book"))
+		self.assertTrue(frappe.get_meta("Coupon Entry").has_field("journal_entry"))
+		self.assertTrue(frappe.get_meta("Coupon Book Leaf").has_field("coupon_entry"))
+
 	def test_zero_and_negative_pages_are_rejected(self):
 		for pages in (0, -1):
 			coupon = Coupon({"doctype": "Coupon Entry", "number_of_pages": pages})
