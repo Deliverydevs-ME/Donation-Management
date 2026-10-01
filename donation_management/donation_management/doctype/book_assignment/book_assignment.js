@@ -960,13 +960,14 @@ function validate_return_denomination_total(dialog, frm) {
 		return false;
 	}
 
-	const expected_amount = cint(dialog.get_value("used_pages")) * cint(frm.doc.coupon_value);
+	const coupon_value = cint(dialog.get_value("coupon_value")) || cint(frm.doc.coupon_value);
+	const expected_amount = cint(dialog.get_value("used_pages")) * coupon_value;
 	if (collected_amount !== expected_amount) {
 		frappe.msgprint(
 			__("Total Amount Collected must be {0} because Used Pages x Coupon Value is {1} x {2}.", [
 				format_currency(expected_amount),
 				cint(dialog.get_value("used_pages")),
-				cint(frm.doc.coupon_value),
+				coupon_value,
 			])
 		);
 		return false;

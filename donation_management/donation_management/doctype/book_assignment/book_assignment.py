@@ -951,13 +951,34 @@ def get_book_return_details(book):
 	if not book:
 		return {"used_pages": 0, "coupon_value": 0, "total_amount": 0}
 
-	coupon_value = cint(frappe.db.get_value("Book Assignment", book, "coupon_value"))
+	coupon_value = get_coupon_value_for_book(book)
 	used_pages = get_book_used_pages(book)
 	return {
 		"used_pages": used_pages,
 		"coupon_value": coupon_value,
 		"total_amount": flt(used_pages * coupon_value),
 	}
+
+
+def get_coupon_value_for_book(book, book_serial_no=None):
+	"""Get Coupon Value from the assignment, falling back to its Coupon Book row."""
+	if not book:
+		return 0
+
+	coupon_value = cint(frappe.db.get_value("Book Assignment", book, "coupon_value"))
+	if coupon_value:
+		return coupon_value
+
+	filters = {
+		"parent": book,
+		"parenttype": "Book Assignment",
+		"parentfield": "assigned_books",
+		"book_type": "Coupon Book",
+	}
+	if book_serial_no:
+		filters["book_serial_no"] = book_serial_no
+
+	return cint(frappe.db.get_value("Book Assignment Detail", filters, "coupon_value"))
 
 
 def get_book_used_pages(book):

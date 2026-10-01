@@ -5,6 +5,7 @@ from frappe.tests.utils import FrappeTestCase
 
 from donation_management.donation_management.doctype.coupon_book_leaf.coupon_book_leaf import (
 	get_coupon_book_leaf_ranges,
+	upsert_coupon_book_leaf,
 )
 
 
@@ -30,12 +31,34 @@ class TestCouponBookLeaf(FrappeTestCase):
 					receipt_format="CP-###",
 					from_receipt_no="CP-001",
 					to_receipt_no="CP-003",
+					coupon_value=100,
 				),
 			],
 		)
 		ranges = get_coupon_book_leaf_ranges(book)
 		self.assertEqual(len(ranges), 1)
 		self.assertEqual(ranges[0]["book_serial_no"], "CB-01")
+		self.assertEqual(ranges[0]["coupon_value"], 100)
+
+	def test_generated_leaf_stores_coupon_value(self):
+		leaf = Mock()
+		book = frappe._dict(name="BA-00001")
+		with patch.object(frappe.db, "exists", return_value=None), patch.object(
+			frappe, "get_doc", return_value=leaf
+		) as get_doc:
+			upsert_coupon_book_leaf(book, "CB-01", "CP-001", 100)
+
+		get_doc.assert_called_once_with(
+			{
+				"doctype": "Coupon Book Leaf",
+				"book": "BA-00001",
+				"book_serial_no": "CB-01",
+				"receipt_number": "CP-001",
+				"coupon_value": 100,
+				"status": "Pending",
+			}
+		)
+		leaf.insert.assert_called_once_with(ignore_permissions=True)
 
 	def test_coupon_entry_cancellation_returns_receipt_numbers(self):
 		from donation_management.donation_management.doctype.coupon_book_leaf.coupon_book_leaf import (

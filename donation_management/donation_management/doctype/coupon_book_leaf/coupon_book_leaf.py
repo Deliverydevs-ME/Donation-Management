@@ -8,10 +8,29 @@ from frappe.utils import cint, flt
 
 class CouponBookLeaf(Document):
 	def validate(self):
+		self.set_coupon_value_from_assignment()
 		self.validate_parent_assignment_state()
 		self.validate_locked_state()
 		self.validate_coupon_entry_link()
 		self.validate_unique_leaf()
+
+	def set_coupon_value_from_assignment(self):
+		if self.coupon_value or not self.book:
+			return
+
+		filters = {
+			"parent": self.book,
+			"parenttype": "Book Assignment",
+			"parentfield": "assigned_books",
+			"book_type": "Coupon Book",
+		}
+		if self.book_serial_no:
+			filters["book_serial_no"] = self.book_serial_no
+
+		coupon_value = frappe.db.get_value("Book Assignment Detail", filters, "coupon_value")
+		if not coupon_value:
+			coupon_value = frappe.db.get_value("Book Assignment", self.book, "coupon_value")
+		self.coupon_value = cint(coupon_value)
 
 	def before_submit(self):
 		self.validate_parent_assignment_state()
@@ -66,6 +85,7 @@ class CouponBookLeaf(Document):
 				"docstatus",
 				"journal_entry",
 				"amount",
+				"coupon_value",
 				"number_of_pages",
 				"accounting_status",
 			],
@@ -81,6 +101,7 @@ class CouponBookLeaf(Document):
 		if entry.docstatus == 1:
 			self.journal_entry = entry.journal_entry
 			self.accounting_status = entry.accounting_status
+			self.coupon_value = cint(entry.coupon_value)
 			self.amount = flt(entry.amount) / max(cint(entry.number_of_pages), 1) if entry.get("number_of_pages") else 0
 			self.status = "Used"
 
@@ -134,6 +155,7 @@ def sync_coupon_book_leaves(book):
 				book_doc,
 				receipt_range.get("book_serial_no"),
 				format_receipt_number(receipt_range.get("receipt_format"), receipt_number),
+				receipt_range.get("coupon_value"),
 			)
 
 
@@ -148,6 +170,7 @@ def get_coupon_book_leaf_ranges(book_doc):
 						"receipt_format": row.receipt_format,
 						"from_receipt_no": row.from_receipt_no,
 						"to_receipt_no": row.to_receipt_no,
+						"coupon_value": row.coupon_value,
 					}
 				)
 	elif book_doc.book_type == "Coupon Book" and book_doc.from_receipt_no and book_doc.to_receipt_no:
@@ -157,12 +180,13 @@ def get_coupon_book_leaf_ranges(book_doc):
 				"receipt_format": getattr(book_doc, "receipt_format", None),
 				"from_receipt_no": book_doc.from_receipt_no,
 				"to_receipt_no": book_doc.to_receipt_no,
+				"coupon_value": getattr(book_doc, "coupon_value", None),
 			}
 		)
 	return ranges
 
 
-def upsert_coupon_book_leaf(book_doc, book_serial_no, receipt_number):
+def upsert_coupon_book_leaf(book_doc, book_serial_no, receipt_number, coupon_value=None):
 	existing = frappe.db.exists(
 		"Coupon Book Leaf",
 		{
@@ -172,6 +196,14 @@ def upsert_coupon_book_leaf(book_doc, book_serial_no, receipt_number):
 		},
 	)
 	if existing:
+		if coupon_value not in (None, "") and cint(coupon_value) > 0:
+			frappe.db.set_value(
+				"Coupon Book Leaf",
+				existing,
+				"coupon_value",
+				cint(coupon_value),
+				update_modified=False,
+			)
 		return existing
 
 	leaf = frappe.get_doc(
@@ -180,6 +212,7 @@ def upsert_coupon_book_leaf(book_doc, book_serial_no, receipt_number):
 			"book": book_doc.name,
 			"book_serial_no": book_serial_no,
 			"receipt_number": receipt_number,
+			"coupon_value": cint(coupon_value),
 			"status": "Pending",
 		}
 	)
@@ -234,6 +267,7 @@ def allocate_coupon_entry_leaves(coupon_entry):
 	for leaf_name in available[:remaining_page_count]:
 		leaf = frappe.get_doc("Coupon Book Leaf", leaf_name)
 		leaf.coupon_entry = coupon_entry.name
+		leaf.coupon_value = cint(coupon_entry.coupon_value)
 		leaf.status = "Used"
 		leaf.amount = per_leaf_amount
 		leaf.journal_entry = coupon_entry.journal_entry
@@ -252,14 +286,14 @@ def get_coupon_entry_range(coupon_entry):
 			"book_serial_no": coupon_entry.book_serial_no,
 			"book_type": "Coupon Book",
 		},
-		["receipt_format", "from_receipt_no", "to_receipt_no"],
+		["receipt_format", "from_receipt_no", "to_receipt_no", "coupon_value"],
 		as_dict=True,
 	)
 	if not row:
 		row = frappe.db.get_value(
 			"Book Assignment",
 			coupon_entry.book,
-			["receipt_format", "from_receipt_no", "to_receipt_no"],
+			["receipt_format", "from_receipt_no", "to_receipt_no", "coupon_value"],
 			as_dict=True,
 		)
 	if not row or not row.from_receipt_no or not row.to_receipt_no:

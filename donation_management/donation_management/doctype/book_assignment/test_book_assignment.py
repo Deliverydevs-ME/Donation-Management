@@ -98,6 +98,20 @@ class TestBookAssignment(FrappeTestCase):
 		self.assertEqual(details["coupon_value"], 100)
 		self.assertEqual(details["total_amount"], 300)
 
+	def test_return_details_fall_back_to_coupon_row_value(self):
+		def get_value(doctype, *args, **kwargs):
+			if doctype == "Book Assignment":
+				return None
+			return 50
+
+		with patch.object(frappe.db, "get_value", side_effect=get_value), patch.object(
+			frappe.db, "sql", return_value=[(2,)]
+		):
+			details = get_book_return_details("BA-00002")
+
+		self.assertEqual(details["coupon_value"], 50)
+		self.assertEqual(details["total_amount"], 100)
+
 	def test_submitted_assignment_persists_current_child_stock(self):
 		rows = [
 			frappe._dict(name="BAD-ROW-1", item="Donation Book", warehouse="Stores - J"),
