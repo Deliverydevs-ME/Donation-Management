@@ -11,6 +11,7 @@ from donation_management.donation_management.doctype.book_assignment.book_assign
 	get_book_return_details,
 	get_book_item_details,
 	get_book_items,
+	get_book_stock_qty,
 	get_receipt_range_count,
 	receipt_number_in_range,
 	receipt_series_prefix,
@@ -134,9 +135,12 @@ class TestBookAssignment(FrappeTestCase):
 			return_value=100,
 		), patch(
 			"donation_management.donation_management.doctype.book_assignment.book_assignment.generate_return_coupons"
-		), patch.object(frappe, "get_doc", return_value=doc), patch.object(
-			frappe, "parse_json", return_value=[]
-		):
+			), patch.object(frappe, "get_doc", return_value=doc), patch.object(
+				frappe, "parse_json", return_value=[]
+			), patch(
+				"donation_management.donation_management.doctype.book_assignment.book_assignment.today",
+				return_value="2026-10-05",
+			):
 			return_book("BA-00003", collected_amount=300, used_pages=3, denominations=[], denomination_total=300)
 
 		self.assertEqual(doc.coupon_value, 100)
@@ -161,3 +165,20 @@ class TestBookAssignment(FrappeTestCase):
 			7,
 			update_modified=False,
 		)
+
+	def test_available_stock_reads_current_bin_quantity(self):
+		with patch.object(frappe.db, "get_value", return_value=12.5) as get_value:
+			self.assertEqual(get_book_stock_qty("Donation Book", "Stores - J"), 12.5)
+
+		get_value.assert_called_once_with(
+			"Bin",
+			{"item_code": "Donation Book", "warehouse": "Stores - J"},
+			"actual_qty",
+		)
+
+	def test_available_stock_is_zero_without_item_or_warehouse(self):
+		with patch.object(frappe.db, "get_value") as get_value:
+			self.assertEqual(get_book_stock_qty("", "Stores - J"), 0)
+			self.assertEqual(get_book_stock_qty("Donation Book", ""), 0)
+
+		get_value.assert_not_called()
