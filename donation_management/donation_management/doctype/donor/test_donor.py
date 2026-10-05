@@ -1,6 +1,9 @@
 # Copyright (c) 2026, osama.ahmed@deliverydevs.com and Contributors
 # See license.txt
 
+import json
+from pathlib import Path
+
 from frappe.tests.utils import FrappeTestCase
 from unittest.mock import patch
 
@@ -20,7 +23,14 @@ class TestDonorEsaalRelationships(FrappeTestCase):
 		)
 
 	def test_islamic_relationship_limits(self):
-		with patch.object(frappe.db, "exists", return_value=True):
+		with patch.object(frappe.db, "exists", return_value=True), patch.object(
+			frappe.db,
+			"get_value",
+			side_effect=lambda doctype, name, *args, **kwargs: {
+				"name": name,
+				"family_relationship": "Father" if "DN-1" in name or "DN-2" in name else "Mother",
+			},
+		):
 			with self.assertRaises(frappe.ValidationError):
 				self.make_donor(
 					[
@@ -32,7 +42,7 @@ class TestDonorEsaalRelationships(FrappeTestCase):
 			with self.assertRaises(frappe.ValidationError):
 				self.make_donor(
 					[
-						{"person_name": "DN-{0}".format(index), "relationship": "Mother"}
+						{"person_name": "MOTHER-{0}".format(index), "relationship": "Mother"}
 						for index in range(1, 6)
 					]
 				).validate_esaal_e_sawab_relationships()
@@ -47,8 +57,31 @@ class TestDonorEsaalRelationships(FrappeTestCase):
 			for index in range(1, 8)
 		)
 
-		with patch.object(frappe.db, "exists", return_value=True):
+		with patch.object(frappe.db, "exists", return_value=True), patch.object(
+			frappe.db,
+			"get_value",
+			side_effect=lambda doctype, name, *args, **kwargs: {
+				"name": name,
+				"family_relationship": "Paternal Aunt" if "DN-A" in name else "Brother",
+			},
+		):
 			self.make_donor(rows).validate_esaal_e_sawab_relationships()
+
+	def test_person_name_uses_existing_donor(self):
+		with patch.object(frappe.db, "exists", return_value=False), patch.object(
+			frappe.db,
+			"get_value",
+			return_value={"name": "Abdul Rahman", "family_relationship": "Brother"},
+		):
+			self.make_donor([{"person_name": "Abdul Rahman", "relationship": "Brother"}]).validate_esaal_e_sawab_relationships()
+
+	def test_relationship_field_is_free_text(self):
+		path = Path(__file__).parents[1] / "esaal_e_sawab_detail" / "esaal_e_sawab_detail.json"
+		metadata = json.loads(path.read_text())
+		relationship = next(field for field in metadata["fields"] if field["fieldname"] == "relationship")
+
+		self.assertEqual(relationship["fieldtype"], "Data")
+		self.assertNotIn("options", relationship)
 
 from donation_management.donation_management.doctype.donor.donor import get_donor_tree_title
 

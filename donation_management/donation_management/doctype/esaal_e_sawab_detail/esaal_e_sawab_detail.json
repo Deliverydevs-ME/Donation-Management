@@ -15,15 +15,18 @@
    "fieldtype": "Link",
    "in_list_view": 1,
    "label": "Person Name",
+   "no_create": 1,
+   "no_quick_entry": 1,
    "options": "Donor",
    "reqd": 1
   },
   {
+   "fetch_from": "person_name.family_relationship",
    "fieldname": "relationship",
-   "fieldtype": "Select",
+   "fieldtype": "Data",
    "in_list_view": 1,
    "label": "Relationship",
-   "options": "\nFather\nMother\nBrother\nSister\nGrand Father\nGrand Mother\nPaternal Uncle\nPaternal Aunt\nMaternal Uncle\nMaternal Aunt",
+   "read_only": 1,
    "reqd": 1
   },
   {

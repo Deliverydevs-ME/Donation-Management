@@ -3,7 +3,7 @@
 
 import frappe
 from frappe.model.document import Document
-from frappe.utils import flt, getdate, today
+from frappe.utils import cint, flt, getdate, today
 
 from donation_management.donation_management.api import (
 	create_collection_journal_entry,
@@ -18,6 +18,7 @@ class DonationBookCollection(Document):
 	def validate(self):
 		self.set_defaults()
 		self.validate_book()
+		self.validate_book_serial_no()
 		self.populate_assignment_details()
 		self.validate_assignment_details()
 		self.total_amount = flt(self.cash_amount) + flt(self.online_amount) + flt(self.returned_unused_amount)
@@ -185,6 +186,27 @@ class DonationBookCollection(Document):
 		if order.donation_book and order.donation_book != self.book:
 			frappe.throw(frappe._("Linked Donation Order belongs to a different Donation Book."))
 
+	def validate_book_serial_no(self):
+		if not self.book_serial_no:
+			return
+
+		serial_is_donation_book = frappe.db.exists(
+			"Book Assignment Detail",
+			{
+				"parent": self.book,
+				"parenttype": "Book Assignment",
+				"parentfield": "assigned_books",
+				"book_type": "Donation Book",
+				"book_serial_no": self.book_serial_no,
+			},
+		)
+		if not serial_is_donation_book:
+			frappe.throw(
+				frappe._("Book Serial No {0} is not a Donation Book serial in Book Assignment {1}.").format(
+					self.book_serial_no, self.book
+				)
+			)
+
 	def set_accounting_details(self):
 		if not flt(self.cash_amount):
 			return
@@ -212,6 +234,91 @@ class DonationBookCollection(Document):
 
 	def get_received_from(self):
 		return "Donation Book Collection {0} ({1})".format(self.name, self.book)
+
+
+@frappe.whitelist()
+@frappe.validate_and_sanitize_search_inputs
+def get_donation_book_assignments(doctype, txt, searchfield, start, page_len, filters=None):
+	"""Return only assignments that contain at least one Donation Book row."""
+	search = "%{}%".format(txt or "")
+	return frappe.db.sql(
+		"""
+		select book.name,
+			concat(book.name, ifnull(concat(' - ', nullif(book.book_serial_numbers, '')), ''))
+		from `tabBook Assignment` book
+		where book.docstatus != 2
+			and book.status in %(statuses)s
+			and (
+				book.book_type = %(donation_book_type)s
+				or exists (
+					select detail.name
+					from `tabBook Assignment Detail` detail
+					where detail.parent = book.name
+						and detail.parenttype = 'Book Assignment'
+						and detail.parentfield = 'assigned_books'
+						and detail.book_type = %(donation_book_type)s
+				)
+			)
+			and (
+				book.name like %(search)s
+				or ifnull(book.book_serial_numbers, '') like %(search)s
+				or exists (
+					select detail.name
+					from `tabBook Assignment Detail` detail
+					where detail.parent = book.name
+						and detail.parenttype = 'Book Assignment'
+						and detail.parentfield = 'assigned_books'
+						and detail.book_type = %(donation_book_type)s
+						and (detail.book_serial_no like %(search)s or detail.item like %(search)s)
+				)
+			)
+		order by book.modified desc
+		limit %(start)s, %(page_len)s
+		""",
+		{
+			"donation_book_type": "Donation Book",
+			"statuses": ("Issued", "Returned", "Closed"),
+			"search": search,
+			"start": cint(start),
+			"page_len": cint(page_len),
+		},
+	)
+
+
+@frappe.whitelist()
+@frappe.validate_and_sanitize_search_inputs
+def get_donation_book_serials(doctype, txt, searchfield, start, page_len, filters=None):
+	"""Return donation serials only after a Book Assignment is selected."""
+	filters = frappe._dict(filters or {})
+	if not filters.get("book"):
+		return []
+
+	return frappe.db.sql(
+		"""
+		select detail.book_serial_no,
+			concat(detail.book_serial_no, ' - ', book.name)
+		from `tabBook Assignment Detail` detail
+		inner join `tabBook Assignment` book on book.name = detail.parent
+		where detail.parent = %(book)s
+			and detail.parenttype = 'Book Assignment'
+			and detail.parentfield = 'assigned_books'
+			and detail.book_type = %(donation_book_type)s
+			and ifnull(detail.book_serial_no, '') != ''
+			and book.docstatus != 2
+			and book.status in %(statuses)s
+			and detail.book_serial_no like %(search)s
+		order by detail.book_serial_no
+		limit %(start)s, %(page_len)s
+		""",
+		{
+			"book": filters.get("book"),
+			"donation_book_type": "Donation Book",
+			"statuses": ("Issued", "Returned", "Closed"),
+			"search": "%{}%".format(txt or ""),
+			"start": cint(start),
+			"page_len": cint(page_len),
+		},
+	)
 
 
 @frappe.whitelist()

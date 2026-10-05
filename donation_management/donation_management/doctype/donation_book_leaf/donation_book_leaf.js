@@ -4,6 +4,9 @@ frappe.ui.form.on("Donation Book Leaf", {
 			query: "donation_management.donation_management.doctype.donation_book_leaf.donation_book_leaf.get_donor_donation_orders",
 			filters: {
 				donor: frm.doc.donor || "",
+				book: frm.doc.book || "",
+				book_serial_no: frm.doc.book_serial_no || "",
+				receipt_number: frm.doc.receipt_number || "",
 			},
 		}));
 

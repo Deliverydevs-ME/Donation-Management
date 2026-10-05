@@ -108,7 +108,10 @@ class DonationBookLeaf(Document):
 	)
 		if self.receipt_number not in receipts:
 			frappe.throw(
-				frappe._("Receipt {0} is not used by Donation Order {1}.").format(
+				frappe._(
+					"Receipt {0} is not used by Donation Order {1}. Select the Donation Order "
+					"that uses this receipt, or select this Donation Book Leaf from the Donation Order."
+				).format(
 					self.receipt_number,
 					self.donation_order,
 				)
@@ -255,6 +258,9 @@ def get_donor_donation_orders(doctype, txt, searchfield, start, page_len, filter
 		return []
 
 	search_text = f"%{txt}%"
+	book = filters.get("book") or ""
+	book_serial_no = filters.get("book_serial_no") or ""
+	receipt_number = filters.get("receipt_number") or ""
 	return frappe.db.sql(
 		"""
 		select
@@ -264,6 +270,20 @@ def get_donor_donation_orders(doctype, txt, searchfield, start, page_len, filter
 		from `tabDonation Order` order_doc
 		where order_doc.donor_name = %(donor)s
 			and order_doc.docstatus != 2
+			and (%(book)s = '' or order_doc.donation_book = %(book)s)
+			and (%(book_serial_no)s = '' or order_doc.donation_book_serial_no = %(book_serial_no)s)
+			and (
+				%(receipt_number)s = ''
+				or order_doc.manual_receipt_number = %(receipt_number)s
+				or exists (
+					select 1
+					from `tabDonation Order Purpose Detail` purpose_detail
+					where purpose_detail.parent = order_doc.name
+						and purpose_detail.parenttype = 'Donation Order'
+						and purpose_detail.parentfield = 'purpose_details'
+						and purpose_detail.manual_receipt_number = %(receipt_number)s
+				)
+			)
 			and (
 				order_doc.name like %(search)s
 				or order_doc.donor_name like %(search)s
@@ -273,6 +293,9 @@ def get_donor_donation_orders(doctype, txt, searchfield, start, page_len, filter
 		""",
 		{
 			"donor": donor,
+			"book": book,
+			"book_serial_no": book_serial_no,
+			"receipt_number": receipt_number,
 			"search": search_text,
 			"start": cint(start),
 			"page_len": cint(page_len),

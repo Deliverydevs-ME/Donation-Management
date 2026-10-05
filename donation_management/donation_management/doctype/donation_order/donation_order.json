@@ -34,7 +34,6 @@
   "donation_book_leaf",
   "donation_book",
   "manual_receipt_number",
-  "mohasil_column_break",
   "manual_receipt_date",
   "manual_receipt_issued_by",
   "computerized_receipt",
@@ -331,10 +330,6 @@
    "hidden": 1,
    "label": "Manual Receipt Number",
    "read_only": 1
-  },
-  {
-   "fieldname": "mohasil_column_break",
-   "fieldtype": "Column Break"
   },
   {
    "depends_on": "eval:doc.is_mohasil_collection",

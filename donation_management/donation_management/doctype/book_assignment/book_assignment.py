@@ -1778,7 +1778,7 @@ def get_available_book_serial_nos(doctype, txt, searchfield, start, page_len, fi
 @frappe.validate_and_sanitize_search_inputs
 def get_mohasil_donation_books(doctype, txt, searchfield, start, page_len, filters):
 	filters = frappe._dict(filters or {})
-	if not filters.get("mohasil"):
+	if not filters.get("mohasil") or not (filters.get("book") or filters.get("book_serial_no")):
 		return []
 
 	search = "%%%s%%" % txt
@@ -1853,9 +1853,9 @@ def get_mohasil_donation_book_serials(doctype, txt, searchfield, start, page_len
 		inner join `tabBook Assignment` book
 			on book.name = detail.parent
 			where book.book_type in %(book_types)s
-			and book.status = %(status)s
-			and book.issued_to_employee = %(mohasil)s
-			and book.docstatus != 2
+				and book.status = %(status)s
+				and book.issued_to_employee = %(mohasil)s
+				and book.docstatus != 2
 			and detail.parentfield = 'assigned_books'
 			and detail.book_type = %(donation_book_type)s
 			and ifnull(detail.book_serial_no, '') != ''
@@ -1871,9 +1871,9 @@ def get_mohasil_donation_book_serials(doctype, txt, searchfield, start, page_len
 		""",
 		{
 			"book_types": (BOOK_TYPE_DONATION, BOOK_TYPE_MIXED),
-			"status": "Returned",
-			"mohasil": filters.get("mohasil"),
-			"donation_book_type": BOOK_TYPE_DONATION,
+				"status": "Returned",
+				"mohasil": filters.get("mohasil"),
+				"donation_book_type": BOOK_TYPE_DONATION,
 			"search": search,
 			"start": cint(start),
 			"page_len": cint(page_len),
@@ -1921,7 +1921,7 @@ def get_donation_book_for_serial(book_serial_no=None, mohasil=None):
 @frappe.validate_and_sanitize_search_inputs
 def get_mohasil_donation_book_leaves(doctype, txt, searchfield, start, page_len, filters):
 	filters = frappe._dict(filters or {})
-	if not filters.get("mohasil"):
+	if not filters.get("mohasil") or not (filters.get("book") or filters.get("book_serial_no")):
 		return []
 
 	search = "%%%s%%" % txt
@@ -1941,6 +1941,8 @@ def get_mohasil_donation_book_leaves(doctype, txt, searchfield, start, page_len,
 			and book.book_type in %(book_types)s
 			and book.status = %(status)s
 			and book.issued_to_employee = %(mohasil)s
+			and (%(book)s = '' or book.name = %(book)s)
+			and (%(book_serial_no)s = '' or detail.book_serial_no = %(book_serial_no)s)
 			and book.docstatus != 2
 			and leaf.status in ('Pending', 'Received', 'Returned Unused')
 			and ifnull(leaf.donation_order, '') = ''
@@ -1958,6 +1960,8 @@ def get_mohasil_donation_book_leaves(doctype, txt, searchfield, start, page_len,
 			"book_types": (BOOK_TYPE_DONATION, BOOK_TYPE_MIXED),
 			"status": "Returned",
 			"mohasil": filters.get("mohasil"),
+			"book": filters.get("book") or "",
+			"book_serial_no": filters.get("book_serial_no") or "",
 			"search": search,
 			"start": cint(start),
 			"page_len": cint(page_len),

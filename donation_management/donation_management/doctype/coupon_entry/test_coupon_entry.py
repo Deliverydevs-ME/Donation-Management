@@ -28,6 +28,9 @@ class TestCoupon(FrappeTestCase):
 		self.assertEqual(dashboard.internal_links["Book Assignment"], "book")
 		self.assertEqual(dashboard.internal_links["Journal Entry"], "journal_entry")
 		self.assertEqual(dashboard.non_standard_fieldnames["Coupon Book Leaf"], "coupon_entry")
+		self.assertTrue(
+			any("Coupon Book Leaf" in transaction["items"] for transaction in dashboard.transactions)
+		)
 		self.assertTrue(frappe.get_meta("Coupon Entry").has_field("book"))
 		self.assertTrue(frappe.get_meta("Coupon Entry").has_field("journal_entry"))
 		self.assertTrue(frappe.get_meta("Coupon Book Leaf").has_field("coupon_entry"))

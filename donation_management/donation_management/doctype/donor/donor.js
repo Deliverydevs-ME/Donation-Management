@@ -35,6 +35,13 @@ frappe.ui.form.on("Donor", {
 		frm.set_query("mohasil", () => ({
 			filters: mohasil_employee_filters,
 		}));
+
+		frm.set_query("person_name", "esaal_e_sawab", () => ({
+			filters: {
+				is_group: 0,
+				name: ["!=", frm.doc.name || ""],
+			},
+		}));
 	},
 
 	refresh(frm) {

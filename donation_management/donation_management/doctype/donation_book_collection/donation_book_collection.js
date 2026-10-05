@@ -1,4 +1,23 @@
 frappe.ui.form.on("Donation Book Collection", {
+	setup(frm) {
+		frm.set_query("book", () => ({
+			query: "donation_management.donation_management.doctype.donation_book_collection.donation_book_collection.get_donation_book_assignments",
+		}));
+
+		frm.set_query("book_serial_no", () => ({
+			query: "donation_management.donation_management.doctype.donation_book_collection.donation_book_collection.get_donation_book_serials",
+			filters: {
+				book: frm.doc.book || "",
+			},
+		}));
+	},
+
+	book(frm) {
+		if (frm.doc.book_serial_no) {
+			frm.set_value("book_serial_no", "");
+		}
+	},
+
 	refresh(frm) {
 		if (frm.doc.docstatus !== 1 || frm.doc.status !== "Submitted" || !frm.has_perm("write")) {
 			return;

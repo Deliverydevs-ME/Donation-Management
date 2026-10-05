@@ -169,6 +169,38 @@ def get_donor_esaal_e_sawab(donor=None):
 
 
 @frappe.whitelist()
+@frappe.validate_and_sanitize_search_inputs
+def get_esaal_person_options(doctype, txt, searchfield, start, page_len, filters=None):
+	"""Return only Persons registered in the selected Donor's Esaal table."""
+	filters = frappe._dict(filters or {})
+	if not filters.get("donor"):
+		return []
+
+	search = "%{}%".format(txt or "")
+	return frappe.db.sql(
+		"""
+		select person.name, person.customer_name
+		from `tabEsaal E Sawab Detail` detail
+		inner join `tabDonor` person on person.name = detail.person_name
+		where detail.parenttype = 'Donor'
+			and detail.parent = %(donor)s
+			and detail.parentfield = 'esaal_e_sawab'
+			and person.is_group = 0
+			and (
+				person.name like %(search)s
+				or person.customer_name like %(search)s
+			)
+		order by person.customer_name, person.name
+		limit %(start)s, %(page_len)s
+		""",
+		{
+			"donor": filters.get("donor"),
+			"search": search,
+			"start": cint(start),
+			"page_len": cint(page_len),
+		},
+	)
+@frappe.whitelist()
 def get_effective_donation_location(employee=None, donation_date=None):
 	return get_effective_donation_location_from_assignment(employee, donation_date)
 

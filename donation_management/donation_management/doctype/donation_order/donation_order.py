@@ -6,6 +6,7 @@ from frappe.model.document import Document
 from frappe.utils import cint, flt, getdate, now_datetime, today
 
 from donation_management.donation_management.doctype.donor.donor import (
+	ESAAL_RELATIONSHIP_LIMITS,
 	normalize_phone,
 	validate_mohasil_employee,
 )
@@ -100,7 +101,6 @@ class DonationOrder(Document):
 
 	def on_update(self):
 		self.update_linked_donation_book_usage()
-		self.sync_esaal_e_sawab_to_donor()
 		self.create_instrument_event_if_changed()
 		self.log_confidential_reference_changes()
 
@@ -112,7 +112,6 @@ class DonationOrder(Document):
 				)
 			)
 
-		self.sync_esaal_e_sawab_to_donor()
 		self.update_donor_program_enrollments()
 		if self.is_pending_pdc():
 			self.accounting_status = "Not Posted"
@@ -332,6 +331,10 @@ class DonationOrder(Document):
 		if not self.donor_name:
 			frappe.throw(frappe._("Donor is required before selecting Esaal e Sawab people."))
 
+		rows = list(self.get("esaal_e_sawab", []))
+		if not rows:
+			frappe.throw(frappe._("At least one person must be selected in Esaal e Sawab."))
+
 		registered_rows = frappe.get_all(
 			"Esaal E Sawab Detail",
 			filters={
@@ -341,26 +344,38 @@ class DonationOrder(Document):
 			},
 			fields=["person_name", "relationship"],
 		)
-		registered_keys = {
-			get_esaal_e_sawab_key(row.person_name, row.relationship) for row in registered_rows
-		}
+		registered_people = {row.person_name: row.relationship for row in registered_rows if row.person_name}
 		selected_keys = set()
+		relationship_counts = {}
 
-		for row in self.get("esaal_e_sawab", []):
+		for row in rows:
 			if not row.person_name or not row.relationship:
 				frappe.throw(frappe._("Person Name and Relationship are required in Esaal e Sawab row {0}.").format(row.idx))
+			if row.person_name not in registered_people:
+				frappe.throw(
+					frappe._("Person {0} is not registered in the selected Donor's Esaal e Sawab list.").format(
+						row.person_name
+					)
+				)
+			if registered_people[row.person_name] != row.relationship:
+				frappe.throw(
+					frappe._("The relationship for Person {0} must be fetched from the selected Donor.").format(
+						row.person_name
+					)
+				)
 
 			key = get_esaal_e_sawab_key(row.person_name, row.relationship)
 			if key in selected_keys:
 				frappe.throw(frappe._("Esaal e Sawab row {0} is duplicated.").format(row.idx))
-			if key not in registered_keys:
+			selected_keys.add(key)
+			relationship_counts[row.relationship] = relationship_counts.get(row.relationship, 0) + 1
+			limit = ESAAL_RELATIONSHIP_LIMITS.get(row.relationship)
+			if limit and relationship_counts[row.relationship] > limit:
 				frappe.throw(
-					frappe._("{0} with relationship {1} is not registered under the selected Donor.").format(
-						row.person_name,
-						row.relationship,
+					frappe._("Only {0} {1} relationship(s) are allowed in Esaal e Sawab.").format(
+						limit, row.relationship
 					)
 				)
-			selected_keys.add(key)
 
 	def validate_mohasil_details(self):
 		if self.manual_receipt_number:
@@ -798,38 +813,6 @@ class DonationOrder(Document):
 			self.cancellation_requested_by = frappe.session.user
 		if self.meta.has_field("cancellation_requested_on") and not self.get("cancellation_requested_on"):
 			self.cancellation_requested_on = now_datetime()
-
-	def sync_esaal_e_sawab_to_donor(self):
-		if not self.donor_name or not self.get("esaal_e_sawab"):
-			return
-
-		donor = frappe.get_doc("Donor", self.donor_name)
-		existing_keys = {
-			get_esaal_e_sawab_key(row.person_name, row.relationship)
-			for row in donor.get("esaal_e_sawab", [])
-			if row.person_name
-		}
-		changed = False
-
-		for row in self.get("esaal_e_sawab", []):
-			if not row.person_name:
-				continue
-			key = get_esaal_e_sawab_key(row.person_name, row.relationship)
-			if not key or key in existing_keys:
-				continue
-			donor.append(
-				"esaal_e_sawab",
-				{
-					"person_name": row.person_name,
-					"relationship": row.relationship,
-					"remarks": row.remarks,
-				},
-			)
-			existing_keys.add(key)
-			changed = True
-
-		if changed:
-			donor.save(ignore_permissions=True)
 
 	def set_bank_deposit_status(self):
 		if self.mode_of_payment_type == "Cash" and self.accounting_status == "Posted":

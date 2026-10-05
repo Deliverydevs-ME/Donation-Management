@@ -220,6 +220,22 @@ class Donor(NestedSet):
 
 			if not row.person_name:
 				frappe.throw(frappe._("Person Name is required in Esaal e Sawab row {0}.").format(row.idx))
+
+			person = frappe.db.get_value(
+				"Donor",
+				row.person_name,
+				["name", "family_relationship"],
+				as_dict=True,
+			)
+			if not person:
+				frappe.throw(frappe._("Person {0} was not found in Donor.").format(row.person_name))
+			if not person.get("family_relationship"):
+				frappe.throw(
+					frappe._("Family Relationship is required on Person {0} before adding them to Esaal e Sawab.").format(
+						row.person_name
+					)
+				)
+			row.relationship = person.get("family_relationship")
 			if not row.relationship:
 				frappe.throw(frappe._("Relationship is required in Esaal e Sawab row {0}.").format(row.idx))
 			if row.relationship not in ESAAL_RELATIONSHIPS:
@@ -228,9 +244,6 @@ class Donor(NestedSet):
 						row.relationship
 					)
 				)
-			if not frappe.db.exists("Donor", row.person_name):
-				frappe.throw(frappe._("Esaal e Sawab person {0} must be an existing Donor.").format(row.person_name))
-
 			key = (str(row.person_name).strip().casefold(), str(row.relationship).strip().casefold())
 			if key in seen:
 				frappe.throw(
