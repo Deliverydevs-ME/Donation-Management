@@ -62,6 +62,8 @@ class TestDonationBookLeaf(FrappeTestCase):
 			)
 
 		query, values = sql.call_args.args
+		self.assertIn("order_doc.name as label", query)
+		self.assertNotIn("concat(coalesce(order_doc.donor_name", query)
 		self.assertIn("order_doc.donation_book = %(book)s", query)
 		self.assertIn("order_doc.donation_book_serial_no = %(book_serial_no)s", query)
 		self.assertIn("tabDonation Order Purpose Detail", query)

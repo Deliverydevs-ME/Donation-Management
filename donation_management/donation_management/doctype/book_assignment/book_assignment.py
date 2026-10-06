@@ -1247,7 +1247,7 @@ def get_donation_book_used_receipts(
 			inner join `tabDonation Order Purpose Detail` detail
 				on detail.parent = parent.name
 			where parent.donation_book = %(book)s
-				and parent.docstatus != 2
+				and parent.docstatus = 1
 				and ifnull(detail.manual_receipt_number, '') != ''
 				{exclude_condition}
 				{serial_condition}
@@ -1255,7 +1255,7 @@ def get_donation_book_used_receipts(
 			select parent.manual_receipt_number as receipt_number
 			from `tabDonation Order` parent
 			where parent.donation_book = %(book)s
-				and parent.docstatus != 2
+				and parent.docstatus = 1
 				and ifnull(parent.manual_receipt_number, '') != ''
 				{exclude_condition}
 				{serial_condition}
@@ -1283,7 +1283,7 @@ def get_donation_book_order_total(book, exclude_order=None, donation_book_serial
 	if not book:
 		return 0
 
-	conditions = ["donation_book = %(book)s", "docstatus != 2"]
+	conditions = ["donation_book = %(book)s", "docstatus = 1"]
 	values = {"book": book}
 	if exclude_order:
 		conditions.append("name != %(exclude_order)s")
@@ -1490,7 +1490,7 @@ def refresh_donation_book_leaf_usage(book):
 		inner join `tabDonation Order Purpose Detail` detail
 			on detail.parent = parent.name
 		where parent.donation_book = %(book)s
-			and parent.docstatus != 2
+			and parent.docstatus = 1
 			and ifnull(detail.manual_receipt_number, '') != ''
 		union
 		select
@@ -1505,7 +1505,7 @@ def refresh_donation_book_leaf_usage(book):
 			parent.manual_receipt_number as receipt_number
 		from `tabDonation Order` parent
 		where parent.donation_book = %(book)s
-			and parent.docstatus != 2
+			and parent.docstatus = 1
 			and ifnull(parent.manual_receipt_number, '') != ''
 		""",
 		{"book": book},

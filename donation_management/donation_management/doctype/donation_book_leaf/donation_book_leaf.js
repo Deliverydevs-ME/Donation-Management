@@ -1,5 +1,12 @@
 frappe.ui.form.on("Donation Book Leaf", {
 	setup(frm) {
+		// Donation Order uses the donor as its global Link title. A Book Leaf must
+		// always show the actual order reference so the receipt can be reconciled.
+		const donation_order_field = frm.get_field("donation_order");
+		if (donation_order_field) {
+			donation_order_field.is_title_link = () => false;
+		}
+
 		frm.set_query("donation_order", () => ({
 			query: "donation_management.donation_management.doctype.donation_book_leaf.donation_book_leaf.get_donor_donation_orders",
 			filters: {
@@ -16,6 +23,13 @@ frappe.ui.form.on("Donation Book Leaf", {
 				donor: frm.doc.donor || "",
 			},
 		}));
+	},
+
+	refresh(frm) {
+		const donation_order_field = frm.get_field("donation_order");
+		if (donation_order_field && frm.doc.donation_order) {
+			donation_order_field.set_formatted_input(frm.doc.donation_order);
+		}
 	},
 
 	donor(frm) {

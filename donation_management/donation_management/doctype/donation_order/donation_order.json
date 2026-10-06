@@ -309,11 +309,12 @@
    "options": "Serial No"
   },
   {
-   "depends_on": "eval:doc.is_mohasil_collection",
-   "fieldname": "donation_book_leaf",
-   "fieldtype": "Link",
-   "label": "Donation Book Leaf",
-   "options": "Donation Book Leaf"
+	   "depends_on": "eval:doc.is_mohasil_collection",
+	   "fieldname": "donation_book_leaf",
+	   "fieldtype": "Link",
+	   "label": "Donation Book Leaf",
+	   "mandatory_depends_on": "eval:doc.is_mohasil_collection",
+	   "options": "Donation Book Leaf"
   },
   {
    "depends_on": "eval:doc.is_mohasil_collection",

@@ -8,6 +8,7 @@ from frappe.tests.utils import FrappeTestCase
 
 from donation_management.donation_management.doctype.donation_order.donation_order import (
 	DonationOrder,
+	_get_donation_book_leaf_for_mohasil,
 	get_esaal_e_sawab_key,
 )
 
@@ -79,3 +80,90 @@ class TestDonationOrder(FrappeTestCase):
 
 		with self.assertRaisesRegex(frappe.ValidationError, "Person Name and Relationship"):
 			order.validate_esaal_e_sawab_selection()
+
+	def test_mohasil_collection_requires_donation_book_leaf(self):
+		order = DonationOrder(
+			{
+				"doctype": "Donation Order",
+				"is_mohasil_collection": 1,
+				"mohasil": "EMP-1010",
+				"donation_book_serial_no": "DB-02",
+			}
+		)
+
+		with patch(
+			"donation_management.donation_management.doctype.donor.donor.validate_mohasil_employee"
+			), patch.object(order, "set_donation_book_from_serial"), patch.object(
+			order, "validate_donation_book_for_mohasil"
+		):
+			with self.assertRaisesRegex(frappe.ValidationError, "Donation Book Leaf is required"):
+				order.validate_mohasil_details()
+
+	def test_mohasil_location_error_explains_how_to_fix_assignment(self):
+		order = DonationOrder(
+			{
+				"doctype": "Donation Order",
+				"is_mohasil_collection": 1,
+				"mohasil": "EMP-1010",
+				"donation_posting_date": "2026-10-06",
+			}
+		)
+
+		with patch(
+			"donation_management.donation_management.doctype.donation_order.donation_order.get_assignment_for_date",
+			return_value=None,
+		):
+			with self.assertRaisesRegex(frappe.ValidationError, "Create or activate a Donation Location Assignment"):
+				order.set_and_validate_donation_location()
+
+	def test_mohasil_leaf_receipt_can_match_the_single_purpose_row(self):
+		order = DonationOrder(
+			{
+				"doctype": "Donation Order",
+				"manual_receipt_number": "002",
+				"purpose_details": [{"manual_receipt_number": "002"}],
+			}
+		)
+
+		with patch(
+			"donation_management.donation_management.doctype.donation_order.donation_order.get_existing_manual_receipt_order",
+			return_value=None,
+		):
+			order.validate_manual_receipt_uniqueness()
+
+	def test_manual_receipt_uniqueness_rejects_duplicate_purpose_rows(self):
+		order = DonationOrder(
+			{
+				"doctype": "Donation Order",
+				"purpose_details": [
+					{"manual_receipt_number": "002"},
+					{"manual_receipt_number": "002"},
+				],
+			}
+		)
+
+		with self.assertRaisesRegex(frappe.ValidationError, "Manual Receipt Number is repeated"):
+			order.validate_manual_receipt_uniqueness()
+
+	def test_current_order_can_submit_its_legacy_used_book_leaf(self):
+		leaf = frappe._dict(
+			name="DBL-TEST",
+			book="BK-TEST",
+			book_serial_no="DB-TEST",
+			receipt_number="001",
+			status="Used",
+			donation_order="DO-TEST",
+		)
+		assignment = frappe._dict(
+			book="BK-TEST",
+			book_status="Returned",
+			issued_to_employee="EMP-TEST",
+			book_type="Donation Book",
+		)
+
+		with patch.object(frappe.db, "get_value", return_value=leaf), patch.object(
+			frappe.db, "sql", return_value=[assignment]
+		):
+			result = _get_donation_book_leaf_for_mohasil("DBL-TEST", "EMP-TEST", current_order="DO-TEST")
+
+		self.assertEqual(result.name, "DBL-TEST")

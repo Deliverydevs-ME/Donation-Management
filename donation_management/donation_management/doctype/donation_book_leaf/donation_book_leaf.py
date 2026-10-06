@@ -251,7 +251,7 @@ def get_donor_journal_entries(doctype, txt, searchfield, start, page_len, filter
 @frappe.whitelist()
 @frappe.validate_and_sanitize_search_inputs
 def get_donor_donation_orders(doctype, txt, searchfield, start, page_len, filters):
-	"""Return Donation Orders belonging to the selected donor with a useful label."""
+	"""Return Donation Orders belonging to the selected donor, led by their order number."""
 	filters = frappe.parse_json(filters) if isinstance(filters, str) else frappe._dict(filters or {})
 	donor = filters.get("donor")
 	if not donor:
@@ -265,7 +265,8 @@ def get_donor_donation_orders(doctype, txt, searchfield, start, page_len, filter
 		"""
 		select
 			order_doc.name,
-			concat(coalesce(order_doc.donor_name, ''), ' - ', order_doc.name) as label,
+			order_doc.name as label,
+			order_doc.donor_name,
 			order_doc.donation_posting_date
 		from `tabDonation Order` order_doc
 		where order_doc.donor_name = %(donor)s

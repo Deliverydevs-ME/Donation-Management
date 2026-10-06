@@ -40,21 +40,43 @@ frappe.ui.form.on("Donation Order", {
 
 		frm.set_query("donation_location", () => ({}));
 
-		frm.set_query("donation_book_serial_no", () => ({
-			query: "donation_management.donation_management.doctype.book_assignment.book_assignment.get_mohasil_donation_book_serials",
-			filters: {
-				mohasil: frm.doc.mohasil || "",
-			},
-		}));
+		frm.set_query("donation_book_serial_no", () => {
+			if (cint(frm.doc.is_mohasil_collection) && !frm.doc.mohasil) {
+				show_link_dependency_message(
+					frm,
+					"donation_book_serial_no",
+					__("Select a Mohasil first. Only returned Donation Book Serial Nos assigned to that Mohasil can be selected.")
+				);
+			}
 
-		frm.set_query("donation_book_leaf", () => ({
-			query: "donation_management.donation_management.doctype.book_assignment.book_assignment.get_mohasil_donation_book_leaves",
-			filters: {
-				mohasil: frm.doc.mohasil || "",
-				book: frm.doc.donation_book || "",
-				book_serial_no: frm.doc.donation_book_serial_no || "",
-			},
-		}));
+			return {
+				query: "donation_management.donation_management.doctype.book_assignment.book_assignment.get_mohasil_donation_book_serials",
+				filters: {
+					mohasil: frm.doc.mohasil || "",
+				},
+			};
+		});
+
+		frm.set_query("donation_book_leaf", () => {
+			if (cint(frm.doc.is_mohasil_collection) && !frm.doc.mohasil) {
+				show_link_dependency_message(frm, "donation_book_leaf", __("Select a Mohasil first."));
+			} else if (cint(frm.doc.is_mohasil_collection) && !frm.doc.donation_book_serial_no) {
+				show_link_dependency_message(
+					frm,
+					"donation_book_leaf",
+					__("Select the Donation Book Serial No first. The leaf list is filtered to that returned book.")
+				);
+			}
+
+			return {
+				query: "donation_management.donation_management.doctype.book_assignment.book_assignment.get_mohasil_donation_book_leaves",
+				filters: {
+					mohasil: frm.doc.mohasil || "",
+					book: frm.doc.donation_book || "",
+					book_serial_no: frm.doc.donation_book_serial_no || "",
+				},
+			};
+		});
 
 		frm.set_query("bank_account", () => {
 			const filters = { is_group: 0, account_type: "Bank" };
@@ -73,8 +95,9 @@ frappe.ui.form.on("Donation Order", {
 				filters.company = frm.doc.company;
 			}
 
-			if (["Cash", "Bank"].includes(frm.doc.mode_of_payment_type)) {
-				filters.account_type = frm.doc.mode_of_payment_type;
+			const mode_of_payment_type = get_effective_mode_of_payment_type(frm);
+			if (["Cash", "Bank"].includes(mode_of_payment_type)) {
+				filters.account_type = mode_of_payment_type;
 			}
 
 			if (is_bank_draft_mode(frm) && frm.doc.donation_type) {
@@ -134,8 +157,9 @@ frappe.ui.form.on("Donation Order", {
 			if (frm.doc.company) {
 				filters.company = frm.doc.company;
 			}
-			if (["Cash", "Bank"].includes(frm.doc.mode_of_payment_type)) {
-				filters.account_type = frm.doc.mode_of_payment_type;
+			const mode_of_payment_type = get_effective_mode_of_payment_type(frm);
+			if (["Cash", "Bank"].includes(mode_of_payment_type)) {
+				filters.account_type = mode_of_payment_type;
 			}
 			if (is_bank_draft_mode(frm) && row.donation_type) {
 				filters.account_name = ["like", `%${get_receiving_account_donation_type(row.donation_type)}%`];
@@ -293,7 +317,18 @@ frappe.ui.form.on("Donation Order", {
 		}
 	},
 
+	validate(frm) {
+		const errors = get_donation_order_client_validation_errors(frm);
+		if (!errors.length) {
+			return;
+		}
+
+		frappe.validated = false;
+		show_donation_order_validation_errors(errors);
+	},
+
 	mohasil(frm) {
+		frm.__donation_order_link_messages = {};
 		if (frm.doc.donation_book_serial_no) {
 			frm.set_value("donation_book_serial_no", "");
 		}
@@ -1024,8 +1059,9 @@ function hide_legacy_location_field(frm) {
 }
 
 function toggle_purpose_grid_debit_account(frm) {
-	const show_row_debit_account = Boolean(frm.doc.mode_of_payment_type) || is_deposit_account_mode(frm);
-	const cash_mode = frm.doc.mode_of_payment_type === "Cash";
+	const mode_of_payment_type = get_effective_mode_of_payment_type(frm);
+	const show_row_debit_account = Boolean(mode_of_payment_type) || is_deposit_account_mode(frm);
+	const cash_mode = mode_of_payment_type === "Cash";
 	const manual_bank_mode = is_manual_bank_mode(frm);
 	const bank_draft_mode = is_bank_draft_mode(frm);
 	const deposit_account_mode = is_deposit_account_mode(frm);
@@ -1041,7 +1077,7 @@ function toggle_purpose_grid_debit_account(frm) {
 }
 
 function toggle_parent_debit_account(frm) {
-	const cash_mode = frm.doc.mode_of_payment_type === "Cash";
+	const cash_mode = get_effective_mode_of_payment_type(frm) === "Cash";
 	const manual_bank_mode = is_manual_bank_mode(frm);
 	const bank_draft_mode = is_bank_draft_mode(frm);
 	const deposit_account_mode = is_deposit_account_mode(frm);
@@ -1457,8 +1493,23 @@ function set_donation_book_from_serial(frm) {
 		},
 		callback(response) {
 			const book = response.message || {};
+			if (!book.name) {
+				show_donation_order_message(
+					__("Donation Book Not Available"),
+					__("The selected Donation Book Serial No is not available for the selected Mohasil. Select a returned book assigned to this Mohasil.")
+				);
+				set_value_if_changed(frm, "donation_book", "");
+				set_value_if_changed(frm, "donation_book_leaf", "");
+				return;
+			}
 			set_value_if_changed(frm, "donation_book", book.name || "");
 			check_all_manual_receipt_duplicates(frm);
+		},
+		error() {
+			show_donation_order_message(
+				__("Donation Book Lookup Failed"),
+				__("The Donation Book could not be loaded. Confirm that Mohasil and Donation Book Serial No are selected, then try again.")
+			);
 		},
 	});
 }
@@ -1477,6 +1528,10 @@ function set_donation_book_from_leaf(frm) {
 		callback(response) {
 			const leaf = response.message || {};
 			if (!leaf.name) {
+				show_donation_order_message(
+					__("Donation Book Leaf Not Available"),
+					__("The selected Donation Book Leaf is not available. Select an unused leaf belonging to the selected Mohasil and returned Donation Book.")
+				);
 				return;
 			}
 
@@ -1492,6 +1547,12 @@ function set_donation_book_from_leaf(frm) {
 				);
 				frm.refresh_field("purpose_details");
 			}
+		},
+		error() {
+			show_donation_order_message(
+				__("Donation Book Leaf Lookup Failed"),
+				__("The Donation Book Leaf could not be loaded. Select Mohasil and Donation Book Serial No first, then try again.")
+			);
 		},
 	});
 }
@@ -1579,6 +1640,213 @@ function clear_purpose_receipt_numbers(frm) {
 	frm.refresh_field("purpose_details");
 }
 
+function show_link_dependency_message(frm, fieldname, message) {
+	frm.__donation_order_link_messages = frm.__donation_order_link_messages || {};
+	if (frm.__donation_order_link_messages[fieldname]) {
+		return;
+	}
+
+	frm.__donation_order_link_messages[fieldname] = true;
+	frappe.msgprint({
+		title: __("Select a Required Field First"),
+		indicator: "orange",
+		message,
+	});
+}
+
+function get_donation_order_client_validation_errors(frm) {
+	const doc = frm.doc;
+	const errors = [];
+	const add_error = (message) => {
+		if (!errors.includes(message)) {
+			errors.push(message);
+		}
+	};
+	const is_mohasil_collection = cint(doc.is_mohasil_collection);
+	const purpose_rows = doc.purpose_details || [];
+	const has_legacy_purpose =
+		!purpose_rows.length && doc.donation_type && doc.purpose_of_donation && doc.donation_purpose;
+
+	if (!doc.donor_name) {
+		add_error(__("Select a Donor."));
+	}
+	if (!doc.name_on_donation_slip) {
+		add_error(__("Enter the Name on Donation Slip."));
+	}
+	if (!doc.company) {
+		add_error(__("Select a Company."));
+	}
+	if (!doc.mode_of_payment) {
+		add_error(__("Select a Mode of Payment."));
+	}
+	const mode_of_payment_type = get_effective_mode_of_payment_type(frm);
+	if (doc.mode_of_payment && !doc.mode_of_payment_type) {
+		add_error(
+			__("The Mode of Payment account details have not loaded. Re-select the Mode of Payment and wait for the account fields to populate.")
+		);
+	}
+	if (!doc.donation_location && !is_mohasil_collection) {
+		add_error(__("Select a Donation Location."));
+	}
+
+	if (is_mohasil_collection) {
+		if (!doc.mohasil) {
+			add_error(__("Select a Mohasil for Mohasil Collection."));
+		}
+		if (!doc.donation_book_serial_no) {
+			add_error(__("Select a returned Donation Book Serial No assigned to the selected Mohasil."));
+		}
+		if (!doc.donation_book_leaf) {
+			add_error(__("Select an unused Donation Book Leaf."));
+		}
+		if (!doc.location_assignment) {
+			add_error(
+				__(
+					"No Donation Location Assignment is loaded for this Mohasil and Posting Date. " +
+					"Create or activate the assignment before saving."
+				)
+			);
+		}
+		if (!doc.donation_location) {
+			add_error(__("A Donation Location must be loaded from the Mohasil's active location assignment."));
+		}
+	}
+
+	if (!purpose_rows.length && !has_legacy_purpose) {
+		add_error(__("Add at least one Purpose Details row."));
+	}
+
+	purpose_rows.forEach((row, index) => {
+		const row_number = row.idx || index + 1;
+		if (!row.donation_type) {
+			add_error(__("Select Type of Donation in Purpose Details row {0}.", [row_number]));
+		}
+		if (!row.donation_category) {
+			add_error(__("Select Donation Category in Purpose Details row {0}.", [row_number]));
+		}
+		if (!row.donation_purpose) {
+			add_error(__("Select Donation Purpose in Purpose Details row {0}.", [row_number]));
+		}
+		if (flt(row.amount) <= 0) {
+			add_error(__("Enter an amount greater than zero in Purpose Details row {0}.", [row_number]));
+		}
+		if (is_mohasil_collection && !row.manual_receipt_number) {
+			add_error(__("Enter the Manual Receipt Number in Purpose Details row {0}.", [row_number]));
+		}
+	});
+
+	if (is_esaal_e_sawab_order(frm)) {
+		const esaal_rows = doc.esaal_e_sawab || [];
+		if (!esaal_rows.length) {
+			add_error(__("Select at least one person in the Esaal e Sawab table."));
+		}
+		esaal_rows.forEach((row, index) => {
+			const row_number = row.idx || index + 1;
+			if (!row.person_name) {
+				add_error(__("Select a Person Name in Esaal e Sawab row {0}.", [row_number]));
+			}
+			if (!row.relationship) {
+				add_error(__("Relationship has not been fetched in Esaal e Sawab row {0}. Select a registered person and wait for it to load.", [row_number]));
+			}
+		});
+	}
+
+	const is_sponsorship = is_sponsorship_order(frm);
+	if (doc.requires_student && !is_sponsorship && !doc.student_name) {
+		add_error(__("Select a Student for the selected Donation Purpose."));
+	}
+	if (doc.requires_prisoner && !is_sponsorship && !doc.prisoner_name) {
+		add_error(__("Enter a Prisoner for the selected Donation Purpose."));
+	}
+
+	if (is_sponsorship) {
+		const sponsorship_rows = doc.sponsorship_students || [];
+		if (!sponsorship_rows.length) {
+			add_error(__("Add at least one Sponsorship Allocation row."));
+		}
+		sponsorship_rows.forEach((row, index) => {
+			const row_number = row.idx || index + 1;
+			if (!row.sponsorship_program) {
+				add_error(__("Select a Sponsorship Program in Sponsorship Allocation row {0}.", [row_number]));
+			}
+			if (cint(row.quantity) <= 0) {
+				add_error(__("Quantity must be greater than zero in Sponsorship Allocation row {0}.", [row_number]));
+			}
+		});
+	}
+
+	if (doc.mode_of_payment === "Cheque") {
+		if (!doc.cheque_number) {
+			add_error(__("Enter the Cheque Number."));
+		}
+		if (cint(doc.is_post_dated_cheque) && !doc.cheque_deposit_date) {
+			add_error(__("Enter the Cheque Deposit Date for a Post-Dated Cheque."));
+		}
+	}
+	if (["Cheque", "Card Payment"].includes(doc.mode_of_payment) && !doc.bank_account) {
+		add_error(__("Select the Deposit Account for Mode of Payment {0}.", [doc.mode_of_payment]));
+	}
+	if (mode_of_payment_type === "Cash" && !doc.debit_account) {
+		add_error(__("Select the Cash Debit Account."));
+	}
+	if (
+		mode_of_payment_type === "Bank" &&
+		!is_deposit_account_mode(frm) &&
+		!is_bank_draft_mode(frm) &&
+		!doc.debit_account
+	) {
+		add_error(__("Select the Bank Debit Account for the selected Mode of Payment."));
+	}
+
+	purpose_rows.forEach((row, index) => {
+		if (!row.debit_account) {
+			add_error(__("Select a Debit Account in Purpose Details row {0}.", [row.idx || index + 1]));
+		}
+	});
+
+	if (is_mohasil_collection && (doc.cash_denominations || []).length) {
+		const valid_denominations = [10, 20, 50, 100, 500, 1000, 5000];
+		let denomination_total = 0;
+		let has_note_count = false;
+		(doc.cash_denominations || []).forEach((row, index) => {
+			const row_number = row.idx || index + 1;
+			if (!valid_denominations.includes(cint(row.denomination))) {
+				add_error(__("Select a valid cash denomination in row {0}.", [row_number]));
+			}
+			if (cint(row.note_count) < 0) {
+				add_error(__("Note count cannot be negative in Cash Denomination row {0}.", [row_number]));
+			}
+			if (cint(row.note_count)) {
+				has_note_count = true;
+			}
+			denomination_total += cint(row.denomination) * cint(row.note_count);
+		});
+		if (has_note_count && denomination_total !== flt(doc.donation_amount)) {
+			add_error(
+				__("Cash denomination total {0} must match Total Donation Received {1}.", [
+					format_currency(denomination_total, doc.currency),
+					format_currency(flt(doc.donation_amount), doc.currency),
+				])
+			);
+		}
+	}
+
+	return errors;
+}
+
+function show_donation_order_validation_errors(errors) {
+	const items = errors.map((error) => `<li>${escape_html(error)}</li>`).join("");
+	frappe.msgprint({
+		title: __("Donation Order Cannot Be Saved"),
+		indicator: "red",
+		message: `<p>${__("Please correct the following items:")}</p><ul>${items}</ul>`,
+	});
+}
+
+function show_donation_order_message(title, message) {
+	frappe.msgprint({ title, indicator: "red", message });
+}
+
 function set_mohasil_from_selected_donor(frm) {
 	if (!frm.doc.donor_name || frm.doc.mohasil) {
 		return;
@@ -1606,10 +1874,29 @@ function set_effective_donation_location(frm) {
 		},
 		callback(response) {
 			const assignment = response.message || {};
+			if (!assignment.assignment) {
+				set_value_if_changed(frm, "donation_location", "");
+				set_value_if_changed(frm, "location_assignment", "");
+				show_donation_order_message(
+					__("Donation Location Assignment Missing"),
+					__("No active Donation Location Assignment was found for the selected Mohasil and Donation Posting Date. Create or activate an assignment before saving.")
+				);
+				return;
+			}
 			set_value_if_changed(frm, "donation_location", assignment.donation_location || "");
 			set_value_if_changed(frm, "location_assignment", assignment.assignment || "");
 		},
+		error() {
+			show_donation_order_message(
+				__("Donation Location Lookup Failed"),
+				__("The Donation Location could not be loaded. Confirm the Mohasil and Donation Posting Date, then try again.")
+			);
+		},
 	});
+}
+
+function get_effective_mode_of_payment_type(frm) {
+	return frm.doc.mode_of_payment_type || (frm.doc.mode_of_payment === "Cash" ? "Cash" : "");
 }
 
 function update_cash_denomination_row(frm, cdt, cdn) {

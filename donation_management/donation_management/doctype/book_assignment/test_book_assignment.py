@@ -12,6 +12,7 @@ from donation_management.donation_management.doctype.book_assignment.book_assign
 	get_book_item_details,
 	get_book_items,
 	get_book_stock_qty,
+	get_donation_book_used_receipts,
 	get_receipt_range_count,
 	receipt_number_in_range,
 	receipt_series_prefix,
@@ -182,3 +183,10 @@ class TestBookAssignment(FrappeTestCase):
 			self.assertEqual(get_book_stock_qty("Donation Book", ""), 0)
 
 		get_value.assert_not_called()
+
+	def test_draft_donation_orders_do_not_consume_book_receipts(self):
+		with patch.object(frappe.db, "sql", return_value=[]) as sql:
+			self.assertEqual(get_donation_book_used_receipts("BK-TEST"), 0)
+
+		query = sql.call_args.args[0]
+		self.assertIn("parent.docstatus = 1", query)

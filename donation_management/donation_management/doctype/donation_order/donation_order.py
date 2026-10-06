@@ -266,12 +266,19 @@ class DonationOrder(Document):
 
 		if cint(self.is_mohasil_collection):
 			if not self.mohasil:
-				frappe.throw(frappe._("Mohasil is required for Mohasil Collection."))
+				frappe.throw(
+					frappe._(
+						"Mohasil is required for Mohasil Collection. Select the Mohasil before selecting a Donation Book."
+					)
+				)
 
 			assignment = get_assignment_for_date(self.mohasil, posting_date)
 			if not assignment:
 				frappe.throw(
-					frappe._("No active Donation Location Assignment found for Mohasil {0} on {1}.").format(
+					frappe._(
+						"No active Donation Location Assignment found for Mohasil {0} on {1}. "
+						"Create or activate a Donation Location Assignment for this Mohasil and date."
+					).format(
 						self.mohasil,
 						frappe.format_value(posting_date, {"fieldtype": "Date"}),
 					)
@@ -404,7 +411,20 @@ class DonationOrder(Document):
 			frappe.throw(frappe._("Mohasil is required for Mohasil Collection."))
 
 		if not self.donation_book_serial_no:
-			frappe.throw(frappe._("Donation Book is required for Mohasil Collection."))
+			frappe.throw(
+				frappe._(
+					"Donation Book Serial No is required for Mohasil Collection. "
+					"Select a returned Donation Book Serial No assigned to the selected Mohasil."
+				)
+			)
+
+		if not self.donation_book_leaf:
+			frappe.throw(
+				frappe._(
+					"Donation Book Leaf is required for Mohasil Collection. "
+					"Select an unused Donation Book Leaf after selecting the Donation Book Serial No."
+				)
+			)
 
 		self.set_donation_book_from_serial()
 
@@ -467,9 +487,10 @@ class DonationOrder(Document):
 			frappe.throw(frappe._("Book {0} is not a Donation Book.").format(self.donation_book))
 		if book.status != "Returned":
 			frappe.throw(
-				frappe._("Donation Book {0} must be Returned before Donation Orders can be created against its receipts.").format(
-					self.donation_book
-				)
+				frappe._(
+					"Donation Book {0} is currently {1}. Use the Return action on the Book Assignment "
+					"and complete the cash collection before creating a Donation Order."
+				).format(self.donation_book, book.status or frappe._("Draft"))
 			)
 		if book.issued_to_employee != self.mohasil:
 			frappe.throw(
@@ -670,15 +691,18 @@ class DonationOrder(Document):
 		return existing[0][0] if existing else None
 
 	def validate_manual_receipt_uniqueness(self):
-		receipt_numbers = []
 		parent_receipt = str(self.manual_receipt_number or "").strip()
-		if parent_receipt:
-			receipt_numbers.append(parent_receipt)
-
+		purpose_receipts = []
 		for row in self.get("purpose_details", []):
 			receipt_number = str(row.get("manual_receipt_number") or "").strip()
 			if receipt_number:
-				receipt_numbers.append(receipt_number)
+				purpose_receipts.append(receipt_number)
+
+		# A selected Donation Book Leaf intentionally copies its receipt number to
+		# the parent order and its single Purpose Details row. Count it only once.
+		receipt_numbers = list(purpose_receipts)
+		if parent_receipt and parent_receipt not in purpose_receipts:
+			receipt_numbers.append(parent_receipt)
 
 		if not receipt_numbers:
 			if self.meta.has_field("manual_receipt_reconciliation_status"):
@@ -2087,7 +2111,9 @@ def _get_donation_book_leaf_for_mohasil(leaf_name, mohasil, current_order=None):
 	if not leaf:
 		frappe.throw(frappe._("Donation Book Leaf {0} was not found.").format(leaf_name))
 
-	if leaf.status in ("Used", "Cancelled", "Destroyed", "Missing"):
+	if leaf.status in ("Cancelled", "Destroyed", "Missing") or (
+		leaf.status == "Used" and leaf.donation_order != current_order
+	):
 		frappe.throw(frappe._("Donation Book Leaf {0} is already {1}.").format(leaf.name, leaf.status))
 	if leaf.donation_order and leaf.donation_order != current_order:
 		frappe.throw(
