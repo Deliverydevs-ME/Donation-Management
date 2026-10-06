@@ -221,36 +221,24 @@ class Donor(NestedSet):
 			if not row.person_name:
 				frappe.throw(frappe._("Person Name is required in Esaal e Sawab row {0}.").format(row.idx))
 
-			person = frappe.db.get_value(
-				"Donor",
-				row.person_name,
-				["name", "family_relationship"],
-				as_dict=True,
-			)
-			if not person:
-				frappe.throw(frappe._("Person {0} was not found in Donor.").format(row.person_name))
-			if not person.get("family_relationship"):
-				frappe.throw(
-					frappe._("Family Relationship is required on Person {0} before adding them to Esaal e Sawab.").format(
-						row.person_name
-					)
-				)
-			row.relationship = person.get("family_relationship")
+			row.person_name = " ".join(str(row.person_name).strip().split())
+			row.relationship = " ".join(str(row.relationship or "").strip().split())
 			if not row.relationship:
 				frappe.throw(frappe._("Relationship is required in Esaal e Sawab row {0}.").format(row.idx))
-			if row.relationship not in ESAAL_RELATIONSHIPS:
+
+			relationships_by_key = {relationship.casefold(): relationship for relationship in ESAAL_RELATIONSHIPS}
+			canonical_relationship = relationships_by_key.get(row.relationship.casefold())
+			if not canonical_relationship:
 				frappe.throw(
 					frappe._("Relationship {0} is not an allowed Esaal e Sawab relationship.").format(
 						row.relationship
 					)
 				)
-			key = (str(row.person_name).strip().casefold(), str(row.relationship).strip().casefold())
+			row.relationship = canonical_relationship
+			key = row.person_name.casefold()
 			if key in seen:
 				frappe.throw(
-					frappe._("Esaal e Sawab person {0} with relationship {1} is entered more than once.").format(
-						row.person_name,
-						row.relationship,
-					)
+					frappe._("Esaal e Sawab person {0} is entered more than once.").format(row.person_name)
 				)
 			seen.add(key)
 			counts[row.relationship] = counts.get(row.relationship, 0) + 1

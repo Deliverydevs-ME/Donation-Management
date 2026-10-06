@@ -42,6 +42,9 @@ class TestDonationOrder(FrappeTestCase):
 		self.assertIn("prompt_to_add_esaal_person", order_script)
 		self.assertIn("Add Person to Donor", order_script)
 		self.assertIn('"only_select", 1', order_script)
+		self.assertIn("get_donor_esaal_e_sawab", order_script)
+		self.assertIn('"person_name", "fieldtype", "Select"', order_script)
+		self.assertIn('"relationship", "read_only", 1', order_script)
 		self.assertIn("ESAAL_E_SAWAB_RETURN_CONTEXT_KEY", order_script)
 		self.assertIn("return_to_donation_order_after_esaal_person_added", donor_script)
 

@@ -12,12 +12,9 @@
  "fields": [
   {
    "fieldname": "person_name",
-   "fieldtype": "Link",
+   "fieldtype": "Data",
    "in_list_view": 1,
    "label": "Person Name",
-   "no_create": 1,
-   "no_quick_entry": 1,
-   "options": "Donor",
    "reqd": 1
   },
   {
@@ -26,7 +23,6 @@
    "fieldtype": "Data",
    "in_list_view": 1,
    "label": "Relationship",
-   "read_only": 1,
    "reqd": 1
   },
   {
