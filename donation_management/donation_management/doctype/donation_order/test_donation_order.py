@@ -2,6 +2,7 @@
 # See license.txt
 
 from pathlib import Path
+from inspect import unwrap
 from unittest.mock import patch
 
 import frappe
@@ -12,9 +13,27 @@ from donation_management.donation_management.doctype.donation_order.donation_ord
 	_get_donation_book_leaf_for_mohasil,
 	get_esaal_e_sawab_key,
 )
+from donation_management.donation_management.api import get_esaal_person_options
 
 
 class TestDonationOrder(FrappeTestCase):
+	def test_esaal_person_search_accepts_json_link_filters(self):
+		with patch.object(frappe.db, "sql", return_value=[]) as sql:
+			self.assertEqual(
+				unwrap(get_esaal_person_options)(
+					"Donor",
+					"",
+					"name",
+					0,
+					1,
+					'{"donor":"DN-10650"}',
+				),
+				[],
+			)
+
+		sql.assert_called_once()
+		self.assertIn("DN-10650", str(sql.call_args))
+
 	def test_esaal_empty_state_guides_users_to_selected_donor(self):
 		doctype_root = Path(__file__).resolve().parent
 		order_script = (doctype_root / "donation_order.js").read_text()

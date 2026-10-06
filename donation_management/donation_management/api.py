@@ -172,7 +172,7 @@ def get_donor_esaal_e_sawab(donor=None):
 @frappe.validate_and_sanitize_search_inputs
 def get_esaal_person_options(doctype, txt, searchfield, start, page_len, filters=None):
 	"""Return only Persons registered in the selected Donor's Esaal table."""
-	filters = frappe._dict(filters or {})
+	filters = frappe.parse_json(filters) if isinstance(filters, str) else frappe._dict(filters or {})
 	if not filters.get("donor"):
 		return []
 
