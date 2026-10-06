@@ -1,6 +1,8 @@
 # Copyright (c) 2026, osama.ahmed@deliverydevs.com and Contributors
 # See license.txt
 
+from pathlib import Path
+
 import frappe
 from unittest.mock import patch
 from frappe.tests.utils import FrappeTestCase
@@ -25,6 +27,29 @@ from donation_management.donation_management.doctype.book_assignment.book_assign
 
 
 class TestBookAssignment(FrappeTestCase):
+	def test_submittable_doctypes_use_business_status_indicators_in_list_view(self):
+		doctype_root = Path(__file__).resolve().parents[1]
+		doctypes = (
+			"Book Assignment",
+			"Book Page Adjustment",
+			"Coupon Book Leaf",
+			"Coupon Entry",
+			"Donation Book Collection",
+			"Donation Book Leaf",
+			"Donation Box",
+			"Donation Cash Handover",
+			"Donation Closing",
+			"Donation Instrument Event",
+			"Donation Location Assignment",
+			"Donation Order",
+		)
+
+		for doctype in doctypes:
+			folder = frappe.scrub(doctype)
+			script = doctype_root / folder / f"{folder}_list.js"
+			self.assertTrue(script.exists(), f"{doctype} needs a list-view status indicator")
+			self.assertIn("get_indicator(doc)", script.read_text())
+
 	def test_donation_book_is_reopenable_while_a_leaf_is_unsubmitted(self):
 		with patch.object(frappe.db, "exists", return_value="DBL-00001") as exists:
 			self.assertTrue(has_unsubmitted_donation_book_leaves("BK-00001"))
