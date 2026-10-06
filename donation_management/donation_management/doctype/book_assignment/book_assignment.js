@@ -620,6 +620,9 @@ function add_action_buttons(frm) {
 		frm.add_custom_button(__("Return"), () => show_donation_book_return_dialog(frm), __("Actions"));
 	} else if (frm.doc.status === "Returned") {
 		frm.add_custom_button(__("Close"), () => close_book(frm), __("Actions"));
+		if ([book_type_donation, book_type_mixed].includes(frm.doc.book_type) && frm.has_perm("write")) {
+			frm.add_custom_button(__("Reopen"), () => show_reopen_dialog(frm), __("Actions"));
+		}
 		if ([book_type_coupon, book_type_mixed].includes(frm.doc.book_type)) {
 			frm.add_custom_button(__("Request Page Adjustment"), () => create_page_adjustment(frm), __("Actions"));
 		}
@@ -944,15 +947,8 @@ function build_return_dialog(frm, accounting_defaults, return_details) {
 	const coupon_value = cint(return_details.coupon_value) || cint(frm.doc.coupon_value);
 	dialog.set_value("used_pages", used_pages);
 	dialog.set_value("coupon_value", coupon_value);
-	dialog.set_value("collected_amount", flt(used_pages * coupon_value));
-	update_return_collected_amount(dialog, frm);
+	dialog.set_value("collected_amount", flt(return_details.total_amount));
 	update_return_denomination_total(dialog);
-}
-
-function update_return_collected_amount(dialog, frm) {
-	const used_pages = cint(dialog.get_value("used_pages"));
-	const coupon_value = cint(dialog.get_value("coupon_value")) || cint(frm.doc.coupon_value);
-	dialog.set_value("collected_amount", used_pages * coupon_value);
 }
 
 function update_return_denomination_total(dialog) {
@@ -977,19 +973,6 @@ function validate_return_denomination_total(dialog, frm) {
 
 	if (used_pages > cint(frm.doc.total_pages)) {
 		frappe.msgprint(__("Used Pages cannot exceed Total Pages."));
-		return false;
-	}
-
-	const coupon_value = cint(dialog.get_value("coupon_value")) || cint(frm.doc.coupon_value);
-	const expected_amount = cint(dialog.get_value("used_pages")) * coupon_value;
-	if (collected_amount !== expected_amount) {
-		frappe.msgprint(
-			__("Total Amount Collected must be {0} because Used Pages x Coupon Value is {1} x {2}.", [
-				format_currency(expected_amount),
-				cint(dialog.get_value("used_pages")),
-				coupon_value,
-			])
-		);
 		return false;
 	}
 

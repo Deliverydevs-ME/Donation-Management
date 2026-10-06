@@ -5,8 +5,10 @@ ITEM_COUPON_VALUES = "\n10\n50\n100\n500\n1000\n5000"
 
 
 def execute():
+	from donation_management.patches.cleanup_donation_book_collection_layout import execute as cleanup_collection_layout
 	from donation_management.patches.ensure_donation_order_layout_fields import execute as ensure_donation_order_layout
 
+	cleanup_collection_layout()
 	ensure_roles()
 	ensure_item_coupon_value_field()
 	ensure_box_shapes()

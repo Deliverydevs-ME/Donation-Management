@@ -421,6 +421,13 @@ class BookAssignment(Document):
 		if previous_status == "Closed" and status == "Returned" and self.flags.reopening_book:
 			return
 
+		if (
+			previous_status in ("Returned", "Closed")
+			and status == "Issued"
+			and self.flags.reopening_donation_book
+		):
+			return
+
 		if status not in allowed_transitions.get(previous_status, ()):
 			frappe.throw(
 				frappe._("Book status cannot be changed from {0} to {1}.").format(
@@ -803,6 +810,9 @@ def reopen_book(book, reason):
 
 	doc = frappe.get_doc("Book Assignment", book)
 	doc.check_permission("write")
+	if doc.is_donation_book() or doc.has_donation_rows():
+		return reopen_donation_book(doc, reason)
+
 	if doc.status != "Closed":
 		frappe.throw(frappe._("Only Closed Books can be reopened."))
 	if doc.is_exhausted():
@@ -820,6 +830,44 @@ def reopen_book(book, reason):
 	if doc.is_donation_book() or doc.has_donation_rows():
 		sync_donation_book_leaves(doc.name)
 	return doc.as_dict()
+
+
+def reopen_donation_book(doc, reason):
+	"""Return an eligible Donation Book to Issued for its remaining receipts."""
+	if doc.status not in ("Returned", "Closed"):
+		frappe.throw(frappe._("Only returned or closed Donation Books can be reopened."))
+
+	update_donation_book_receipt_usage(doc.name)
+	doc.reload()
+	if not has_unsubmitted_donation_book_leaves(doc.name):
+		frappe.throw(
+			frappe._("This Donation Book cannot be reopened because all Donation Book Leaves are submitted.")
+		)
+
+	doc.flags.ignore_validate_update_after_submit = True
+	doc.flags.reopening_donation_book = True
+	doc.status = "Issued"
+	doc.return_date = None
+	doc.reopen_reason = reason
+	doc.reopened_by = frappe.session.user
+	doc.reopened_on = now_datetime()
+	doc.reopen_count = cint(doc.reopen_count) + 1
+	doc.save()
+	sync_donation_book_leaves(doc.name)
+	return doc.as_dict()
+
+
+def has_unsubmitted_donation_book_leaves(book):
+	"""A book remains reopenable while at least one active leaf is not Used."""
+	return bool(
+		frappe.db.exists(
+			"Donation Book Leaf",
+			{
+				"book": book,
+				"status": ["not in", ("Used", "Cancelled")],
+			},
+		)
+	)
 
 
 @frappe.whitelist()
@@ -864,9 +912,13 @@ def return_book(
 	if coupon_value not in COUPON_VALUES:
 		frappe.throw(frappe._("Coupon Value must be 10, 50, 100, 500, 1000, or 5000 before returning a Book."))
 
-	calculated_collected_amount = flt(used_pages * coupon_value)
+	submitted_used_pages = get_book_used_pages(book)
+	if used_pages != submitted_used_pages:
+		frappe.throw(frappe._("Submitted Coupon Entry pages have changed. Refresh the Return dialog and try again."))
+
+	calculated_collected_amount = get_book_collected_amount(book)
 	if collected_amount is not None and flt(collected_amount) != calculated_collected_amount:
-		frappe.throw(frappe._("Total Amount Collected must equal Used Pages multiplied by Coupon Value."))
+		frappe.throw(frappe._("Total Amount Collected must equal the total of submitted Coupon Entries."))
 
 	denominations = frappe.parse_json(denominations) or []
 	manual_denomination_total = flt(denomination_total)
@@ -953,12 +1005,13 @@ def get_book_return_details(book):
 	if not book:
 		return {"used_pages": 0, "coupon_value": 0, "total_amount": 0}
 
-	coupon_value = get_coupon_value_for_book(book)
 	used_pages = get_book_used_pages(book)
+	total_amount = get_book_collected_amount(book)
+	coupon_value = get_coupon_value_for_book(book)
 	return {
 		"used_pages": used_pages,
 		"coupon_value": coupon_value,
-		"total_amount": flt(used_pages * coupon_value),
+		"total_amount": total_amount,
 	}
 
 

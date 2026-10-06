@@ -14,6 +14,8 @@ from donation_management.donation_management.doctype.book_assignment.book_assign
 	get_book_stock_qty,
 	get_donation_book_used_receipts,
 	get_receipt_range_count,
+	has_unsubmitted_donation_book_leaves,
+	reopen_donation_book,
 	receipt_number_in_range,
 	receipt_series_prefix,
 	return_book,
@@ -22,6 +24,55 @@ from donation_management.donation_management.doctype.book_assignment.book_assign
 
 
 class TestBookAssignment(FrappeTestCase):
+	def test_donation_book_is_reopenable_while_a_leaf_is_unsubmitted(self):
+		with patch.object(frappe.db, "exists", return_value="DBL-00001") as exists:
+			self.assertTrue(has_unsubmitted_donation_book_leaves("BK-00001"))
+
+		exists.assert_called_once_with(
+			"Donation Book Leaf",
+			{"book": "BK-00001", "status": ["not in", ("Used", "Cancelled")]},
+		)
+
+	def test_reopening_donation_book_sets_issued_status(self):
+		doc = frappe._dict(
+			name="BK-00001",
+			status="Returned",
+			return_date="2026-10-05",
+			reopen_count=0,
+			flags=frappe._dict(),
+		)
+		doc.reload = lambda: None
+		doc.save = lambda: None
+		doc.as_dict = lambda: doc
+
+		with patch(
+			"donation_management.donation_management.doctype.book_assignment.book_assignment.update_donation_book_receipt_usage"
+		), patch(
+			"donation_management.donation_management.doctype.book_assignment.book_assignment.has_unsubmitted_donation_book_leaves",
+			return_value=True,
+		), patch(
+			"donation_management.donation_management.doctype.book_assignment.book_assignment.sync_donation_book_leaves"
+		), patch(
+			"donation_management.donation_management.doctype.book_assignment.book_assignment.now_datetime",
+			return_value="2026-10-06 12:00:00",
+		):
+			reopen_donation_book(doc, "Continue collecting receipts")
+
+		self.assertEqual(doc.status, "Issued")
+		self.assertIsNone(doc.return_date)
+		self.assertEqual(doc.reopen_count, 1)
+
+	def test_donation_book_cannot_reopen_after_all_leaves_are_submitted(self):
+		doc = frappe._dict(name="BK-00001", status="Returned")
+		doc.reload = lambda: None
+		with patch(
+			"donation_management.donation_management.doctype.book_assignment.book_assignment.update_donation_book_receipt_usage"
+		), patch(
+			"donation_management.donation_management.doctype.book_assignment.book_assignment.has_unsubmitted_donation_book_leaves",
+			return_value=False,
+		), self.assertRaisesRegex(frappe.ValidationError, "all Donation Book Leaves are submitted"):
+			reopen_donation_book(doc, "Continue collecting receipts")
+
 	def test_receipt_ranges_are_inclusive(self):
 		self.assertEqual(get_receipt_range_count("100", "100"), 1)
 		self.assertEqual(get_receipt_range_count("100", "105"), 6)
@@ -92,8 +143,15 @@ class TestBookAssignment(FrappeTestCase):
 		self.assertEqual(details["coupon_value"], 100)
 
 	def test_return_details_use_submitted_pages_and_coupon_value(self):
-		with patch.object(frappe.db, "get_value", return_value=100), patch.object(
-			frappe.db, "sql", return_value=[(3,)]
+		with patch(
+			"donation_management.donation_management.doctype.book_assignment.book_assignment.get_coupon_value_for_book",
+			return_value=100,
+		), patch(
+			"donation_management.donation_management.doctype.book_assignment.book_assignment.get_book_used_pages",
+			return_value=3,
+		), patch(
+			"donation_management.donation_management.doctype.book_assignment.book_assignment.get_book_collected_amount",
+			return_value=300,
 		):
 			details = get_book_return_details("BA-00001")
 
@@ -102,18 +160,37 @@ class TestBookAssignment(FrappeTestCase):
 		self.assertEqual(details["total_amount"], 300)
 
 	def test_return_details_fall_back_to_coupon_row_value(self):
-		def get_value(doctype, *args, **kwargs):
-			if doctype == "Book Assignment":
-				return None
-			return 50
-
-		with patch.object(frappe.db, "get_value", side_effect=get_value), patch.object(
-			frappe.db, "sql", return_value=[(2,)]
+		with patch(
+			"donation_management.donation_management.doctype.book_assignment.book_assignment.get_coupon_value_for_book",
+			return_value=50,
+		), patch(
+			"donation_management.donation_management.doctype.book_assignment.book_assignment.get_book_used_pages",
+			return_value=2,
+		), patch(
+			"donation_management.donation_management.doctype.book_assignment.book_assignment.get_book_collected_amount",
+			return_value=100,
 		):
 			details = get_book_return_details("BA-00002")
 
 		self.assertEqual(details["coupon_value"], 50)
 		self.assertEqual(details["total_amount"], 100)
+
+	def test_return_details_use_submitted_entry_amounts_not_one_coupon_value(self):
+		with patch(
+			"donation_management.donation_management.doctype.book_assignment.book_assignment.get_coupon_value_for_book",
+			return_value=10,
+		), patch(
+			"donation_management.donation_management.doctype.book_assignment.book_assignment.get_book_used_pages",
+			return_value=3,
+		), patch(
+			"donation_management.donation_management.doctype.book_assignment.book_assignment.get_book_collected_amount",
+			return_value=120,
+		):
+			details = get_book_return_details("BA-00003")
+
+		self.assertEqual(details["coupon_value"], 10)
+		self.assertEqual(details["used_pages"], 3)
+		self.assertEqual(details["total_amount"], 120)
 
 	def test_return_book_uses_coupon_row_value_for_calculation(self):
 		doc = frappe._dict(
@@ -134,6 +211,12 @@ class TestBookAssignment(FrappeTestCase):
 		with patch(
 			"donation_management.donation_management.doctype.book_assignment.book_assignment.get_coupon_value_for_book",
 			return_value=100,
+		), patch(
+			"donation_management.donation_management.doctype.book_assignment.book_assignment.get_book_used_pages",
+			return_value=3,
+		), patch(
+			"donation_management.donation_management.doctype.book_assignment.book_assignment.get_book_collected_amount",
+			return_value=300,
 		), patch(
 			"donation_management.donation_management.doctype.book_assignment.book_assignment.generate_return_coupons"
 			), patch.object(frappe, "get_doc", return_value=doc), patch.object(

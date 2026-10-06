@@ -8,6 +8,8 @@ import frappe
 from frappe.tests.utils import FrappeTestCase
 
 from donation_management.donation_management.doctype.donation_book_collection.donation_book_collection import (
+	DonationBookCollection,
+	get_book_assignment_details,
 	get_donation_book_assignments,
 	get_donation_book_serials,
 )
@@ -20,6 +22,99 @@ def unwrap_search_method(method):
 
 
 class TestDonationBookCollection(FrappeTestCase):
+	def test_collection_layout_has_no_amount_or_collection_accounting_fields(self):
+		path = Path(__file__).with_name("donation_book_collection.json")
+		metadata = json.loads(path.read_text())
+		fieldnames = {field.get("fieldname") for field in metadata["fields"]}
+		self.assertFalse(
+			fieldnames.intersection(
+				{
+					"manual_receipt_number",
+					"manual_receipt_date",
+					"cash_amount",
+					"online_amount",
+					"donation_order",
+					"returned_unused_amount",
+					"mode_of_payment",
+					"debit_account",
+					"credit_account",
+					"journal_entry",
+				}
+			)
+		)
+		self.assertEqual(metadata["field_order"].index("accounting_section") + 1, metadata["field_order"].index("accounting_cost_center"))
+		self.assertEqual(metadata["field_order"].index("accounting_cost_center") + 1, metadata["field_order"].index("status"))
+		detail_table = next(field for field in metadata["fields"] if field.get("fieldname") == "book_assignment_details")
+		self.assertEqual(detail_table.get("read_only"), 1)
+
+	def test_collection_detail_grid_references_order_journal_entry(self):
+		path = Path(__file__).parents[1] / "donation_book_collection_detail" / "donation_book_collection_detail.json"
+		metadata = json.loads(path.read_text())
+		fieldnames = {field.get("fieldname") for field in metadata["fields"]}
+		self.assertIn("journal_entry", fieldnames)
+		self.assertNotIn("debit_account", fieldnames)
+		self.assertNotIn("credit_account", fieldnames)
+
+	def test_collection_details_are_limited_to_submitted_leaves_and_orders(self):
+		assignment = frappe._dict(check_permission=lambda permission: None)
+		leaves = [
+			frappe._dict(
+				book_serial_no="DB-001",
+				receipt_number="REC-001",
+				manual_receipt_date="2026-10-06",
+				payment_mode="Cash",
+				amount=500,
+				donation_order="DO-00001",
+				journal_entry="ACC-JV-00001",
+				status="Used",
+			)
+		]
+		with patch.object(frappe, "get_doc", return_value=assignment), patch.object(
+			frappe.db, "sql", return_value=leaves
+		) as sql:
+			rows = get_book_assignment_details("BK-00001", "DB-001")
+
+		self.assertEqual(rows[0]["donation_order"], "DO-00001")
+		self.assertEqual(rows[0]["journal_entry"], "ACC-JV-00001")
+		self.assertEqual(rows[0]["amount"], 500)
+		query, values = sql.call_args.args
+		self.assertIn("leaf.docstatus = 1", query)
+		self.assertIn("leaf.status = 'Used'", query)
+		self.assertIn("order_doc.docstatus = 1", query)
+		self.assertEqual(values, {"book": "BK-00001", "book_serial_no": "DB-001"})
+
+	def test_collection_uses_explicit_fetch_action(self):
+		path = Path(__file__).with_name("donation_book_collection.js")
+		script = path.read_text()
+		self.assertIn('__("Fetch Submitted Receipts")', script)
+		self.assertNotIn("populate_book_assignment_details", script)
+
+	def test_collection_submission_requires_fetched_rows(self):
+		collection = DonationBookCollection({"doctype": "Donation Book Collection"})
+		with self.assertRaisesRegex(frappe.ValidationError, "Fetch at least one submitted Donation Book Leaf"):
+			collection.before_submit()
+
+	def test_collection_submission_sets_date_without_creating_accounting(self):
+		collection = DonationBookCollection({"doctype": "Donation Book Collection", "status": "Draft"})
+		with patch(
+			"donation_management.donation_management.doctype.donation_book_collection.donation_book_collection.today",
+			return_value="2026-10-06",
+		), patch.object(collection, "db_set") as db_set:
+			collection.on_submit()
+
+		self.assertEqual(collection.collection_date, "2026-10-06")
+		self.assertEqual(collection.status, "Submitted")
+		db_set.assert_called_once_with(
+			{"collection_date": "2026-10-06", "status": "Submitted"}, update_modified=False
+		)
+
+	def test_collection_cancellation_only_changes_collection_status(self):
+		collection = DonationBookCollection({"doctype": "Donation Book Collection"})
+		with patch.object(collection, "db_set") as db_set:
+			collection.on_cancel()
+
+		db_set.assert_called_once_with("status", "Cancelled", update_modified=False)
+
 	def test_book_query_is_restricted_to_donation_book_assignments(self):
 		query_method = unwrap_search_method(get_donation_book_assignments)
 
