@@ -1,6 +1,7 @@
 # Copyright (c) 2026, osama.ahmed@deliverydevs.com and Contributors
 # See license.txt
 
+from pathlib import Path
 from unittest.mock import patch
 
 import frappe
@@ -14,6 +15,17 @@ from donation_management.donation_management.doctype.donation_order.donation_ord
 
 
 class TestDonationOrder(FrappeTestCase):
+	def test_esaal_empty_state_guides_users_to_selected_donor(self):
+		doctype_root = Path(__file__).resolve().parent
+		order_script = (doctype_root / "donation_order.js").read_text()
+		donor_script = (doctype_root.parent / "donor" / "donor.js").read_text()
+
+		self.assertIn("prompt_to_add_esaal_person", order_script)
+		self.assertIn("Add Person to Donor", order_script)
+		self.assertIn('"only_select", 1', order_script)
+		self.assertIn("ESAAL_E_SAWAB_RETURN_CONTEXT_KEY", order_script)
+		self.assertIn("return_to_donation_order_after_esaal_person_added", donor_script)
+
 	def test_esaal_e_sawab_key_normalizes_person_and_relationship(self):
 		self.assertEqual(
 			get_esaal_e_sawab_key("  Abdul   Rahman  ", " Father "),

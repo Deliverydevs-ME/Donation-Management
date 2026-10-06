@@ -52,6 +52,10 @@ frappe.ui.form.on("Donor", {
 		add_donor_ledger_buttons(frm);
 	},
 
+	after_save(frm) {
+		return_to_donation_order_after_esaal_person_added(frm);
+	},
+
 	customer_type(frm) {
 		toggle_donor_reference_fields(frm);
 		if (frm.doc.customer_type !== "Refered by Trustee") {
@@ -69,6 +73,36 @@ frappe.ui.form.on("Donor", {
 
 function has_confidential_reference_access() {
 	return confidential_reference_roles.some((role) => frappe.user.has_role(role));
+}
+
+const DONOR_ESAAL_E_SAWAB_RETURN_CONTEXT_KEY = "donation_management.esaal_e_sawab_return_context";
+const DONOR_ESAAL_E_SAWAB_RETURN_CONTEXT_TTL = 2 * 60 * 60 * 1000;
+
+function return_to_donation_order_after_esaal_person_added(frm) {
+	const saved_context = window.sessionStorage.getItem(DONOR_ESAAL_E_SAWAB_RETURN_CONTEXT_KEY);
+	if (!saved_context) {
+		return;
+	}
+
+	let context;
+	try {
+		context = JSON.parse(saved_context);
+	} catch (error) {
+		window.sessionStorage.removeItem(DONOR_ESAAL_E_SAWAB_RETURN_CONTEXT_KEY);
+		return;
+	}
+
+	if (
+		context.donor !== frm.doc.name ||
+		Date.now() - context.created_at > DONOR_ESAAL_E_SAWAB_RETURN_CONTEXT_TTL ||
+		!(frm.doc.esaal_e_sawab || []).some((row) => row.person_name)
+	) {
+		return;
+	}
+
+	window.sessionStorage.removeItem(DONOR_ESAAL_E_SAWAB_RETURN_CONTEXT_KEY);
+	frappe.model.sync(context.document);
+	frappe.set_route(...context.route);
 }
 
 function set_donor_type_options(frm) {

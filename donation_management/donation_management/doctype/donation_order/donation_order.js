@@ -184,6 +184,7 @@ frappe.ui.form.on("Donation Order", {
 				donor: frm.doc.donor_name || "",
 			},
 		}));
+		configure_esaal_person_grid(frm);
 	},
 
 	refresh(frm) {
@@ -197,6 +198,7 @@ frappe.ui.form.on("Donation Order", {
 		render_donor_program_enrollments(frm);
 		apply_sponsorship_table_rules(frm);
 		toggle_mohasil_details(frm);
+		configure_esaal_person_grid(frm);
 
 		if (frm.doc.docstatus === 1) {
 			return;
@@ -303,6 +305,7 @@ frappe.ui.form.on("Donation Order", {
 			frm.refresh_field("esaal_e_sawab");
 		}
 		set_donor_details_from_name(frm);
+		prompt_to_add_esaal_person(frm);
 	},
 
 	donation_posting_date(frm) {
@@ -1964,12 +1967,83 @@ function update_beneficiary_fields(frm, clear_hidden_values) {
 	}
 
 	set_sponsorship_totals(frm);
+	prompt_to_add_esaal_person(frm);
 }
 
 function is_esaal_e_sawab_order(frm) {
 	return (frm.doc.purpose_details || []).some(
 		(row) => row.donation_purpose === "Esaal e Sawab"
 	) || frm.doc.donation_purpose === "Esaal e Sawab";
+}
+
+function configure_esaal_person_grid(frm) {
+	const grid = frm.fields_dict.esaal_e_sawab && frm.fields_dict.esaal_e_sawab.grid;
+	if (grid) {
+		grid.update_docfield_property("person_name", "only_select", 1);
+	}
+}
+
+const ESAAL_E_SAWAB_RETURN_CONTEXT_KEY = "donation_management.esaal_e_sawab_return_context";
+const ESAAL_E_SAWAB_RETURN_CONTEXT_TTL = 2 * 60 * 60 * 1000;
+
+function prompt_to_add_esaal_person(frm) {
+	if (
+		frm.doc.docstatus !== 0 ||
+		!is_esaal_e_sawab_order(frm) ||
+		!frm.doc.donor_name ||
+		frm.__checking_esaal_people_for === frm.doc.donor_name ||
+		frm.__esaal_people_available_for === frm.doc.donor_name ||
+		frm.__esaal_people_prompted_for === frm.doc.donor_name
+	) {
+		return;
+	}
+
+	const donor = frm.doc.donor_name;
+	frm.__checking_esaal_people_for = donor;
+	frappe.call({
+		method: "donation_management.donation_management.api.get_esaal_person_options",
+		args: {
+			doctype: "Donor",
+			txt: "",
+			searchfield: "name",
+			start: 0,
+			page_len: 1,
+			filters: { donor },
+		},
+		callback(response) {
+			if (frm.__checking_esaal_people_for === donor) {
+				frm.__checking_esaal_people_for = null;
+			}
+			if (frm.doc.donor_name !== donor || !is_esaal_e_sawab_order(frm)) {
+				return;
+			}
+			if ((response.message || []).length) {
+				frm.__esaal_people_available_for = donor;
+				return;
+			}
+
+			frm.__esaal_people_prompted_for = donor;
+			frappe.confirm(
+				__("No Esaal e Sawab person is registered for this donor. Add a person to the selected Donor now?"),
+				() => open_donor_for_esaal_person(frm, donor),
+				null,
+				__("Add Person to Donor"),
+				__("Later")
+			);
+		},
+	});
+}
+
+function open_donor_for_esaal_person(frm, donor) {
+	const context = {
+		donor,
+		route: frappe.get_route(),
+		document: frm.doc,
+		created_at: Date.now(),
+	};
+
+	window.sessionStorage.setItem(ESAAL_E_SAWAB_RETURN_CONTEXT_KEY, JSON.stringify(context));
+	frappe.set_route("Form", "Donor", donor);
 }
 
 function apply_sponsorship_table_rules(frm) {
