@@ -912,7 +912,7 @@ function build_return_dialog(frm, accounting_defaults, return_details) {
 		fields,
 		primary_action_label: __("Return"),
 		primary_action(values) {
-			if (!validate_return_denomination_total(dialog, frm)) {
+			if (!validate_return_denomination_total(dialog, return_details.total_pages)) {
 				return;
 			}
 
@@ -961,7 +961,7 @@ function update_return_denomination_total(dialog) {
 	}
 }
 
-function validate_return_denomination_total(dialog, frm) {
+function validate_return_denomination_total(dialog, total_pages) {
 	const used_pages = cint(dialog.get_value("used_pages"));
 	const collected_amount = flt(dialog.get_value("collected_amount"));
 	const denomination_total = flt(dialog.get_value("denomination_total"));
@@ -971,7 +971,7 @@ function validate_return_denomination_total(dialog, frm) {
 		return false;
 	}
 
-	if (used_pages > cint(frm.doc.total_pages)) {
+	if (used_pages > cint(total_pages)) {
 		frappe.msgprint(__("Used Pages cannot exceed Total Pages."));
 		return false;
 	}

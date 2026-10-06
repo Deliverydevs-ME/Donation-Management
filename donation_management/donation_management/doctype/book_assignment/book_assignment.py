@@ -906,7 +906,8 @@ def return_book(
 	if used_pages <= 0:
 		frappe.throw(frappe._("Used Pages must be greater than zero when returning a Book."))
 
-	if used_pages > cint(doc.total_pages):
+	total_pages = get_coupon_book_total_pages(book)
+	if used_pages > total_pages:
 		frappe.throw(frappe._("Used Pages cannot exceed Total Pages."))
 
 	if coupon_value not in COUPON_VALUES:
@@ -944,7 +945,7 @@ def return_book(
 	generate_return_coupons(doc, used_pages)
 
 	doc.used_pages = used_pages
-	doc.remaining_pages = cint(doc.total_pages) - used_pages
+	doc.remaining_pages = max(total_pages - used_pages, 0)
 	doc.collected_amount = calculated_collected_amount
 	doc.mode_of_payment = mode_of_payment or doc.mode_of_payment
 	doc.debit_account = debit_account or doc.debit_account
@@ -1003,15 +1004,17 @@ def get_book_collected_amount(book):
 def get_book_return_details(book):
 	"""Return submitted coupon usage and the amount needed by the Return dialog."""
 	if not book:
-		return {"used_pages": 0, "coupon_value": 0, "total_amount": 0}
+		return {"used_pages": 0, "coupon_value": 0, "total_amount": 0, "total_pages": 0}
 
 	used_pages = get_book_used_pages(book)
 	total_amount = get_book_collected_amount(book)
 	coupon_value = get_coupon_value_for_book(book)
+	total_pages = get_coupon_book_total_pages(book)
 	return {
 		"used_pages": used_pages,
 		"coupon_value": coupon_value,
 		"total_amount": total_amount,
+		"total_pages": total_pages,
 	}
 
 
@@ -1034,6 +1037,27 @@ def get_coupon_value_for_book(book, book_serial_no=None):
 		filters["book_serial_no"] = book_serial_no
 
 	return cint(frappe.db.get_value("Book Assignment Detail", filters, "coupon_value"))
+
+
+def get_coupon_book_total_pages(book):
+	"""Get Coupon Book pages from assignment rows, with legacy parent fallback."""
+	if not book:
+		return 0
+
+	rows = frappe.get_all(
+		"Book Assignment Detail",
+		filters={
+			"parent": book,
+			"parenttype": "Book Assignment",
+			"parentfield": "assigned_books",
+			"book_type": BOOK_TYPE_COUPON,
+		},
+		fields=["total_pages"],
+	)
+	if rows:
+		return sum(cint(row.total_pages) for row in rows)
+
+	return cint(frappe.db.get_value("Book Assignment", book, "total_pages"))
 
 
 def get_book_used_pages(book):
