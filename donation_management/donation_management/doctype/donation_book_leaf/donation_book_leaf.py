@@ -23,6 +23,8 @@ class DonationBookLeaf(Document):
 	def before_cancel(self):
 		if self.status == "Cancelled":
 			return
+		if self.flags.from_donation_order_cancellation:
+			return
 
 		if self.donation_order and self.journal_entry:
 			frappe.throw(
@@ -305,21 +307,26 @@ def get_donor_donation_orders(doctype, txt, searchfield, start, page_len, filter
 
 
 def cancel_leaf_for_donation_order(donation_order, clear_journal_entry=True):
-	"""Mark all leaves for a cancelled order as cancelled without cancelling the leaf document again."""
+	"""Cancel leaves owned by a cancelled Donation Order before its Journal Entry."""
 	if not donation_order or not frappe.db.table_exists("Donation Book Leaf"):
 		return
 
 	leaves = frappe.get_all(
 		"Donation Book Leaf",
 		filters={"donation_order": donation_order},
-		pluck="name",
+		fields=["name", "docstatus"],
 		ignore_permissions=True,
 	)
 	for leaf in leaves:
+		leaf_doc = frappe.get_doc("Donation Book Leaf", leaf.name)
+		if leaf.docstatus == 1:
+			leaf_doc.flags.from_donation_order_cancellation = True
+			leaf_doc.cancel()
+
 		values = {"status": "Cancelled"}
 		if clear_journal_entry:
 			values.update({"journal_entry": None, "accounting_status": "Cancelled"})
-		frappe.db.set_value("Donation Book Leaf", leaf, values, update_modified=False)
+		frappe.db.set_value("Donation Book Leaf", leaf.name, values, update_modified=False)
 
 
 def cancel_leaves_for_book_assignment(book):

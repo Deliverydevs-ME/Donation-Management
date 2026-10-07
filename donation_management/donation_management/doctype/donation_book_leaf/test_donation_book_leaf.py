@@ -3,13 +3,14 @@
 
 import json
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import frappe
 from frappe.tests.utils import FrappeTestCase
 
 from donation_management.donation_management.doctype.donation_book_leaf.donation_book_leaf import (
 	DonationBookLeaf,
+	cancel_leaf_for_donation_order,
 	get_donor_donation_orders,
 )
 from donation_management.donation_management.doctype.book_assignment.book_assignment import (
@@ -35,6 +36,39 @@ class TestDonationBookLeaf(FrappeTestCase):
 
 		with self.assertRaisesRegex(frappe.ValidationError, "cannot be cancelled directly"):
 			leaf.before_cancel()
+
+	def test_leaf_can_be_cancelled_by_its_own_donation_order(self):
+		leaf = DonationBookLeaf(
+			{
+				"doctype": "Donation Book Leaf",
+				"donation_order": "DO-TEST",
+				"journal_entry": "ACC-JV-TEST",
+				"status": "Used",
+			}
+		)
+		leaf.flags.from_donation_order_cancellation = True
+
+		leaf.before_cancel()
+
+	def test_order_cancellation_cancels_leaf_before_clearing_accounting_links(self):
+		leaf = frappe._dict(name="DBL-TEST", docstatus=1)
+		leaf_doc = frappe._dict(flags=frappe._dict(), cancel=MagicMock())
+
+		with patch.object(frappe.db, "table_exists", return_value=True), patch.object(
+			frappe, "get_all", return_value=[leaf]
+		), patch.object(frappe, "get_doc", return_value=leaf_doc), patch.object(
+			frappe.db, "set_value"
+		) as set_value:
+			cancel_leaf_for_donation_order("DO-TEST")
+
+		self.assertTrue(leaf_doc.flags.from_donation_order_cancellation)
+		leaf_doc.cancel.assert_called_once()
+		set_value.assert_called_once_with(
+			"Donation Book Leaf",
+			"DBL-TEST",
+			{"status": "Cancelled", "journal_entry": None, "accounting_status": "Cancelled"},
+			update_modified=False,
+		)
 
 	def test_donor_order_query_requires_donor(self):
 		with patch.object(frappe, "get_all") as get_all:

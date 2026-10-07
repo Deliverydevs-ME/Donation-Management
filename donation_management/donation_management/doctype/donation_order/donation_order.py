@@ -126,8 +126,8 @@ class DonationOrder(Document):
 		self.set_receipt_status()
 
 	def on_cancel(self):
-		self.cancel_linked_journal_entry()
 		self.cancel_linked_donation_book_leaf()
+		self.cancel_linked_journal_entry()
 		self.update_linked_donation_book_usage()
 		if self.meta.has_field("receipt_status"):
 			self.db_set("receipt_status", "Cancelled", update_modified=False)
