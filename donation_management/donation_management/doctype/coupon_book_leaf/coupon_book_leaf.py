@@ -227,6 +227,9 @@ def allocate_coupon_entry_leaves(coupon_entry):
 		get_receipt_number_int,
 	)
 
+	# A Coupon Entry can be submitted against an assignment created before Leaf
+	# generation was introduced. Ensure its receipt range exists before binding.
+	sync_coupon_book_leaves(coupon_entry.book)
 	range_details = get_coupon_entry_range(coupon_entry)
 	from_number = get_receipt_number_int(range_details.from_receipt_no, "From Receipt No")
 	to_number = get_receipt_number_int(range_details.to_receipt_no, "To Receipt No")

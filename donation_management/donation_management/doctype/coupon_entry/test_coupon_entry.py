@@ -1,6 +1,7 @@
 # Copyright (c) 2026, osama.ahmed@deliverydevs.com and Contributors
 # See license.txt
 
+from pathlib import Path
 from unittest.mock import patch
 
 import frappe
@@ -90,3 +91,12 @@ class TestCoupon(FrappeTestCase):
 		self.assertNotIn("to_receipt_no", fields)
 		self.assertEqual(book.requires_book_serial_no, 1)
 		exists.assert_called_once()
+
+	def test_leaf_allocation_synchronizes_the_book_receipt_range_first(self):
+		leaf_source = (
+			Path(__file__).resolve().parent.parent / "coupon_book_leaf" / "coupon_book_leaf.py"
+		).read_text()
+		allocation_start = leaf_source.index("def allocate_coupon_entry_leaves")
+		allocation_source = leaf_source[allocation_start : leaf_source.index("def get_coupon_entry_range", allocation_start)]
+
+		self.assertIn("sync_coupon_book_leaves(coupon_entry.book)", allocation_source)
