@@ -136,6 +136,8 @@ class TestBoxCollection(FrappeTestCase):
 			approved_by=frappe.session.user,
 		)
 		box_collection.reload()
+		box.reload()
+		self.assertEqual(box.status, "Issued")
 
 		with self.assertRaises(frappe.ValidationError):
 			box_collection.set_issuance_date(
@@ -195,6 +197,8 @@ class TestBoxCollection(FrappeTestCase):
 
 		self.assertEqual(box_collection.status, "Collected")
 		self.assertEqual(box_collection.collected_amount, 150)
+		box.reload()
+		self.assertEqual(box.status, "Collected")
 
 		collection_log_name = frappe.db.get_value(
 			"Box Collection Log",

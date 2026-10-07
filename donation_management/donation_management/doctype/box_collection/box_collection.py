@@ -236,6 +236,7 @@ class BoxCollection(Document):
 		self.manual_receipt_date = None
 		self.flags.box_collection_action = True
 		self.save(ignore_permissions=True)
+		self.sync_donation_box_status()
 		self.create_action_log(action_type)
 
 	def requires_issue_approval(self, action_type, previous_location=None):
@@ -311,6 +312,7 @@ class BoxCollection(Document):
 		self.collected_amount = collected_amount
 		self.flags.box_collection_action = True
 		self.save(ignore_permissions=True)
+		self.sync_donation_box_status()
 		log_name = self.create_action_log("Collection", denomination_rows=denomination_rows)
 		journal_entry = create_collection_journal_entry(
 			self,
@@ -336,6 +338,7 @@ class BoxCollection(Document):
 		self.received_on = now_datetime()
 		self.flags.box_collection_action = True
 		self.save(ignore_permissions=True)
+		self.sync_donation_box_status()
 		self.create_action_log("Receive")
 		return "Box received"
 
@@ -350,6 +353,7 @@ class BoxCollection(Document):
 		self.closed_on = now_datetime()
 		self.flags.box_collection_action = True
 		self.save(ignore_permissions=True)
+		self.sync_donation_box_status()
 		self.create_action_log("Close")
 		return "Box closed"
 
@@ -367,8 +371,20 @@ class BoxCollection(Document):
 		self.cancelled_on = now_datetime()
 		self.flags.box_collection_action = True
 		self.save(ignore_permissions=True)
+		self.sync_donation_box_status()
 		self.create_action_log("Cancel")
 		return "Box cancelled"
+
+	def sync_donation_box_status(self):
+		"""Keep the box master aligned with the completed operational action."""
+		if self.box_number and frappe.db.exists("Donation Box", self.box_number):
+			frappe.db.set_value(
+				"Donation Box",
+				self.box_number,
+				"status",
+				self.status,
+				update_modified=False,
+			)
 
 	def ensure_submitted(self):
 		if self.docstatus != 1:

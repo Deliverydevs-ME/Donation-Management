@@ -14,8 +14,6 @@
   "territory",
   "zone_manager",
   "mohasil",
-  "first_issuance_approved_by",
-  "location_change_approved_by",
   "amended_from"
  ],
  "fields": [
@@ -78,18 +76,6 @@
    "fieldtype": "Link",
    "label": "Mohasil",
    "options": "Employee"
-  },
-  {
-   "fieldname": "first_issuance_approved_by",
-   "fieldtype": "Link",
-   "label": "First Issuance Approved By",
-   "options": "User"
-  },
-  {
-   "fieldname": "location_change_approved_by",
-   "fieldtype": "Link",
-   "label": "Location Change Approved By",
-   "options": "User"
   },
   {
    "fieldname": "amended_from",
