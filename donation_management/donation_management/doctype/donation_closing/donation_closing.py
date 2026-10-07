@@ -121,7 +121,7 @@ class DonationClosing(Document):
 	@frappe.whitelist()
 	def fetch_pending_cash_donations(self):
 		self.set_company_default()
-		if not self.is_new() and self.status not in ("", "Draft"):
+		if self.closing_details:
 			frappe.throw(frappe._("Pending cash donations have already been fetched for this Donation Closing."))
 		if not self.closing_date:
 			frappe.throw(frappe._("Closing Date is required before fetching pending cash donations."))
@@ -161,7 +161,6 @@ class DonationClosing(Document):
 				"message": frappe._("No pending cash donations were found."),
 			}
 
-		self.status = "Pending Approval"
 		self.save()
 		return {
 			"count": self.pending_items_count,
@@ -171,30 +170,13 @@ class DonationClosing(Document):
 		}
 
 	@frappe.whitelist()
-	def approve_closing(self):
-		if self.is_new():
-			frappe.throw(frappe._("Save Donation Closing before approving it."))
-		if self.docstatus != 0:
-			frappe.throw(frappe._("Only draft Donation Closing can be approved."))
-		if self.status != "Pending Approval":
-			frappe.throw(frappe._("Only a Donation Closing pending approval can be approved."))
-		if not self.closing_details:
-			frappe.throw(frappe._("Fetch pending cash donations before approving Donation Closing."))
-
-		self.approved_by = frappe.session.user
-		self.approved_on = now_datetime()
-		self.status = "Approved"
-		self.save(ignore_permissions=True)
-		return self.name
-
-	@frappe.whitelist()
 	def receive_closing(self):
 		if self.is_new():
 			frappe.throw(frappe._("Save Donation Closing before receiving it."))
 		if self.docstatus != 0:
 			frappe.throw(frappe._("Only draft Donation Closing can be received."))
-		if self.status != "Approved":
-			frappe.throw(frappe._("Donation Closing must be approved before receiving it."))
+		if self.status not in ("", "Draft"):
+			frappe.throw(frappe._("Only Draft Donation Closing can be received."))
 		if not self.closing_details:
 			frappe.throw(frappe._("Add at least one pending cash donation before receiving."))
 

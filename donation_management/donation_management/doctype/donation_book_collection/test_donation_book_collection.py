@@ -89,10 +89,57 @@ class TestDonationBookCollection(FrappeTestCase):
 		self.assertIn('__("Fetch Submitted Receipts")', script)
 		self.assertNotIn("populate_book_assignment_details", script)
 
+	def test_save_populates_empty_collection_details_without_fetching_in_browser(self):
+		collection = DonationBookCollection(
+			{
+				"doctype": "Donation Book Collection",
+				"book": "BK-00001",
+				"book_serial_no": "DB-001",
+			}
+		)
+		fetched_rows = [
+			{
+				"book_serial_no": "DB-001",
+				"receipt_number": "REC-001",
+				"amount": 500,
+				"donation_order": "DO-00001",
+			}
+		]
+
+		with patch(
+			"donation_management.donation_management.doctype.donation_book_collection.donation_book_collection.get_book_assignment_details",
+			return_value=fetched_rows,
+		) as get_details:
+			collection.populate_assignment_details_if_empty()
+
+		get_details.assert_called_once_with("BK-00001", "DB-001")
+		self.assertEqual(collection.book_assignment_details[0].receipt_number, "REC-001")
+
+	def test_save_does_not_replace_details_fetched_in_browser(self):
+		collection = DonationBookCollection(
+			{
+				"doctype": "Donation Book Collection",
+				"book": "BK-00001",
+				"book_assignment_details": [{"receipt_number": "REC-001"}],
+			}
+		)
+
+		with patch(
+			"donation_management.donation_management.doctype.donation_book_collection.donation_book_collection.get_book_assignment_details"
+		) as get_details:
+			collection.populate_assignment_details_if_empty()
+
+		get_details.assert_not_called()
+
 	def test_collection_submission_requires_fetched_rows(self):
 		collection = DonationBookCollection({"doctype": "Donation Book Collection"})
 		with self.assertRaisesRegex(frappe.ValidationError, "Fetch at least one submitted Donation Book Leaf"):
 			collection.before_submit()
+
+	def test_collection_requires_book_serial_no(self):
+		collection = DonationBookCollection({"doctype": "Donation Book Collection", "book": "BK-00001"})
+		with self.assertRaisesRegex(frappe.ValidationError, "Select a Book Serial No"):
+			collection.validate_book_serial_no()
 
 	def test_collection_submission_sets_date_without_creating_accounting(self):
 		collection = DonationBookCollection({"doctype": "Donation Book Collection", "status": "Draft"})

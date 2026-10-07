@@ -33,6 +33,10 @@ frappe.ui.form.on("Donation Book Collection", {
 				frappe.msgprint(__("Select a Book Assignment before fetching receipts."));
 				return;
 			}
+			if (!frm.doc.book_serial_no) {
+				frappe.msgprint(__("Select a Book Serial No before fetching receipts."));
+				return;
+			}
 			fetch_submitted_receipts(frm);
 		}, __("Actions"));
 	},

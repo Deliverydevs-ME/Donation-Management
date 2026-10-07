@@ -15,15 +15,21 @@ frappe.ui.form.on("Donation Closing", {
 	refresh(frm) {
 		frm.remove_custom_button(__("Record Bank Deposit"));
 
-		if (frm.is_new() || (frm.doc.docstatus === 0 && ["", "Draft"].includes(frm.doc.status || ""))) {
+		if (
+			frm.is_new() ||
+			(frm.doc.docstatus === 0 &&
+				["", "Draft"].includes(frm.doc.status || "") &&
+				!(frm.doc.closing_details || []).length)
+		) {
 			frm.add_custom_button(__("Fetch Pending Cash Donations"), () => fetch_pending(frm));
 		}
 
-		if (!frm.is_new() && frm.doc.docstatus === 0 && frm.doc.status === "Pending Approval") {
-			frm.add_custom_button(__("Approve Closing"), () => approve_closing(frm));
-		}
-
-		if (!frm.is_new() && frm.doc.docstatus === 0 && frm.doc.status === "Approved") {
+		if (
+			!frm.is_new() &&
+			frm.doc.docstatus === 0 &&
+			["", "Draft"].includes(frm.doc.status || "") &&
+			(frm.doc.closing_details || []).length
+		) {
 			frm.add_custom_button(__("Receive Closing"), () => receive_closing(frm));
 		}
 	},
@@ -94,18 +100,6 @@ function receive_closing(frm) {
 		callback() {
 			frm.reload_doc();
 			frappe.show_alert({ message: __("Donation Closing received"), indicator: "green" });
-		},
-	});
-}
-
-function approve_closing(frm) {
-	frappe.call({
-		doc: frm.doc,
-		method: "approve_closing",
-		freeze: true,
-		callback() {
-			frm.reload_doc();
-			frappe.show_alert({ message: __("Donation Closing approved"), indicator: "green" });
 		},
 	});
 }

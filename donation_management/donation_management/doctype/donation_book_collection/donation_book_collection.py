@@ -10,6 +10,7 @@ class DonationBookCollection(Document):
 	def validate(self):
 		self.validate_book()
 		self.validate_book_serial_no()
+		self.populate_assignment_details_if_empty()
 		self.validate_assignment_details()
 		if not self.status:
 			self.status = "Draft"
@@ -41,6 +42,14 @@ class DonationBookCollection(Document):
 			fields=["book_serial_no", "book_type", "from_receipt_no", "to_receipt_no"],
 			order_by="idx asc",
 		)
+
+	def populate_assignment_details_if_empty(self):
+		"""Populate submitted receipt rows when the form is saved without using Fetch."""
+		if self.book_assignment_details:
+			return
+
+		for row in get_book_assignment_details(self.book, self.book_serial_no):
+			self.append("book_assignment_details", row)
 
 	def validate_assignment_details(self, require_rows=False):
 		if not self.book_assignment_details:
@@ -96,7 +105,7 @@ class DonationBookCollection(Document):
 
 	def validate_book_serial_no(self):
 		if not self.book_serial_no:
-			return
+			frappe.throw(frappe._("Select a Book Serial No before saving Donation Book Collection."))
 
 		serial_is_donation_book = frappe.db.exists(
 			"Book Assignment Detail",
