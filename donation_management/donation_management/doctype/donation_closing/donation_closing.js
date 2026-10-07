@@ -24,14 +24,6 @@ frappe.ui.form.on("Donation Closing", {
 			frm.add_custom_button(__("Fetch Pending Cash Donations"), () => fetch_pending(frm));
 		}
 
-		if (
-			!frm.is_new() &&
-			frm.doc.docstatus === 0 &&
-			["", "Draft"].includes(frm.doc.status || "") &&
-			(frm.doc.closing_details || []).length
-		) {
-			frm.add_custom_button(__("Receive Closing"), () => receive_closing(frm));
-		}
 	},
 });
 
@@ -90,18 +82,6 @@ function apply_fetch_result(frm, result) {
 	frm.set_value("total_amount", result.total_amount || 0);
 	frm.set_value("pending_items_count", result.count || 0);
 	frm.refresh_field("closing_details");
-}
-
-function receive_closing(frm) {
-	frappe.call({
-		doc: frm.doc,
-		method: "receive_closing",
-		freeze: true,
-		callback() {
-			frm.reload_doc();
-			frappe.show_alert({ message: __("Donation Closing received"), indicator: "green" });
-		},
-	});
 }
 
 function format_currency(amount) {

@@ -3,10 +3,10 @@
 
 import frappe
 from frappe.model.document import Document
-from frappe.utils import flt, get_time, getdate, now_datetime
+from frappe.utils import flt, getdate, now_datetime
 
 from donation_management.donation_management.api import get_default_company
-from donation_management.donation_management.notifications import notify_finance, notify_users
+from donation_management.donation_management.notifications import notify_finance
 
 
 class DonationClosing(Document):
@@ -28,14 +28,9 @@ class DonationClosing(Document):
 	def on_submit(self):
 		if not self.closing_details:
 			frappe.throw(frappe._("Add at least one pending cash donation before submitting."))
-		if self.status != "Received" or not self.received_by:
-			frappe.throw(frappe._("Donation Closing must be received before submission."))
-		self.validate_cash_handover()
 
-		self.status = "Deposited"
 		self.submitted_by = frappe.session.user
 		self.submitted_on = now_datetime()
-		self.db_set("status", self.status, update_modified=False)
 		self.db_set("submitted_by", self.submitted_by, update_modified=False)
 		self.db_set("submitted_on", self.submitted_on, update_modified=False)
 		self.mark_sources_as_deposited()
@@ -47,8 +42,6 @@ class DonationClosing(Document):
 		)
 
 	def on_cancel(self):
-		self.status = "Cancelled"
-		self.db_set("status", self.status, update_modified=False)
 		self.reset_source_deposit_status()
 		notify_finance(
 			frappe._("Donation Closing Cancelled"),
@@ -56,41 +49,6 @@ class DonationClosing(Document):
 			self.doctype,
 			self.name,
 		)
-
-	def validate_cash_handover(self):
-		if not self.total_amount:
-			return
-
-		if not self.cash_handover:
-			frappe.throw(frappe._("Cash Handover is required before submitting Donation Closing."))
-
-		handover = frappe.db.get_value(
-			"Donation Cash Handover",
-			self.cash_handover,
-			["docstatus", "status", "amount", "variance"],
-			as_dict=True,
-		)
-		if not handover:
-			frappe.throw(frappe._("Cash Handover {0} was not found.").format(self.cash_handover))
-		if handover.docstatus != 1 or handover.status != "Received":
-			frappe.throw(frappe._("Cash Handover must be submitted and Received before closing."))
-		if flt(handover.amount) < flt(self.total_amount):
-			frappe.throw(frappe._("Cash Handover Amount cannot be less than Donation Closing total."))
-		if flt(handover.variance):
-			frappe.throw(frappe._("Cash Handover variance must be resolved before closing."))
-		self.validate_cash_handover_cutoff()
-
-	def validate_cash_handover_cutoff(self):
-		cutoff_time = frappe.db.get_single_value("Donation Settings", "closing_cutoff_time")
-		if not cutoff_time or not self.closing_date:
-			return
-
-		now = now_datetime()
-		if getdate(self.closing_date) == getdate(now) and now.time() > get_time(cutoff_time):
-			frappe.msgprint(
-				frappe._("Closing is being submitted after configured cut-off time {0}.").format(cutoff_time),
-				alert=True,
-			)
 
 	def set_company_default(self):
 		if not self.company:
@@ -168,36 +126,6 @@ class DonationClosing(Document):
 			"name": self.name,
 			"closing_details": get_closing_details_payload(self),
 		}
-
-	@frappe.whitelist()
-	def receive_closing(self):
-		if self.is_new():
-			frappe.throw(frappe._("Save Donation Closing before receiving it."))
-		if self.docstatus != 0:
-			frappe.throw(frappe._("Only draft Donation Closing can be received."))
-		if self.status not in ("", "Draft"):
-			frappe.throw(frappe._("Only Draft Donation Closing can be received."))
-		if not self.closing_details:
-			frappe.throw(frappe._("Add at least one pending cash donation before receiving."))
-
-		self.received_by = frappe.session.user
-		self.received_on = now_datetime()
-		self.status = "Received"
-		self.save(ignore_permissions=True)
-		notify_finance(
-			frappe._("Donation Closing Received"),
-			frappe._("Donation Closing {0} is received and awaiting deposit submission.").format(self.name),
-			self.doctype,
-			self.name,
-		)
-		notify_users(
-			frappe._("Donation Closing Received"),
-			frappe._("Your Donation Closing {0} has been received.").format(self.name),
-			users=[self.cashier],
-			reference_doctype=self.doctype,
-			reference_name=self.name,
-		)
-		return self.name
 
 	def mark_sources_as_deposited(self):
 		for row in self.closing_details or []:
