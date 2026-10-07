@@ -1885,6 +1885,9 @@ class DonationOrder(Document):
 
 		entry = frappe.get_doc("Journal Entry", self.journal_entry)
 		if entry.docstatus == 1:
+			# The Order created this Journal Entry. Its approved cancellation
+			# should not require a second, unrelated Journal Entry permission.
+			entry.flags.ignore_permissions = True
 			entry.cancel()
 			self.accounting_status = "Cancelled"
 

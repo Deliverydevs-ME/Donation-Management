@@ -62,6 +62,7 @@ class TestDonationBookLeaf(FrappeTestCase):
 			cancel_leaf_for_donation_order("DO-TEST")
 
 		self.assertTrue(leaf_doc.flags.from_donation_order_cancellation)
+		self.assertTrue(leaf_doc.flags.ignore_permissions)
 		leaf_doc.cancel.assert_called_once()
 		set_value.assert_called_once_with(
 			"Donation Book Leaf",

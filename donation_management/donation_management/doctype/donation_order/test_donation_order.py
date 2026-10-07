@@ -56,6 +56,24 @@ class TestDonationOrder(FrappeTestCase):
 		leaf.save.assert_not_called()
 		leaf.submit.assert_not_called()
 
+	def test_cancels_owned_journal_entry_without_separate_entry_permission(self):
+		order = DonationOrder(
+			{
+				"doctype": "Donation Order",
+				"journal_entry": "ACC-JV-TEST",
+			}
+		)
+		entry = MagicMock(name="Journal Entry")
+		entry.docstatus = 1
+
+		with patch.object(frappe.db, "exists", return_value=True), patch.object(
+			frappe, "get_doc", return_value=entry
+		):
+			order.cancel_linked_journal_entry()
+
+		self.assertTrue(entry.flags.ignore_permissions)
+		entry.cancel.assert_called_once_with()
+
 	def test_esaal_person_search_accepts_json_link_filters(self):
 		with patch.object(frappe.db, "sql", return_value=[]) as sql:
 			self.assertEqual(

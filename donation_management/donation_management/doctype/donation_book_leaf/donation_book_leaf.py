@@ -321,6 +321,9 @@ def cancel_leaf_for_donation_order(donation_order, clear_journal_entry=True):
 		leaf_doc = frappe.get_doc("Donation Book Leaf", leaf.name)
 		if leaf.docstatus == 1:
 			leaf_doc.flags.from_donation_order_cancellation = True
+			# The Order owns this Leaf, so its approved cancellation must not
+			# depend on a separate Leaf-cancel permission for the same user.
+			leaf_doc.flags.ignore_permissions = True
 			leaf_doc.cancel()
 
 		values = {"status": "Cancelled"}
