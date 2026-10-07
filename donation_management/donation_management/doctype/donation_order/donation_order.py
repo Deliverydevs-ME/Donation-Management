@@ -117,10 +117,12 @@ class DonationOrder(Document):
 			self.accounting_status = "Not Posted"
 			self.db_set("accounting_status", "Not Posted", update_modified=False)
 			self.set_receipt_status()
+			self.submit_linked_donation_book_leaf()
 			self.update_linked_donation_book_usage()
 			return
 		self.set_bank_deposit_status()
 		self.create_journal_entry()
+		self.submit_linked_donation_book_leaf()
 		self.update_linked_donation_book_usage()
 		self.update_donor_program_enrollments()
 		self.set_receipt_status()
@@ -144,6 +146,30 @@ class DonationOrder(Document):
 		)
 
 		cancel_leaf_for_donation_order(self.name, clear_journal_entry=True)
+
+	def submit_linked_donation_book_leaf(self):
+		"""Submit the selected Mohasil receipt after its Donation Order is posted."""
+		if not self.donation_book_leaf:
+			return
+
+		leaf = frappe.get_doc("Donation Book Leaf", self.donation_book_leaf)
+		if leaf.docstatus == 2:
+			frappe.throw(
+				frappe._("Donation Book Leaf {0} is cancelled and cannot be used.").format(leaf.name)
+			)
+		if leaf.docstatus == 1:
+			if leaf.donation_order != self.name:
+				frappe.throw(
+					frappe._("Donation Book Leaf {0} is already submitted for another Donation Order.").format(
+						leaf.name
+					)
+				)
+			return
+
+		leaf.donation_order = self.name
+		leaf.save(ignore_permissions=True)
+		leaf.flags.ignore_permissions = True
+		leaf.submit()
 
 	def is_sponsorship(self):
 		return any(row.donation_category == SPONSORSHIP_PURPOSE for row in self.get("purpose_details", []))

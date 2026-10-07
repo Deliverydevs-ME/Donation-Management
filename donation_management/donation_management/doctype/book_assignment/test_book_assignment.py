@@ -281,6 +281,45 @@ class TestBookAssignment(FrappeTestCase):
 		self.assertEqual(doc.collected_amount, 300)
 		self.assertEqual(doc.remaining_pages, 7)
 
+	def test_return_book_allows_an_empty_cash_denomination_breakdown(self):
+		doc = frappe._dict(
+			status="Issued",
+			total_pages=10,
+			coupon_value=0,
+			is_coupon_book=lambda: True,
+			name="BA-00003",
+			mode_of_payment=None,
+			debit_account=None,
+			credit_account=None,
+			flags=frappe._dict(),
+			set=lambda fieldname, value: setattr(doc, fieldname, value),
+			append=lambda fieldname, value: None,
+			save=lambda: None,
+		)
+		doc.as_dict = lambda: doc
+
+		with patch.object(frappe, "get_doc", return_value=doc), patch(
+			"donation_management.donation_management.doctype.book_assignment.book_assignment.get_coupon_value_for_book",
+			return_value=100,
+		), patch(
+			"donation_management.donation_management.doctype.book_assignment.book_assignment.get_coupon_book_total_pages",
+			return_value=10,
+		), patch(
+			"donation_management.donation_management.doctype.book_assignment.book_assignment.get_book_used_pages",
+			return_value=3,
+		), patch(
+			"donation_management.donation_management.doctype.book_assignment.book_assignment.get_book_collected_amount",
+			return_value=300,
+		), patch(
+			"donation_management.donation_management.doctype.book_assignment.book_assignment.generate_return_coupons"
+		), patch.object(frappe, "parse_json", return_value=[]), patch(
+			"donation_management.donation_management.doctype.book_assignment.book_assignment.today",
+			return_value="2026-10-05",
+		):
+			return_book("BA-00003", collected_amount=300, used_pages=3, denominations=[])
+
+		self.assertEqual(doc.collected_amount, 300)
+
 	def test_return_book_uses_assigned_coupon_total_when_parent_total_is_zero(self):
 		doc = frappe._dict(
 			status="Issued",

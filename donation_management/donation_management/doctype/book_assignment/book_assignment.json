@@ -292,7 +292,6 @@
    "fieldname": "cash_denominations",
    "fieldtype": "Table",
    "label": "Cash Denominations",
-   "mandatory_depends_on": "eval:(doc.book_type == 'Coupon Book' || doc.book_type == 'Donation Book' || doc.book_type == 'Mixed') && (doc.status == 'Returned' || doc.status == 'Closed')",
    "options": "Cash Denomination"
   },
   {

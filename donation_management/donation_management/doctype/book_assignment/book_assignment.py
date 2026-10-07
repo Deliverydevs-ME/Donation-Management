@@ -720,8 +720,10 @@ class BookAssignment(Document):
 			if cint(row.note_count):
 				has_note_count = True
 
-		if flt(self.collected_amount) > 0 and not has_note_count:
-			frappe.throw(frappe._("At least one denomination count is required."))
+		# A cash breakdown is useful for reconciliation, but it is not required
+		# to return a book. Validate it only when the user has entered counts.
+		if not has_note_count:
+			return
 
 		if flt(self.collected_amount) != flt(denomination_total):
 			frappe.throw(frappe._("Cash denomination total must match Total Amount Collected."))
@@ -922,14 +924,11 @@ def return_book(
 		frappe.throw(frappe._("Total Amount Collected must equal the total of submitted Coupon Entries."))
 
 	denominations = frappe.parse_json(denominations) or []
-	manual_denomination_total = flt(denomination_total)
 	denomination_rows_total = sum(
 		cint(row.get("denomination")) * cint(row.get("note_count")) for row in denominations
 	)
 	if denomination_rows_total and flt(denomination_rows_total) != calculated_collected_amount:
 		frappe.throw(frappe._("Cash denomination total must match Total Amount Collected."))
-	if not denomination_rows_total and manual_denomination_total != calculated_collected_amount:
-		frappe.throw(frappe._("Denomination Total must match Total Amount Collected."))
 
 	doc.set("cash_denominations", [])
 	for row in denominations:
@@ -1190,7 +1189,7 @@ def set_donation_book_return_collections(doc, book_collections):
 					book_serial_no,
 				)
 			)
-		if flt(collected_amount, 2) != flt(denomination_total, 2):
+		if denomination_total and flt(collected_amount, 2) != flt(denomination_total, 2):
 			frappe.throw(
 				frappe._("Cash denomination total must match Collected Amount for Book Serial No {0}.").format(
 					book_serial_no,

@@ -474,7 +474,7 @@ function set_collection_visibility(frm) {
 		&& ["Returned", "Closed"].includes(frm.doc.status);
 	frm.toggle_display("collection_section", show_collection);
 	frm.toggle_reqd("collected_amount", show_collection);
-	frm.toggle_reqd("cash_denominations", show_collection);
+	frm.toggle_reqd("cash_denominations", false);
 	frm.set_df_property("collected_amount", "read_only", 1);
 	frm.set_df_property("status", "read_only", 1);
 }
@@ -976,7 +976,7 @@ function validate_return_denomination_total(dialog, total_pages) {
 		return false;
 	}
 
-	if (collected_amount !== denomination_total) {
+	if (denomination_total && collected_amount !== denomination_total) {
 		frappe.msgprint(
 			__("Denomination total {0} must match Total Amount Collected {1}.", [
 				format_currency(denomination_total),
@@ -1024,7 +1024,7 @@ function validate_donation_book_return_collections(dialog, assigned_books) {
 			return false;
 		}
 
-		if (collected_amount !== denomination_total) {
+		if (denomination_total && collected_amount !== denomination_total) {
 			frappe.msgprint(
 				__("Denomination total {0} must match Collected Amount {1} for Book Serial No {2}.", [
 					format_currency(denomination_total),

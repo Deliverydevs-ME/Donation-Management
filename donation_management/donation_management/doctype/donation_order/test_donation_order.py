@@ -3,7 +3,7 @@
 
 from pathlib import Path
 from inspect import unwrap
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import frappe
 from frappe.tests.utils import FrappeTestCase
@@ -17,6 +17,45 @@ from donation_management.donation_management.api import get_esaal_person_options
 
 
 class TestDonationOrder(FrappeTestCase):
+	def test_submits_selected_donation_book_leaf_with_order(self):
+		order = DonationOrder(
+			{
+				"doctype": "Donation Order",
+				"name": "DO-TEST",
+				"donation_book_leaf": "DBL-TEST",
+			}
+		)
+		leaf = MagicMock(name="Donation Book Leaf")
+		leaf.name = "DBL-TEST"
+		leaf.docstatus = 0
+
+		with patch.object(frappe, "get_doc", return_value=leaf):
+			order.submit_linked_donation_book_leaf()
+
+		self.assertEqual(leaf.donation_order, "DO-TEST")
+		leaf.save.assert_called_once_with(ignore_permissions=True)
+		self.assertTrue(leaf.flags.ignore_permissions)
+		leaf.submit.assert_called_once_with()
+
+	def test_does_not_resubmit_an_already_submitted_leaf_for_same_order(self):
+		order = DonationOrder(
+			{
+				"doctype": "Donation Order",
+				"name": "DO-TEST",
+				"donation_book_leaf": "DBL-TEST",
+			}
+		)
+		leaf = MagicMock(name="Donation Book Leaf")
+		leaf.name = "DBL-TEST"
+		leaf.docstatus = 1
+		leaf.donation_order = "DO-TEST"
+
+		with patch.object(frappe, "get_doc", return_value=leaf):
+			order.submit_linked_donation_book_leaf()
+
+		leaf.save.assert_not_called()
+		leaf.submit.assert_not_called()
+
 	def test_esaal_person_search_accepts_json_link_filters(self):
 		with patch.object(frappe.db, "sql", return_value=[]) as sql:
 			self.assertEqual(
