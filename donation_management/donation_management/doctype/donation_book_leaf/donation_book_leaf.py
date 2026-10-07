@@ -320,6 +320,10 @@ def cancel_leaf_for_donation_order(donation_order, clear_journal_entry=True):
 	for leaf in leaves:
 		leaf_doc = frappe.get_doc("Donation Book Leaf", leaf.name)
 		if leaf.docstatus == 1:
+			# Mark the in-memory Leaf as cancelled before Frappe runs its cancel
+			# hooks. This makes the parent-owned cascade unambiguous even if a
+			# hook reloads document flags during cancellation.
+			leaf_doc.status = "Cancelled"
 			leaf_doc.flags.from_donation_order_cancellation = True
 			# The Order owns this Leaf, so its approved cancellation must not
 			# depend on a separate Leaf-cancel permission for the same user.

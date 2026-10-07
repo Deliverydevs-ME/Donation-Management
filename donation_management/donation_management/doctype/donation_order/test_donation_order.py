@@ -17,6 +17,15 @@ from donation_management.donation_management.api import get_esaal_person_options
 
 
 class TestDonationOrder(FrappeTestCase):
+	def test_connections_include_linked_donation_book_leaves(self):
+		dashboard = frappe.get_meta("Donation Order").get_dashboard_data()
+
+		self.assertEqual(dashboard.internal_links["Journal Entry"], "journal_entry")
+		self.assertEqual(dashboard.non_standard_fieldnames["Donation Book Leaf"], "donation_order")
+		self.assertTrue(
+			any("Donation Book Leaf" in transaction["items"] for transaction in dashboard.transactions)
+		)
+
 	def test_submits_selected_donation_book_leaf_with_order(self):
 		order = DonationOrder(
 			{
