@@ -17,6 +17,10 @@ const mohasil_employee_filters = {
 
 frappe.ui.form.on("Donation Order", {
 	setup(frm) {
+		// Donation Orders cancel their own receipt Leaf server-side after approval.
+		// Do not let Frappe's generic linked-document dialog cancel it first.
+		frm.ignore_doctypes_on_cancel_all = ["Donation Book Leaf"];
+
 		frm.set_query("donor_name", () => {
 			return {
 				query: "donation_management.donation_management.api.get_donor_link_options",

@@ -26,6 +26,10 @@ class TestDonationOrder(FrappeTestCase):
 			any("Donation Book Leaf" in transaction["items"] for transaction in dashboard.transactions)
 		)
 
+	def test_client_defers_leaf_cancellation_to_parent_order(self):
+		order_script = (Path(__file__).resolve().parent / "donation_order.js").read_text()
+		self.assertIn('frm.ignore_doctypes_on_cancel_all = ["Donation Book Leaf"]', order_script)
+
 	def test_submits_selected_donation_book_leaf_with_order(self):
 		order = DonationOrder(
 			{
