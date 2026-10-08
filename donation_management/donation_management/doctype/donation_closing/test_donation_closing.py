@@ -81,6 +81,25 @@ class TestDonationClosing(FrappeTestCase):
 		with patch.object(frappe.db, "get_value", return_value=handover):
 			closing.validate_cash_handover()
 
+	def test_closing_resolves_its_linked_cash_handover_when_reference_is_empty(self):
+		closing = DonationClosing(
+			{
+				"doctype": "Donation Closing",
+				"name": "CD-TEST",
+				"total_amount": 10000,
+			}
+		)
+		handover = frappe._dict(
+			name="DCH-TEST", docstatus=1, donation_closing="CD-TEST", amount=10000
+		)
+
+		with patch.object(frappe, "get_all", return_value=["DCH-TEST"]), patch.object(
+			frappe.db, "get_value", return_value=handover
+		):
+			closing.validate_cash_handover()
+
+		self.assertEqual(closing.cash_handover, "DCH-TEST")
+
 	def test_form_shows_one_ungrouped_lifecycle_action(self):
 		script = Path(__file__).with_name("donation_closing.js").read_text()
 
@@ -89,4 +108,5 @@ class TestDonationClosing(FrappeTestCase):
 		self.assertIn('!(frm.doc.closing_details || []).length', script)
 		self.assertIn('__("Donation Cash Handover")', script)
 		self.assertIn('}, __("Create"));', script)
+		self.assertIn('docstatus: ["<", 2]', script)
 		self.assertIn('frm.ignore_doctypes_on_cancel_all = ["Donation Cash Handover"]', script)

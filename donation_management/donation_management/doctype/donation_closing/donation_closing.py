@@ -80,11 +80,26 @@ class DonationClosing(Document):
 
 	def validate_cash_handover(self):
 		if not self.cash_handover:
-			frappe.throw(
-				frappe._(
-					"Create and submit a Donation Cash Handover through the configured Workflow before submitting this Donation Closing."
-				)
+			handover_names = frappe.get_all(
+				"Donation Cash Handover",
+				filters={"donation_closing": self.name, "docstatus": ["<", 2]},
+				pluck="name",
+				limit_page_length=2,
 			)
+			if len(handover_names) == 1:
+				self.cash_handover = handover_names[0]
+			elif len(handover_names) > 1:
+				frappe.throw(
+					frappe._(
+						"Multiple active Donation Cash Handovers are linked to this Donation Closing. Cancel the duplicate before submitting."
+					)
+				)
+			else:
+				frappe.throw(
+					frappe._(
+						"Create and submit a Donation Cash Handover through the configured Workflow before submitting this Donation Closing."
+					)
+				)
 
 		handover = frappe.db.get_value(
 			"Donation Cash Handover",

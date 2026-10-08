@@ -18,17 +18,8 @@ frappe.ui.form.on("Donation Closing", {
 
 	refresh(frm) {
 		frm.remove_custom_button(__("Record Bank Deposit"));
-		if (!frm.is_new() && frm.doc.docstatus === 0 && !frm.doc.cash_handover) {
-			frm.add_custom_button(__("Donation Cash Handover"), () => {
-				frappe.new_doc("Donation Cash Handover", {
-					donation_closing: frm.doc.name,
-					company: frm.doc.company,
-					cashier: frm.doc.cashier,
-					amount: frm.doc.total_amount,
-					reference: frm.doc.name,
-				});
-			}, __("Create"));
-		}
+		frm.remove_custom_button(__("Donation Cash Handover"), __("Create"));
+		add_cash_handover_button_if_needed(frm);
 
 		if (
 			frm.is_new() ||
@@ -41,6 +32,39 @@ frappe.ui.form.on("Donation Closing", {
 
 	},
 });
+
+function add_cash_handover_button_if_needed(frm) {
+	if (frm.is_new() || frm.doc.docstatus !== 0 || frm.doc.cash_handover) {
+		return;
+	}
+
+	const closing_name = frm.doc.name;
+	frappe.db.get_value(
+		"Donation Cash Handover",
+		{ donation_closing: closing_name, docstatus: ["<", 2] },
+		"name",
+		(handover) => {
+			if (
+				frm.doc.name !== closing_name ||
+				frm.doc.docstatus !== 0 ||
+				frm.doc.cash_handover ||
+				handover?.name
+			) {
+				return;
+			}
+
+			frm.add_custom_button(__("Donation Cash Handover"), () => {
+				frappe.new_doc("Donation Cash Handover", {
+					donation_closing: frm.doc.name,
+					company: frm.doc.company,
+					cashier: frm.doc.cashier,
+					amount: frm.doc.total_amount,
+					reference: frm.doc.name,
+				});
+			}, __("Create"));
+		}
+	);
+}
 
 function fetch_pending(frm) {
 	if (!frm.doc.company) {
