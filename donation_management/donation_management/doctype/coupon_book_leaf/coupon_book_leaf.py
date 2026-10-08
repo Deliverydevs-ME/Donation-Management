@@ -316,6 +316,7 @@ def cancel_leaves_for_coupon_entry(coupon_entry, journal_entry=None):
 		leaf = frappe.get_doc("Coupon Book Leaf", row.name)
 		if leaf.docstatus == 1:
 			leaf.flags.ignore_validate_update_after_submit = True
+			leaf.flags.ignore_permissions = True
 			leaf.cancel()
 		else:
 			leaf.db_set(
@@ -343,6 +344,7 @@ def cancel_leaves_for_book_assignment(book):
 		leaf = frappe.get_doc("Coupon Book Leaf", leaf_name)
 		if leaf.docstatus == 1:
 			leaf.flags.ignore_validate_update_after_submit = True
+			leaf.flags.ignore_permissions = True
 			leaf.cancel()
 		else:
 			leaf.db_set(

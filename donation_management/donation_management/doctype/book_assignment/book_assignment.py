@@ -89,8 +89,26 @@ class BookAssignment(Document):
 			cancel_leaves_for_book_assignment as cancel_coupon_book_leaves,
 		)
 
+		self.cancel_linked_coupon_entries()
 		cancel_leaves_for_book_assignment(self.name)
 		cancel_coupon_book_leaves(self.name)
+		self.status = "Cancelled"
+		self.db_set("status", self.status, update_modified=False)
+		for row in self.assigned_books or []:
+			row.status = "Cancelled"
+			if row.name:
+				frappe.db.set_value("Book Assignment Detail", row.name, "status", "Cancelled", update_modified=False)
+
+	def cancel_linked_coupon_entries(self):
+		for coupon_name in frappe.get_all(
+			"Coupon Entry",
+			filters={"book": self.name, "docstatus": 1},
+			pluck="name",
+			ignore_permissions=True,
+		):
+			coupon = frappe.get_doc("Coupon Entry", coupon_name)
+			coupon.flags.ignore_permissions = True
+			coupon.cancel()
 
 	def on_submit(self):
 		self.status = "Issued"

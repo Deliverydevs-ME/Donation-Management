@@ -19,6 +19,13 @@ const mohasil_employee_filters = {
 
 frappe.ui.form.on("Book Assignment", {
 	setup(frm) {
+		// Book Assignment cancels its own issued-book records server-side.
+		frm.ignore_doctypes_on_cancel_all = [
+			"Coupon Entry",
+			"Coupon Book Leaf",
+			"Donation Book Leaf",
+		];
+
 		frm.set_query("item", () => ({
 			query: "donation_management.donation_management.doctype.book_assignment.book_assignment.get_book_items",
 			filters: {

@@ -4,7 +4,7 @@
 from pathlib import Path
 
 import frappe
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 from frappe.tests.utils import FrappeTestCase
 
 from donation_management.donation_management.doctype.book_assignment.book_assignment import (
@@ -27,6 +27,35 @@ from donation_management.donation_management.doctype.book_assignment.book_assign
 
 
 class TestBookAssignment(FrappeTestCase):
+	def test_book_assignment_cancels_its_submitted_coupon_entries(self):
+		assignment = BookAssignment({"doctype": "Book Assignment", "name": "BK-TEST"})
+		coupon = frappe._dict(flags=frappe._dict(), cancel=Mock())
+
+		with patch.object(frappe, "get_all", return_value=["COP-TEST"]), patch.object(
+			frappe, "get_doc", return_value=coupon
+		):
+			assignment.cancel_linked_coupon_entries()
+
+		self.assertTrue(coupon.flags.ignore_permissions)
+		coupon.cancel.assert_called_once_with()
+
+	def test_book_assignment_cancellation_sets_cancelled_status(self):
+		assignment = BookAssignment(
+			{"doctype": "Book Assignment", "name": "BK-TEST", "status": "Issued"}
+		)
+		assignment.cancel_linked_coupon_entries = Mock()
+		assignment.db_set = Mock()
+
+		with patch(
+			"donation_management.donation_management.doctype.donation_book_leaf.donation_book_leaf.cancel_leaves_for_book_assignment"
+		), patch(
+			"donation_management.donation_management.doctype.coupon_book_leaf.coupon_book_leaf.cancel_leaves_for_book_assignment"
+		):
+			assignment.on_cancel()
+
+		self.assertEqual(assignment.status, "Cancelled")
+		assignment.db_set.assert_called_once_with("status", "Cancelled", update_modified=False)
+
 	def test_assigned_book_stock_is_confirmed_after_item_or_warehouse_selection(self):
 		script = Path(__file__).with_name("book_assignment.js").read_text()
 
@@ -34,6 +63,13 @@ class TestBookAssignment(FrappeTestCase):
 		self.assertIn("show_assigned_book_stock_alert", script)
 		self.assertIn('message: __("Available stock: {0}", [stock])', script)
 		self.assertIn('indicator: "green"', script)
+
+	def test_book_assignment_form_uses_server_side_cancellation_cascade(self):
+		script = Path(__file__).with_name("book_assignment.js").read_text()
+
+		self.assertIn('"Coupon Entry"', script)
+		self.assertIn('"Coupon Book Leaf"', script)
+		self.assertIn('"Donation Book Leaf"', script)
 
 	def test_submittable_doctypes_use_business_status_indicators_in_list_view(self):
 		doctype_root = Path(__file__).resolve().parents[1]

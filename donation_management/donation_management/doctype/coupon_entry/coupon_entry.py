@@ -198,6 +198,7 @@ class CouponEntry(Document):
 
 		entry = frappe.get_doc("Journal Entry", self.journal_entry)
 		if entry.docstatus == 1:
+			entry.flags.ignore_permissions = True
 			entry.cancel()
 		frappe.db.set_value(self.doctype, self.name, "accounting_status", "Cancelled", update_modified=False)
 		self.accounting_status = "Cancelled"
