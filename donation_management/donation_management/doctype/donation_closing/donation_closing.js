@@ -14,6 +14,17 @@ frappe.ui.form.on("Donation Closing", {
 
 	refresh(frm) {
 		frm.remove_custom_button(__("Record Bank Deposit"));
+		if (frm.doc.docstatus === 1 && !frm.doc.cash_handover) {
+			frm.add_custom_button(__("Create Cash Handover"), () => {
+				frappe.new_doc("Donation Cash Handover", {
+					donation_closing: frm.doc.name,
+					company: frm.doc.company,
+					cashier: frm.doc.cashier,
+					amount: frm.doc.total_amount,
+					reference: frm.doc.name,
+				});
+			});
+		}
 
 		if (
 			frm.is_new() ||

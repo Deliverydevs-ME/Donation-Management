@@ -7,6 +7,7 @@
  "engine": "InnoDB",
  "field_order": [
   "handover_section",
+  "donation_closing",
   "company",
   "donation_location",
   "cashier",
@@ -25,6 +26,7 @@
  ],
  "fields": [
   {"fieldname": "handover_section", "fieldtype": "Section Break", "label": "Handover"},
+  {"fieldname": "donation_closing", "fieldtype": "Link", "label": "Donation Closing", "options": "Donation Closing"},
   {"fieldname": "company", "fieldtype": "Link", "label": "Company", "options": "Company", "reqd": 1},
   {"fieldname": "donation_location", "fieldtype": "Link", "label": "Donation Location", "options": "Donation Location"},
   {"fieldname": "cashier", "fieldtype": "Link", "label": "Cashier", "options": "User", "reqd": 1},

@@ -53,3 +53,4 @@ class TestDonationClosing(FrappeTestCase):
 		self.assertNotIn("approve_closing", script)
 		self.assertNotIn("receive_closing", script)
 		self.assertIn('!(frm.doc.closing_details || []).length', script)
+		self.assertIn('__("Create Cash Handover")', script)
