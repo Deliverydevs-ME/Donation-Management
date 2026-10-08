@@ -258,7 +258,19 @@ def allocate_coupon_entry_leaves(coupon_entry):
 		)
 		for receipt in receipts
 	]
-	available = [name for name in leaves if name and frappe.db.get_value("Coupon Book Leaf", name, "status") == "Pending"]
+	pending = [
+		name for name in leaves if name and frappe.db.get_value("Coupon Book Leaf", name, "status") == "Pending"
+	]
+	# Legacy leaf records may already be submitted as Used but have no Coupon
+	# Entry link. They are safe to repair only within this entry's receipt range.
+	used_without_entry = []
+	for name in leaves:
+		if not name:
+			continue
+		leaf_data = frappe.db.get_value("Coupon Book Leaf", name, ["status", "coupon_entry"], as_dict=True)
+		if leaf_data and leaf_data.status == "Used" and not leaf_data.coupon_entry:
+			used_without_entry.append(name)
+	available = pending + used_without_entry
 	if len(available) < remaining_page_count:
 		frappe.throw(
 			frappe._(
@@ -275,8 +287,12 @@ def allocate_coupon_entry_leaves(coupon_entry):
 		leaf.amount = per_leaf_amount
 		leaf.journal_entry = coupon_entry.journal_entry
 		leaf.accounting_status = coupon_entry.accounting_status
-		leaf.save(ignore_permissions=True)
-		leaf.submit()
+		if leaf.docstatus == 1:
+			leaf.flags.ignore_validate_update_after_submit = True
+			leaf.save(ignore_permissions=True)
+		else:
+			leaf.save(ignore_permissions=True)
+			leaf.submit()
 
 
 def get_coupon_entry_range(coupon_entry):

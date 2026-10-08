@@ -14,6 +14,7 @@ from donation_management.donation_management.doctype.coupon_entry.coupon_entry i
 	COUPON_SERIES,
 	Coupon,
 	_get_coupon_book_details,
+	sync_coupon_entry_leaf_connections,
 )
 
 
@@ -100,3 +101,20 @@ class TestCoupon(FrappeTestCase):
 		allocation_source = leaf_source[allocation_start : leaf_source.index("def get_coupon_entry_range", allocation_start)]
 
 		self.assertIn("sync_coupon_book_leaves(coupon_entry.book)", allocation_source)
+
+	def test_submitted_coupon_repairs_missing_leaf_connections(self):
+		entry = frappe._dict(name="COP-TEST", docstatus=1, book="BK-TEST", number_of_pages=2)
+		with patch.object(frappe.db, "exists", return_value=True), patch.object(
+			frappe, "get_doc", return_value=entry
+		), patch.object(frappe.db, "count", side_effect=[0, 2]), patch(
+			"donation_management.donation_management.doctype.coupon_book_leaf.coupon_book_leaf.allocate_coupon_entry_leaves"
+		) as allocate:
+			self.assertEqual(sync_coupon_entry_leaf_connections("COP-TEST"), 2)
+
+		allocate.assert_called_once_with(entry)
+
+	def test_coupon_form_refreshes_connections_after_leaf_repair(self):
+		script = Path(__file__).with_name("coupon_entry.js").read_text()
+
+		self.assertIn("sync_coupon_entry_leaf_connections", script)
+		self.assertIn("frm.dashboard.refresh()", script)

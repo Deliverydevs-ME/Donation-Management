@@ -320,6 +320,34 @@ def get_coupon_book_details(book, book_serial_no=None):
 	return _get_coupon_book_details(book, book_serial_no, allow_missing_serial=True)
 
 
+@frappe.whitelist()
+def sync_coupon_entry_leaf_connections(coupon_entry):
+	"""Repair missing leaf links so Coupon Entry Connections shows used receipts."""
+	if not coupon_entry or not frappe.db.exists("Coupon Entry", coupon_entry):
+		return 0
+
+	entry = frappe.get_doc("Coupon Entry", coupon_entry)
+	if entry.docstatus != 1 or not entry.book:
+		return 0
+
+	from donation_management.donation_management.doctype.coupon_book_leaf.coupon_book_leaf import (
+		allocate_coupon_entry_leaves,
+	)
+
+	linked_leaves = frappe.db.count("Coupon Book Leaf", {"coupon_entry": entry.name})
+	if linked_leaves >= cint(entry.number_of_pages):
+		return linked_leaves
+
+	try:
+		allocate_coupon_entry_leaves(entry)
+	except frappe.ValidationError:
+		# An old entry can have no unlinked leaves left to repair. Do not stop the
+		# user from opening it; the current links, if any, still appear.
+		pass
+
+	return frappe.db.count("Coupon Book Leaf", {"coupon_entry": entry.name})
+
+
 def get_used_coupon_pages(book, exclude_coupon=None, book_serial_no=None):
 	# A cancelled Coupon Entry has discarded physical pages. Keep it in the
 	# consumed count so cancellation never makes those pages available again.

@@ -9,6 +9,7 @@ from frappe.tests.utils import FrappeTestCase
 
 from donation_management.donation_management.doctype.book_assignment.book_assignment import (
 	BookAssignment,
+	cancel_book_issue_stock_entry,
 	create_book_issue_stock_entry,
 	format_receipt_number,
 	get_book_return_details,
@@ -142,6 +143,20 @@ class TestBookAssignment(FrappeTestCase):
 			restore_unused_book_stock(doc)
 
 		cancel_stock_entry.assert_not_called()
+
+	def test_return_can_cancel_parent_owned_stock_entry(self):
+		doc = frappe._dict(stock_entry="MAT-STE-TEST")
+		stock_entry = frappe._dict(flags=frappe._dict())
+		stock_entry.cancel = Mock()
+
+		with patch.object(frappe.db, "get_value", return_value=1), patch.object(
+			frappe, "get_doc", return_value=stock_entry
+		):
+			cancel_book_issue_stock_entry(doc)
+
+		self.assertTrue(stock_entry.flags.ignore_permissions)
+		self.assertTrue(stock_entry.flags.ignore_links)
+		stock_entry.cancel.assert_called_once_with()
 
 	def test_submittable_doctypes_use_business_status_indicators_in_list_view(self):
 		doctype_root = Path(__file__).resolve().parents[1]

@@ -2202,6 +2202,9 @@ def cancel_book_issue_stock_entry(doc):
 
 	stock_entry = frappe.get_doc("Stock Entry", doc.stock_entry)
 	stock_entry.flags.ignore_permissions = True
+	# The Book Assignment owns this Stock Entry. Its link must not prevent the
+	# authorised return/cancellation from reversing the stock movement.
+	stock_entry.flags.ignore_links = True
 	stock_entry.cancel()
 
 

@@ -16,6 +16,17 @@ frappe.ui.form.on("Coupon Entry", {
 		if (frm.doc.book) {
 			set_coupon_book_details(frm);
 		}
+		if (frm.doc.docstatus === 1) {
+			frappe.call({
+				method: "donation_management.donation_management.doctype.coupon_entry.coupon_entry.sync_coupon_entry_leaf_connections",
+				args: { coupon_entry: frm.doc.name },
+				callback(response) {
+					if (response.message) {
+						frm.dashboard.refresh();
+					}
+				},
+			});
+		}
 	},
 
 	on_submit(frm) {
