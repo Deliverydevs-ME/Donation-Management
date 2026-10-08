@@ -44,6 +44,7 @@ class DonationClosing(Document):
 		)
 
 	def on_cancel(self):
+		self.cancel_linked_cash_handovers()
 		self.reset_source_deposit_status()
 		notify_finance(
 			frappe._("Donation Closing Cancelled"),
@@ -51,6 +52,17 @@ class DonationClosing(Document):
 			self.doctype,
 			self.name,
 		)
+
+	def cancel_linked_cash_handovers(self):
+		handover_names = frappe.get_all(
+			"Donation Cash Handover",
+			filters={"donation_closing": self.name, "docstatus": 1},
+			pluck="name",
+		)
+		for handover_name in handover_names:
+			handover = frappe.get_doc("Donation Cash Handover", handover_name)
+			handover.flags.ignore_permissions = True
+			handover.cancel()
 
 	def set_company_default(self):
 		if not self.company:

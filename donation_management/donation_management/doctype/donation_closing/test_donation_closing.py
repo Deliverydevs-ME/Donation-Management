@@ -2,7 +2,7 @@
 # See license.txt
 
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import frappe
 from frappe.tests.utils import FrappeTestCase
@@ -99,6 +99,18 @@ class TestDonationClosing(FrappeTestCase):
 			closing.validate_cash_handover()
 
 		self.assertEqual(closing.cash_handover, "DCH-TEST")
+
+	def test_cancelling_closing_cancels_submitted_linked_cash_handovers(self):
+		closing = DonationClosing({"doctype": "Donation Closing", "name": "CD-TEST"})
+		handover = frappe._dict(flags=frappe._dict(), cancel=Mock())
+
+		with patch.object(frappe, "get_all", return_value=["DCH-TEST"]), patch.object(
+			frappe, "get_doc", return_value=handover
+		):
+			closing.cancel_linked_cash_handovers()
+
+		self.assertTrue(handover.flags.ignore_permissions)
+		handover.cancel.assert_called_once_with()
 
 	def test_form_shows_one_ungrouped_lifecycle_action(self):
 		script = Path(__file__).with_name("donation_closing.js").read_text()
