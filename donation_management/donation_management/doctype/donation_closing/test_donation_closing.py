@@ -25,7 +25,7 @@ class TestDonationClosing(FrappeTestCase):
 		with self.assertRaisesRegex(frappe.ValidationError, "already been fetched"):
 			closing.fetch_pending_cash_donations()
 
-	def test_submission_does_not_enforce_a_custom_workflow_status_or_cash_handover(self):
+	def test_submission_does_not_enforce_a_custom_workflow_status(self):
 		closing = DonationClosing(
 			{
 				"doctype": "Donation Closing",
@@ -47,10 +47,46 @@ class TestDonationClosing(FrappeTestCase):
 		self.assertEqual(closing.status, "Approved")
 		self.assertEqual(closing.submitted_by, frappe.session.user)
 
+	def test_closing_requires_submitted_linked_cash_handover(self):
+		closing = DonationClosing(
+			{
+				"doctype": "Donation Closing",
+				"name": "CD-TEST",
+				"cash_handover": "DCH-TEST",
+				"total_amount": 10000,
+			}
+		)
+		handover = frappe._dict(
+			name="DCH-TEST", docstatus=0, donation_closing="CD-TEST", amount=10000
+		)
+
+		with patch.object(frappe.db, "get_value", return_value=handover), self.assertRaisesRegex(
+			frappe.ValidationError, "must be submitted through the configured Workflow"
+		):
+			closing.validate_cash_handover()
+
+	def test_closing_accepts_submitted_linked_cash_handover(self):
+		closing = DonationClosing(
+			{
+				"doctype": "Donation Closing",
+				"name": "CD-TEST",
+				"cash_handover": "DCH-TEST",
+				"total_amount": 10000,
+			}
+		)
+		handover = frappe._dict(
+			name="DCH-TEST", docstatus=1, donation_closing="CD-TEST", amount=10000
+		)
+
+		with patch.object(frappe.db, "get_value", return_value=handover):
+			closing.validate_cash_handover()
+
 	def test_form_shows_one_ungrouped_lifecycle_action(self):
 		script = Path(__file__).with_name("donation_closing.js").read_text()
 
 		self.assertNotIn("approve_closing", script)
 		self.assertNotIn("receive_closing", script)
 		self.assertIn('!(frm.doc.closing_details || []).length', script)
-		self.assertIn('__("Create Cash Handover")', script)
+		self.assertIn('__("Donation Cash Handover")', script)
+		self.assertIn('}, __("Create"));', script)
+		self.assertIn('frm.ignore_doctypes_on_cancel_all = ["Donation Cash Handover"]', script)

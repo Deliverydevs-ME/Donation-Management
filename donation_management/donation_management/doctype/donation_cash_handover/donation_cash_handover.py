@@ -76,9 +76,9 @@ class DonationCashHandover(Document):
 		)
 		if not closing:
 			frappe.throw(frappe._("Donation Closing {0} was not found.").format(self.donation_closing))
-		if closing.docstatus != 1:
+		if closing.docstatus == 2:
 			frappe.throw(
-				frappe._("Donation Closing {0} must be submitted before Cash Handover can be recorded.").format(
+				frappe._("Donation Closing {0} has been cancelled and cannot be used for Cash Handover.").format(
 					self.donation_closing
 				)
 			)

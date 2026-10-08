@@ -2,6 +2,10 @@
 // For license information, please see license.txt
 
 frappe.ui.form.on("Donation Closing", {
+	setup(frm) {
+		frm.ignore_doctypes_on_cancel_all = ["Donation Cash Handover"];
+	},
+
 	onload(frm) {
 		if (frappe.route_options && frappe.route_options.show_fetch_alert) {
 			frappe.show_alert({
@@ -14,8 +18,8 @@ frappe.ui.form.on("Donation Closing", {
 
 	refresh(frm) {
 		frm.remove_custom_button(__("Record Bank Deposit"));
-		if (frm.doc.docstatus === 1 && !frm.doc.cash_handover) {
-			frm.add_custom_button(__("Create Cash Handover"), () => {
+		if (!frm.is_new() && frm.doc.docstatus === 0 && !frm.doc.cash_handover) {
+			frm.add_custom_button(__("Donation Cash Handover"), () => {
 				frappe.new_doc("Donation Cash Handover", {
 					donation_closing: frm.doc.name,
 					company: frm.doc.company,
@@ -23,7 +27,7 @@ frappe.ui.form.on("Donation Closing", {
 					amount: frm.doc.total_amount,
 					reference: frm.doc.name,
 				});
-			});
+			}, __("Create"));
 		}
 
 		if (

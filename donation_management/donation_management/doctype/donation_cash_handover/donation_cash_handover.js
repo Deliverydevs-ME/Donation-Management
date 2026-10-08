@@ -1,6 +1,6 @@
 frappe.ui.form.on("Donation Cash Handover", {
 	setup(frm) {
-		frm.set_query("donation_closing", () => ({ filters: { docstatus: 1 } }));
+		frm.set_query("donation_closing", () => ({ filters: { docstatus: ["<", 2] } }));
 	},
 
 	donation_closing(frm) {

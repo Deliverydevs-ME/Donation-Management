@@ -16,6 +16,8 @@ class DonationClosing(Document):
 		self.set_cashier()
 		self.set_totals()
 		self.validate_closing_details()
+		if self.docstatus == 1:
+			self.validate_cash_handover()
 
 	def set_prepared_by(self):
 		if not self.prepared_by:
@@ -75,6 +77,39 @@ class DonationClosing(Document):
 						row.source_name,
 					)
 				)
+
+	def validate_cash_handover(self):
+		if not self.cash_handover:
+			frappe.throw(
+				frappe._(
+					"Create and submit a Donation Cash Handover through the configured Workflow before submitting this Donation Closing."
+				)
+			)
+
+		handover = frappe.db.get_value(
+			"Donation Cash Handover",
+			self.cash_handover,
+			["name", "docstatus", "donation_closing", "amount"],
+			as_dict=True,
+		)
+		if not handover:
+			frappe.throw(frappe._("Cash Handover {0} was not found.").format(self.cash_handover))
+		if handover.donation_closing != self.name:
+			frappe.throw(
+				frappe._("Cash Handover {0} is not linked to this Donation Closing.").format(handover.name)
+			)
+		if handover.docstatus != 1:
+			frappe.throw(
+				frappe._(
+					"Cash Handover {0} must be submitted through the configured Workflow before submitting this Donation Closing."
+				).format(handover.name)
+			)
+		if flt(handover.amount) != flt(self.total_amount):
+			frappe.throw(
+				frappe._(
+					"Cash Handover {0} expected amount must match Donation Closing Total Amount."
+				).format(handover.name)
+			)
 
 	@frappe.whitelist()
 	def fetch_pending_cash_donations(self):

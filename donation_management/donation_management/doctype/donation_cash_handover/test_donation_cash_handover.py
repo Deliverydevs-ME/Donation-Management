@@ -36,16 +36,18 @@ class TestDonationCashHandover(FrappeTestCase):
 		self.assertEqual(handover.cashier, "cashier@example.com")
 		self.assertEqual(handover.amount, 10000)
 
-	def test_linked_handover_requires_submitted_closing(self):
+	def test_linked_handover_accepts_a_saved_draft_closing(self):
 		handover = DonationCashHandover(
 			{"doctype": "Donation Cash Handover", "donation_closing": "CD-TEST"}
 		)
 		closing = frappe._dict(name="CD-TEST", docstatus=0, company="JTQ", cashier="cashier@example.com", total_amount=10000)
 
-		with patch.object(frappe.db, "get_value", return_value=closing), self.assertRaisesRegex(
-			frappe.ValidationError, "must be submitted"
+		with patch.object(frappe.db, "get_value", return_value=closing), patch.object(
+			frappe, "get_all", return_value=[]
 		):
 			handover.set_donation_closing_details()
+
+		self.assertEqual(handover.amount, 10000)
 
 	def test_linked_handover_allows_only_one_active_record_per_closing(self):
 		handover = DonationCashHandover(
