@@ -46,6 +46,8 @@ class DonationClosing(Document):
 	def on_cancel(self):
 		self.cancel_linked_cash_handovers()
 		self.reset_source_deposit_status()
+		self.status = "Cancelled"
+		self.db_set("status", self.status, update_modified=False)
 		notify_finance(
 			frappe._("Donation Closing Cancelled"),
 			frappe._("Donation Closing {0} has been cancelled.").format(self.name),

@@ -112,6 +112,22 @@ class TestDonationClosing(FrappeTestCase):
 		self.assertTrue(handover.flags.ignore_permissions)
 		handover.cancel.assert_called_once_with()
 
+	def test_cancelling_closing_sets_business_status_to_cancelled(self):
+		closing = DonationClosing(
+			{"doctype": "Donation Closing", "name": "CD-TEST", "status": "Approved"}
+		)
+		closing.cancel_linked_cash_handovers = Mock()
+		closing.reset_source_deposit_status = Mock()
+		closing.db_set = Mock()
+
+		with patch(
+			"donation_management.donation_management.doctype.donation_closing.donation_closing.notify_finance"
+		):
+			closing.on_cancel()
+
+		self.assertEqual(closing.status, "Cancelled")
+		closing.db_set.assert_called_once_with("status", "Cancelled", update_modified=False)
+
 	def test_form_shows_one_ungrouped_lifecycle_action(self):
 		script = Path(__file__).with_name("donation_closing.js").read_text()
 
