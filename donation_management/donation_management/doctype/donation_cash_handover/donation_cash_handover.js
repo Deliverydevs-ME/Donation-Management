@@ -20,4 +20,10 @@ frappe.ui.form.on("Donation Cash Handover", {
 			}
 		);
 	},
+
+	on_submit(frm) {
+		if (frm.doc.donation_closing) {
+			frappe.set_route("Form", "Donation Closing", frm.doc.donation_closing);
+		}
+	},
 });

@@ -1,3 +1,4 @@
+from pathlib import Path
 from unittest.mock import patch
 
 import frappe
@@ -15,6 +16,12 @@ from donation_management.donation_management.doctype.donation_closing.donation_c
 
 
 class TestDonationCashHandover(FrappeTestCase):
+	def test_submitted_handover_returns_to_its_donation_closing(self):
+		handover_script = Path(__file__).with_name("donation_cash_handover.js").read_text()
+
+		self.assertIn("on_submit(frm)", handover_script)
+		self.assertIn('frappe.set_route("Form", "Donation Closing", frm.doc.donation_closing)', handover_script)
+
 	def test_linked_closing_sets_expected_handover_amount(self):
 		handover = DonationCashHandover(
 			{
