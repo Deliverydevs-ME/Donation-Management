@@ -196,7 +196,7 @@ frappe.ui.form.on("Book Assignment Detail", {
 
 	item(frm, cdt, cdn) {
 		const row = locals[cdt][cdn];
-		fetch_assigned_book_stock(frm, cdt, cdn);
+		fetch_assigned_book_stock(frm, cdt, cdn, true);
 		if (!row.item) {
 			clear_assigned_coupon_fields(cdt, cdn);
 			return;
@@ -246,7 +246,7 @@ frappe.ui.form.on("Book Assignment Detail", {
 	},
 
 	warehouse(frm, cdt, cdn) {
-		fetch_assigned_book_stock(frm, cdt, cdn);
+		fetch_assigned_book_stock(frm, cdt, cdn, true);
 	},
 
 	receipt_format(frm, cdt, cdn) {
@@ -366,7 +366,7 @@ function get_assigned_book_type(frm, cdt, cdn) {
 	return locals[cdt][cdn].book_type || book_type_mixed;
 }
 
-function fetch_assigned_book_stock(frm, cdt, cdn) {
+function fetch_assigned_book_stock(frm, cdt, cdn, show_alert = false) {
 	const row = locals[cdt][cdn];
 	if (!row.item || !row.warehouse) {
 		set_assigned_book_stock_display(frm, row, 0);
@@ -384,9 +384,29 @@ function fetch_assigned_book_stock(frm, cdt, cdn) {
 		callback(response) {
 			const current_row = locals[cdt] && locals[cdt][cdn];
 			if (current_row && current_row.item === item && current_row.warehouse === warehouse) {
-				set_assigned_book_stock_display(frm, current_row, response.message);
+				const stock = flt(response.message || 0);
+				set_assigned_book_stock_display(frm, current_row, stock);
+				if (show_alert) {
+					show_assigned_book_stock_alert(item, warehouse, stock);
+				}
 			}
 		},
+	});
+}
+
+function show_assigned_book_stock_alert(item, warehouse, stock) {
+	if (stock <= 0) {
+		frappe.msgprint({
+			title: __("No Stock Available"),
+			message: __("No stock is available for Item {0} in Warehouse {1}.", [item, warehouse]),
+			indicator: "orange",
+		});
+		return;
+	}
+
+	frappe.show_alert({
+		message: __("Available stock: {0}", [stock]),
+		indicator: "green",
 	});
 }
 

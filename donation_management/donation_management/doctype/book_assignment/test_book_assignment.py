@@ -27,6 +27,14 @@ from donation_management.donation_management.doctype.book_assignment.book_assign
 
 
 class TestBookAssignment(FrappeTestCase):
+	def test_assigned_book_stock_is_confirmed_after_item_or_warehouse_selection(self):
+		script = Path(__file__).with_name("book_assignment.js").read_text()
+
+		self.assertIn("fetch_assigned_book_stock(frm, cdt, cdn, true)", script)
+		self.assertIn("show_assigned_book_stock_alert", script)
+		self.assertIn('message: __("Available stock: {0}", [stock])', script)
+		self.assertIn('indicator: "green"', script)
+
 	def test_submittable_doctypes_use_business_status_indicators_in_list_view(self):
 		doctype_root = Path(__file__).resolve().parents[1]
 		doctypes = (
