@@ -601,7 +601,7 @@ function add_action_buttons(frm) {
 		frm.add_custom_button(__("Return"), () => show_donation_book_return_dialog(frm), __("Actions"));
 	} else if (frm.doc.status === "Returned") {
 		frm.add_custom_button(__("Close"), () => close_book(frm), __("Actions"));
-		if ([book_type_donation, book_type_mixed].includes(frm.doc.book_type) && frm.has_perm("write")) {
+		if (frm.has_perm("write")) {
 			frm.add_custom_button(__("Reopen"), () => show_reopen_dialog(frm), __("Actions"));
 		}
 		if ([book_type_coupon, book_type_mixed].includes(frm.doc.book_type)) {
@@ -617,6 +617,14 @@ function show_reopen_dialog(frm) {
 		title: __("Reopen Book"),
 		fields: [
 			{
+				fieldname: "issued_to_employee",
+				fieldtype: "Link",
+				label: __("Issued To Employee"),
+				options: "Employee",
+				default: frm.doc.issued_to_employee,
+				reqd: 1,
+			},
+			{
 				fieldname: "reason",
 				fieldtype: "Small Text",
 				label: __("Reason"),
@@ -630,6 +638,7 @@ function show_reopen_dialog(frm) {
 				args: {
 					book: frm.doc.name,
 					reason: values.reason,
+					issued_to_employee: values.issued_to_employee,
 				},
 				freeze: true,
 				callback() {

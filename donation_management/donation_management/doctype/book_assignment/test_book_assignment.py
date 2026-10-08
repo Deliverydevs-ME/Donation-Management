@@ -10,6 +10,7 @@ from frappe.tests.utils import FrappeTestCase
 from donation_management.donation_management.doctype.book_assignment.book_assignment import (
 	BookAssignment,
 	cancel_book_issue_stock_entry,
+	create_book_assignment_issue_log,
 	create_book_issue_stock_entry,
 	format_receipt_number,
 	get_book_return_details,
@@ -212,14 +213,53 @@ class TestBookAssignment(FrappeTestCase):
 		), patch(
 			"donation_management.donation_management.doctype.book_assignment.book_assignment.create_book_issue_stock_entry"
 		), patch(
+			"donation_management.donation_management.doctype.book_assignment.book_assignment.create_book_assignment_issue_log"
+		), patch(
+			"donation_management.donation_management.doctype.book_assignment.book_assignment.set_reissued_employee"
+		), patch(
 			"donation_management.donation_management.doctype.book_assignment.book_assignment.now_datetime",
 			return_value="2026-10-06 12:00:00",
 		):
-			reopen_donation_book(doc, "Continue collecting receipts")
+			reopen_donation_book(doc, "Continue collecting receipts", "EMP-NEW")
 
 		self.assertEqual(doc.status, "Issued")
 		self.assertIsNone(doc.return_date)
 		self.assertEqual(doc.reopen_count, 1)
+
+	def test_reopen_dialog_selects_the_employee_receiving_the_book(self):
+		script = Path(__file__).with_name("book_assignment.js").read_text()
+
+		self.assertIn('fieldname: "issued_to_employee"', script)
+		self.assertIn("issued_to_employee: values.issued_to_employee", script)
+		self.assertIn('frm.doc.status === "Returned"', script)
+
+	def test_issue_log_records_assignment_employee_history(self):
+		doc = frappe._dict(
+			name="BK-TEST",
+			issued_to_employee="EMP-NEW",
+			reopen_reason="Assign the remaining pages to a new volunteer",
+		)
+		log = Mock()
+
+		with patch.object(frappe, "get_doc", return_value=log) as get_doc, patch(
+			"donation_management.donation_management.doctype.book_assignment.book_assignment.now_datetime",
+			return_value="2026-10-08 12:00:00",
+		):
+			create_book_assignment_issue_log(doc, "Reissued", "EMP-OLD")
+
+		get_doc.assert_called_once_with(
+			{
+				"doctype": "Book Assignment Issue Log",
+				"book_assignment": "BK-TEST",
+				"action": "Reissued",
+				"action_date": "2026-10-08 12:00:00",
+				"employee": "EMP-NEW",
+				"previous_employee": "EMP-OLD",
+				"reopen_reason": "Assign the remaining pages to a new volunteer",
+				"recorded_by": frappe.session.user,
+			}
+		)
+		log.insert.assert_called_once_with(ignore_permissions=True)
 
 	def test_donation_book_cannot_reopen_after_all_leaves_are_submitted(self):
 		doc = frappe._dict(name="BK-00001", status="Returned")
@@ -402,6 +442,8 @@ class TestBookAssignment(FrappeTestCase):
 			return_value=10,
 		), patch(
 			"donation_management.donation_management.doctype.book_assignment.book_assignment.generate_return_coupons"
+			), patch(
+				"donation_management.donation_management.doctype.book_assignment.book_assignment.create_book_assignment_issue_log"
 			), patch.object(frappe, "get_doc", return_value=doc), patch.object(
 				frappe, "parse_json", return_value=[]
 			), patch(
@@ -445,6 +487,8 @@ class TestBookAssignment(FrappeTestCase):
 			return_value=300,
 		), patch(
 			"donation_management.donation_management.doctype.book_assignment.book_assignment.generate_return_coupons"
+		), patch(
+			"donation_management.donation_management.doctype.book_assignment.book_assignment.create_book_assignment_issue_log"
 		), patch.object(frappe, "parse_json", return_value=[]), patch(
 			"donation_management.donation_management.doctype.book_assignment.book_assignment.today",
 			return_value="2026-10-05",
@@ -483,6 +527,8 @@ class TestBookAssignment(FrappeTestCase):
 			return_value=300,
 		), patch(
 			"donation_management.donation_management.doctype.book_assignment.book_assignment.generate_return_coupons"
+		), patch(
+			"donation_management.donation_management.doctype.book_assignment.book_assignment.create_book_assignment_issue_log"
 		), patch.object(frappe, "parse_json", return_value=[]), patch(
 			"donation_management.donation_management.doctype.book_assignment.book_assignment.today",
 			return_value="2026-10-06",

@@ -127,6 +127,7 @@ class BookAssignment(Document):
 			if row.name:
 				frappe.db.set_value("Book Assignment Detail", row.name, "status", "Issued", update_modified=False)
 		create_book_issue_stock_entry(self)
+		create_book_assignment_issue_log(self, "Issued")
 		if self.is_coupon_book() or self.has_coupon_rows():
 			from donation_management.donation_management.doctype.coupon_book_leaf.coupon_book_leaf import (
 				sync_coupon_book_leaves,
@@ -822,35 +823,37 @@ def issue_book(book):
 
 
 @frappe.whitelist()
-def reopen_book(book, reason):
+def reopen_book(book, reason, issued_to_employee=None):
 	if not reason:
 		frappe.throw(frappe._("Reopen Reason is required."))
 
 	doc = frappe.get_doc("Book Assignment", book)
 	doc.check_permission("write")
 	if doc.is_donation_book() or doc.has_donation_rows():
-		return reopen_donation_book(doc, reason)
+		return reopen_donation_book(doc, reason, issued_to_employee)
 
-	if doc.status != "Closed":
-		frappe.throw(frappe._("Only Closed Books can be reopened."))
+	if doc.status not in ("Returned", "Closed"):
+		frappe.throw(frappe._("Only returned or closed Books can be reopened."))
 	if doc.is_exhausted():
 		frappe.throw(frappe._("A fully utilized Book Assignment cannot be reopened."))
 
+	previous_employee = doc.issued_to_employee
+	set_reissued_employee(doc, issued_to_employee)
 	doc.flags.ignore_validate_update_after_submit = True
 	doc.flags.reopening_book = True
-	doc.status = "Returned"
+	doc.status = "Issued"
 	doc.return_date = None
 	doc.reopen_reason = reason
 	doc.reopened_by = frappe.session.user
 	doc.reopened_on = now_datetime()
 	doc.reopen_count = cint(doc.reopen_count) + 1
 	doc.save()
-	if doc.is_donation_book() or doc.has_donation_rows():
-		sync_donation_book_leaves(doc.name)
+	create_book_issue_stock_entry(doc)
+	create_book_assignment_issue_log(doc, "Reissued", previous_employee)
 	return doc.as_dict()
 
 
-def reopen_donation_book(doc, reason):
+def reopen_donation_book(doc, reason, issued_to_employee=None):
 	"""Return an eligible Donation Book to Issued for its remaining receipts."""
 	if doc.status not in ("Returned", "Closed"):
 		frappe.throw(frappe._("Only returned or closed Donation Books can be reopened."))
@@ -862,6 +865,8 @@ def reopen_donation_book(doc, reason):
 			frappe._("This Donation Book cannot be reopened because all Donation Book Leaves are submitted.")
 		)
 
+	previous_employee = doc.issued_to_employee
+	set_reissued_employee(doc, issued_to_employee)
 	doc.flags.ignore_validate_update_after_submit = True
 	doc.flags.reopening_donation_book = True
 	doc.status = "Issued"
@@ -872,8 +877,44 @@ def reopen_donation_book(doc, reason):
 	doc.reopen_count = cint(doc.reopen_count) + 1
 	doc.save()
 	create_book_issue_stock_entry(doc)
+	create_book_assignment_issue_log(doc, "Reissued", previous_employee)
 	sync_donation_book_leaves(doc.name)
 	return doc.as_dict()
+
+
+def set_reissued_employee(doc, issued_to_employee):
+	"""Validate and apply the employee receiving a book during a reissue."""
+	doc.issued_to_employee = issued_to_employee or doc.issued_to_employee
+	if not doc.issued_to_employee:
+		frappe.throw(frappe._("Issued To Employee is required when reopening a Book."))
+
+	employee = frappe.db.get_value("Employee", doc.issued_to_employee, ["status"], as_dict=True)
+	if not employee:
+		frappe.throw(frappe._("Issued To Employee {0} was not found.").format(doc.issued_to_employee))
+	if employee.status and employee.status != "Active":
+		frappe.throw(frappe._("Issued To Employee {0} must be active.").format(doc.issued_to_employee))
+
+	if doc.is_donation_book() or doc.has_donation_rows():
+		validate_mohasil_employee(doc.issued_to_employee, "Issued To Employee")
+	if doc.is_coupon_book() or doc.has_coupon_rows():
+		doc.set_coupon_employee_details()
+		doc.set_volunteer_area()
+
+
+def create_book_assignment_issue_log(doc, action, previous_employee=None):
+	"""Keep an immutable custody history for every issue and reissue."""
+	frappe.get_doc(
+		{
+			"doctype": "Book Assignment Issue Log",
+			"book_assignment": doc.name,
+			"action": action,
+			"action_date": now_datetime(),
+			"employee": doc.issued_to_employee,
+			"previous_employee": previous_employee,
+			"reopen_reason": doc.reopen_reason if action == "Reissued" else None,
+			"recorded_by": frappe.session.user,
+		}
+	).insert(ignore_permissions=True)
 
 
 def has_unsubmitted_donation_book_leaves(book):
@@ -971,6 +1012,7 @@ def return_book(
 	doc.flags.ignore_validate_update_after_submit = True
 	doc.save()
 	restore_unused_book_stock(doc)
+	create_book_assignment_issue_log(doc, "Returned")
 	return doc.as_dict()
 
 
@@ -1153,6 +1195,7 @@ def return_donation_book(book, collected_amount=None, denominations=None, book_c
 	doc.flags.ignore_validate_update_after_submit = True
 	doc.save()
 	restore_unused_book_stock(doc)
+	create_book_assignment_issue_log(doc, "Returned")
 	return doc.as_dict()
 
 
