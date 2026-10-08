@@ -12,11 +12,24 @@ from donation_management.donation_management.doctype.donation_order.donation_ord
 	DonationOrder,
 	_get_donation_book_leaf_for_mohasil,
 	get_esaal_e_sawab_key,
+	notify_cancellation_approvers,
 )
 from donation_management.donation_management.api import get_esaal_person_options
 
 
 class TestDonationOrder(FrappeTestCase):
+	def test_cancellation_request_keeps_desk_notification_without_email(self):
+		doc = frappe._dict(name="DO-TEST")
+		with patch.object(frappe, "get_all", return_value=["approver@example.com"]), patch.object(
+			frappe.db, "get_value", return_value=1
+		), patch.object(frappe, "publish_realtime") as publish_realtime, patch.object(
+			frappe, "sendmail"
+		) as sendmail:
+			notify_cancellation_approvers(doc, "Duplicate donation")
+
+		publish_realtime.assert_called_once()
+		sendmail.assert_not_called()
+
 	def test_connections_include_linked_donation_book_leaves(self):
 		dashboard = frappe.get_meta("Donation Order").get_dashboard_data()
 

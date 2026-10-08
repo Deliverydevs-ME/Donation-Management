@@ -53,6 +53,9 @@ CANCELLATION_STATUS_PENDING = "Pending Approval"
 CANCELLATION_STATUS_APPROVED = "Approved"
 CANCELLATION_APPROVER_ROLE = "Donation Cancellation Approver"
 ESAAL_E_SAWAB_PURPOSE = "Esaal e Sawab"
+# Keep cancellation requests visible in Desk notifications while outbound email
+# delivery is temporarily disabled. Set this to True when email is required.
+SEND_CANCELLATION_APPROVAL_EMAILS = False
 
 
 def format_sponsorship_duration(total_days):
@@ -2262,12 +2265,13 @@ def notify_cancellation_approvers(doc, reason):
 			user=user,
 		)
 
-	frappe.sendmail(
-		recipients=approvers,
-		subject=frappe._("Donation Order Cancellation Approval: {0}").format(doc.name),
-		message=message,
-		now=False,
-	)
+	if SEND_CANCELLATION_APPROVAL_EMAILS:
+		frappe.sendmail(
+			recipients=approvers,
+			subject=frappe._("Donation Order Cancellation Approval: {0}").format(doc.name),
+			message=message,
+			now=False,
+		)
 
 
 @frappe.whitelist()
