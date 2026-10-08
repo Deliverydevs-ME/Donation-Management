@@ -77,8 +77,6 @@ class BookAssignment(Document):
 			sync_coupon_book_leaves(self.name)
 		if self.docstatus == 1 and self.is_coupon_book():
 			self.create_journal_entry_for_return()
-		if self.docstatus == 1:
-			sync_assigned_book_stock(self.name)
 		self.notify_when_exhausted()
 
 	def on_cancel(self):
@@ -133,8 +131,6 @@ class BookAssignment(Document):
 			)
 
 			sync_coupon_book_leaves(self.name)
-		sync_assigned_book_stock(self.name)
-
 	def set_defaults(self):
 		if not self.book_type:
 			self.book_type = BOOK_TYPE_COUPON
@@ -307,8 +303,8 @@ class BookAssignment(Document):
 			frappe.throw(frappe._("Item {0} was not found.").format(row.item))
 		if cint(item.disabled) or not cint(item.is_stock_item) or not cint(item.has_serial_no):
 			frappe.throw(frappe._("Item {0} must be an enabled stock Item with serial numbers.").format(row.item))
-		row.available_stock = get_book_stock_qty(row.item, row.warehouse)
-		if row.available_stock <= 0:
+		available_stock = get_book_stock_qty(row.item, row.warehouse)
+		if self.docstatus == 0 and available_stock <= 0:
 			frappe.throw(
 				frappe._(
 					"No stock is available for Item {0} in Warehouse {1} in Assigned Books row {2}."
@@ -2067,31 +2063,38 @@ def get_mohasil_donation_book_leaves(doctype, txt, searchfield, start, page_len,
 def get_book_stock_qty(item=None, warehouse=None):
 	if not item or not warehouse:
 		return 0
-	return flt(frappe.db.get_value("Bin", {"item_code": item, "warehouse": warehouse}, "actual_qty") or 0)
-
-
-def sync_assigned_book_stock(book):
-	"""Persist current Bin stock on every assigned-book row after submission."""
-	if not book or not frappe.db.exists("Book Assignment", book):
-		return
-
-	rows = frappe.get_all(
-		"Book Assignment Detail",
-		filters={
-			"parent": book,
-			"parenttype": "Book Assignment",
-			"parentfield": "assigned_books",
-		},
-		fields=["name", "item", "warehouse"],
+	# Book Assignment does not transfer a serial out of its warehouse. A serial
+	# is available only while it is not actively issued or fully consumed.
+	return cint(
+		frappe.db.sql(
+			"""
+			select count(*)
+			from `tabSerial No` serial
+			where serial.item_code = %(item)s
+				and serial.warehouse = %(warehouse)s
+				and not exists (
+					select book.name
+					from `tabBook Assignment` book
+					left join `tabBook Assignment Detail` detail
+						on detail.parent = book.name
+						and detail.parenttype = 'Book Assignment'
+						and detail.parentfield = 'assigned_books'
+						and detail.book_serial_no = serial.name
+					where book.docstatus != 2
+						and (book.book_serial_no = serial.name or detail.name is not null)
+						and (
+							book.status in ('Issued', 'Closed')
+							or (
+								book.status = 'Returned'
+								and ifnull(detail.remaining_pages, book.remaining_pages, 0) <= 0
+								and ifnull(detail.remaining_receipts, book.remaining_receipts, 0) <= 0
+							)
+						)
+				)
+			""",
+			{"item": item, "warehouse": warehouse},
+		)[0][0]
 	)
-	for row in rows:
-		frappe.db.set_value(
-			"Book Assignment Detail",
-			row.name,
-			"available_stock",
-			get_book_stock_qty(row.item, row.warehouse),
-			update_modified=False,
-		)
 
 
 @frappe.whitelist()

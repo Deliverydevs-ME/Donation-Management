@@ -22,7 +22,6 @@ from donation_management.donation_management.doctype.book_assignment.book_assign
 	receipt_number_in_range,
 	receipt_series_prefix,
 	return_book,
-	sync_assigned_book_stock,
 )
 
 
@@ -59,10 +58,12 @@ class TestBookAssignment(FrappeTestCase):
 	def test_assigned_book_stock_is_confirmed_after_item_or_warehouse_selection(self):
 		script = Path(__file__).with_name("book_assignment.js").read_text()
 
-		self.assertIn("fetch_assigned_book_stock(frm, cdt, cdn, true)", script)
+		self.assertIn("show_assigned_book_stock(cdt, cdn)", script)
 		self.assertIn("show_assigned_book_stock_alert", script)
 		self.assertIn('message: __("Available stock: {0}", [stock])', script)
 		self.assertIn('indicator: "green"', script)
+		self.assertNotIn("available_stock", script)
+		self.assertNotIn("assigned_book_stock_refresh_interval", script)
 
 	def test_book_assignment_form_uses_server_side_cancellation_cascade(self):
 		script = Path(__file__).with_name("book_assignment.js").read_text()
@@ -403,42 +404,23 @@ class TestBookAssignment(FrappeTestCase):
 		self.assertEqual(doc.status, "Returned")
 		self.assertEqual(doc.remaining_pages, 2)
 
-	def test_submitted_assignment_persists_current_child_stock(self):
-		rows = [
-			frappe._dict(name="BAD-ROW-1", item="Donation Book", warehouse="Stores - J"),
-		]
-		with patch.object(frappe.db, "exists", return_value=True), patch.object(
-			frappe, "get_all", return_value=rows
-		), patch(
-			"donation_management.donation_management.doctype.book_assignment.book_assignment.get_book_stock_qty",
-			return_value=7,
-		), patch.object(frappe.db, "set_value") as set_value:
-			sync_assigned_book_stock("BA-00001")
+	def test_available_stock_uses_book_assignment_lifecycle(self):
+		with patch.object(frappe.db, "sql", return_value=[(12,)]) as sql:
+			self.assertEqual(get_book_stock_qty("Donation Book", "Stores - J"), 12)
 
-		set_value.assert_called_once_with(
-			"Book Assignment Detail",
-			"BAD-ROW-1",
-			"available_stock",
-			7,
-			update_modified=False,
-		)
-
-	def test_available_stock_reads_current_bin_quantity(self):
-		with patch.object(frappe.db, "get_value", return_value=12.5) as get_value:
-			self.assertEqual(get_book_stock_qty("Donation Book", "Stores - J"), 12.5)
-
-		get_value.assert_called_once_with(
-			"Bin",
-			{"item_code": "Donation Book", "warehouse": "Stores - J"},
-			"actual_qty",
-		)
+		query, filters = sql.call_args.args
+		self.assertIn("book.status in ('Issued', 'Closed')", query)
+		self.assertIn("book.status = 'Returned'", query)
+		self.assertIn("detail.remaining_pages", query)
+		self.assertIn("detail.remaining_receipts", query)
+		self.assertEqual(filters, {"item": "Donation Book", "warehouse": "Stores - J"})
 
 	def test_available_stock_is_zero_without_item_or_warehouse(self):
-		with patch.object(frappe.db, "get_value") as get_value:
+		with patch.object(frappe.db, "sql") as sql:
 			self.assertEqual(get_book_stock_qty("", "Stores - J"), 0)
 			self.assertEqual(get_book_stock_qty("Donation Book", ""), 0)
 
-		get_value.assert_not_called()
+		sql.assert_not_called()
 
 	def test_draft_donation_orders_do_not_consume_book_receipts(self):
 		with patch.object(frappe.db, "sql", return_value=[]) as sql:

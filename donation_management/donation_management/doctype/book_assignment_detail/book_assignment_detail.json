@@ -9,7 +9,6 @@
   "book_type",
   "item",
   "warehouse",
-  "available_stock",
   "book_serial_no",
   "coupon_type",
   "coupon_value",
@@ -49,15 +48,6 @@
    "label": "Warehouse",
    "options": "Warehouse",
    "reqd": 1
-  },
-  {
-   "default": "0",
-   "fieldname": "available_stock",
-   "fieldtype": "Float",
-   "in_list_view": 1,
-   "label": "Available Stock",
-   "non_negative": 1,
-   "read_only": 1
   },
   {
    "fieldname": "book_serial_no",
