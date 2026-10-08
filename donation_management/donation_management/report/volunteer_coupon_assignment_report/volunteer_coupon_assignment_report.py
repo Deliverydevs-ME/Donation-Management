@@ -24,7 +24,7 @@ def get_columns():
 
 
 def get_data(filters):
-	conditions = {"book_type": "Coupon Book"}
+	conditions = {"book_type": "Coupon Book", "docstatus": 1}
 	if filters.get("volunteer_name"):
 		conditions["volunteer_name"] = filters.volunteer_name
 	if filters.get("coupon_type"):

@@ -23,6 +23,7 @@ frappe.ui.form.on("Book Assignment", {
 			"Coupon Entry",
 			"Coupon Book Leaf",
 			"Donation Book Leaf",
+			"Stock Entry",
 		];
 
 		frm.set_query("item", () => ({

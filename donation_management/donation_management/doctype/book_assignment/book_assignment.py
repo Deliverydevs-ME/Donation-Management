@@ -87,6 +87,7 @@ class BookAssignment(Document):
 			cancel_leaves_for_book_assignment as cancel_coupon_book_leaves,
 		)
 
+		cancel_book_issue_stock_entry(self)
 		self.cancel_linked_coupon_entries()
 		cancel_leaves_for_book_assignment(self.name)
 		cancel_coupon_book_leaves(self.name)
@@ -125,6 +126,7 @@ class BookAssignment(Document):
 		for row in self.assigned_books or []:
 			if row.name:
 				frappe.db.set_value("Book Assignment Detail", row.name, "status", "Issued", update_modified=False)
+		create_book_issue_stock_entry(self)
 		if self.is_coupon_book() or self.has_coupon_rows():
 			from donation_management.donation_management.doctype.coupon_book_leaf.coupon_book_leaf import (
 				sync_coupon_book_leaves,
@@ -807,7 +809,7 @@ def issue_book(book):
 	doc.check_permission("submit")
 	if doc.docstatus != 0 or doc.status not in (None, "", "Draft"):
 		frappe.throw(frappe._("Only draft Book Assignments can be submitted for issue."))
-	if doc.stock_entry:
+	if has_submitted_book_stock_entry(doc.stock_entry):
 		frappe.throw(frappe._("Book {0} is already linked with historical Stock Entry {1}.").format(doc.name, doc.stock_entry))
 
 	doc.validate_book_stock_details()
@@ -869,6 +871,7 @@ def reopen_donation_book(doc, reason):
 	doc.reopened_on = now_datetime()
 	doc.reopen_count = cint(doc.reopen_count) + 1
 	doc.save()
+	create_book_issue_stock_entry(doc)
 	sync_donation_book_leaves(doc.name)
 	return doc.as_dict()
 
@@ -967,6 +970,7 @@ def return_book(
 	doc.return_date = today()
 	doc.flags.ignore_validate_update_after_submit = True
 	doc.save()
+	restore_unused_book_stock(doc)
 	return doc.as_dict()
 
 
@@ -1148,6 +1152,7 @@ def return_donation_book(book, collected_amount=None, denominations=None, book_c
 	doc.return_date = today()
 	doc.flags.ignore_validate_update_after_submit = True
 	doc.save()
+	restore_unused_book_stock(doc)
 	return doc.as_dict()
 
 
@@ -2095,6 +2100,109 @@ def get_book_stock_qty(item=None, warehouse=None):
 			{"item": item, "warehouse": warehouse},
 		)[0][0]
 	)
+
+
+def get_assigned_book_stock_rows(doc):
+	"""Return each serialized book that must move when an assignment is issued."""
+	rows = [
+		frappe._dict(
+			{
+				"item": row.item,
+				"warehouse": row.warehouse,
+				"book_serial_no": row.book_serial_no,
+			}
+		)
+		for row in doc.assigned_books or []
+		if row.item and row.warehouse and row.book_serial_no
+	]
+	if rows:
+		return rows
+
+	if doc.item and doc.warehouse and doc.book_serial_no:
+		return [
+			frappe._dict(
+				{
+					"item": doc.item,
+					"warehouse": doc.warehouse,
+					"book_serial_no": doc.book_serial_no,
+				}
+			)
+		]
+	return []
+
+
+def has_submitted_book_stock_entry(stock_entry):
+	return bool(stock_entry and frappe.db.get_value("Stock Entry", stock_entry, "docstatus") == 1)
+
+
+def create_book_issue_stock_entry(doc, posting_date=None):
+	"""Issue every assigned serial through ERPNext so stock reports stay correct."""
+	if has_submitted_book_stock_entry(doc.stock_entry):
+		return doc.stock_entry
+
+	rows = get_assigned_book_stock_rows(doc)
+	if not rows:
+		frappe.throw(frappe._("At least one Item, Warehouse, and Book Serial No are required to issue stock."))
+
+	from erpnext.stock.doctype.stock_entry.stock_entry_utils import make_stock_entry
+
+	stock_entry = None
+	for row in rows:
+		entry_for_row = make_stock_entry(
+			item_code=row.item,
+			qty=1,
+			company=doc.company,
+			from_warehouse=row.warehouse,
+			serial_no=[row.book_serial_no],
+			posting_date=posting_date or doc.start_date or today(),
+			purpose="Material Issue",
+			do_not_save=True,
+		)
+		if stock_entry is None:
+			stock_entry = entry_for_row
+		else:
+			item = entry_for_row.items[0].as_dict()
+			item.pop("name", None)
+			stock_entry.append("items", item)
+
+	stock_entry.remarks = "Book Assignment {0}: issued to {1}".format(
+		doc.name,
+		doc.issued_to_employee or doc.volunteer_name or "",
+	)
+	stock_entry.flags.ignore_permissions = True
+	stock_entry.insert(ignore_permissions=True)
+	stock_entry.submit()
+
+	doc.stock_entry = stock_entry.name
+	frappe.db.set_value("Book Assignment", doc.name, "stock_entry", stock_entry.name, update_modified=False)
+	return stock_entry.name
+
+
+def restore_unused_book_stock(doc):
+	"""Reverse the issue only when the returned book still has usable pages."""
+	if not has_unused_book_capacity(doc):
+		return
+	cancel_book_issue_stock_entry(doc)
+
+
+def has_unused_book_capacity(doc):
+	is_exhausted = getattr(doc, "is_exhausted", None)
+	if callable(is_exhausted):
+		return not is_exhausted()
+
+	for row in doc.get("assigned_books") or []:
+		if cint(row.get("remaining_pages")) > 0 or cint(row.get("remaining_receipts")) > 0:
+			return True
+	return cint(doc.get("remaining_pages")) > 0 or cint(doc.get("remaining_receipts")) > 0
+
+
+def cancel_book_issue_stock_entry(doc):
+	if not has_submitted_book_stock_entry(doc.stock_entry):
+		return
+
+	stock_entry = frappe.get_doc("Stock Entry", doc.stock_entry)
+	stock_entry.flags.ignore_permissions = True
+	stock_entry.cancel()
 
 
 @frappe.whitelist()

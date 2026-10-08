@@ -9,6 +9,7 @@ from frappe.tests.utils import FrappeTestCase
 
 from donation_management.donation_management.doctype.book_assignment.book_assignment import (
 	BookAssignment,
+	create_book_issue_stock_entry,
 	format_receipt_number,
 	get_book_return_details,
 	get_book_item_details,
@@ -21,6 +22,7 @@ from donation_management.donation_management.doctype.book_assignment.book_assign
 	reopen_donation_book,
 	receipt_number_in_range,
 	receipt_series_prefix,
+	restore_unused_book_stock,
 	return_book,
 )
 
@@ -71,6 +73,75 @@ class TestBookAssignment(FrappeTestCase):
 		self.assertIn('"Coupon Entry"', script)
 		self.assertIn('"Coupon Book Leaf"', script)
 		self.assertIn('"Donation Book Leaf"', script)
+		self.assertIn('"Stock Entry"', script)
+
+	def test_issuing_book_creates_stock_ledger_entry(self):
+		doc = frappe._dict(
+			{
+				"name": "BK-TEST",
+				"company": "JTQ",
+				"start_date": "2026-10-08",
+				"issued_to_employee": "EMP-TEST",
+				"stock_entry": None,
+				"assigned_books": [
+					frappe._dict(
+						{
+							"item": "Sadqa Coupon Book",
+							"warehouse": "Stores - JTQ",
+							"book_serial_no": "SCB-0001",
+						}
+					)
+				],
+				"item": None,
+				"warehouse": None,
+				"book_serial_no": None,
+			}
+		)
+		stock_entry = Mock()
+		stock_entry.name = "MAT-STE-TEST"
+		stock_entry.items = []
+
+		with patch.object(frappe.db, "get_value", return_value=None), patch.object(
+			frappe.db, "set_value"
+		) as set_value, patch(
+			"erpnext.stock.doctype.stock_entry.stock_entry_utils.make_stock_entry",
+			return_value=stock_entry,
+		) as make_stock_entry:
+			self.assertEqual(create_book_issue_stock_entry(doc), "MAT-STE-TEST")
+
+		make_stock_entry.assert_called_once_with(
+			item_code="Sadqa Coupon Book",
+			qty=1,
+			company="JTQ",
+			from_warehouse="Stores - JTQ",
+			serial_no=["SCB-0001"],
+			posting_date="2026-10-08",
+			purpose="Material Issue",
+			do_not_save=True,
+		)
+		stock_entry.insert.assert_called_once_with(ignore_permissions=True)
+		stock_entry.submit.assert_called_once_with()
+		set_value.assert_called_once_with(
+			"Book Assignment", "BK-TEST", "stock_entry", "MAT-STE-TEST", update_modified=False
+		)
+
+	def test_return_with_unused_pages_reverses_issue_stock_entry(self):
+		doc = frappe._dict(is_exhausted=lambda: False)
+		with patch(
+			"donation_management.donation_management.doctype.book_assignment.book_assignment.cancel_book_issue_stock_entry"
+		) as cancel_stock_entry:
+			restore_unused_book_stock(doc)
+
+		cancel_stock_entry.assert_called_once_with(doc)
+
+	def test_return_with_no_remaining_pages_keeps_issue_stock_entry(self):
+		doc = frappe._dict(is_exhausted=lambda: True)
+		with patch(
+			"donation_management.donation_management.doctype.book_assignment.book_assignment.cancel_book_issue_stock_entry"
+		) as cancel_stock_entry:
+			restore_unused_book_stock(doc)
+
+		cancel_stock_entry.assert_not_called()
 
 	def test_submittable_doctypes_use_business_status_indicators_in_list_view(self):
 		doctype_root = Path(__file__).resolve().parents[1]
@@ -123,6 +194,8 @@ class TestBookAssignment(FrappeTestCase):
 			return_value=True,
 		), patch(
 			"donation_management.donation_management.doctype.book_assignment.book_assignment.sync_donation_book_leaves"
+		), patch(
+			"donation_management.donation_management.doctype.book_assignment.book_assignment.create_book_issue_stock_entry"
 		), patch(
 			"donation_management.donation_management.doctype.book_assignment.book_assignment.now_datetime",
 			return_value="2026-10-06 12:00:00",
