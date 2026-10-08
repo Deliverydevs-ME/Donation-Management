@@ -287,8 +287,9 @@ class DonationOrder(Document):
 			self.confidential_ref_co = donor.confidential_ref_co
 		if cint(self.is_mohasil_collection) and not self.mohasil:
 			self.mohasil = donor.mohasil
-		if not self.name_on_donation_slip:
-			self.name_on_donation_slip = donor.customer_name
+		# This is donor-derived information. Always refresh it so a previous
+		# donor's name cannot remain on an Order after the donor is changed.
+		self.name_on_donation_slip = donor.customer_name
 
 	def set_and_validate_donation_location(self):
 		posting_date = getdate(self.donation_posting_date)

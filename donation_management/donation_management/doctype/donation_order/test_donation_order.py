@@ -18,6 +18,41 @@ from donation_management.donation_management.api import get_esaal_person_options
 
 
 class TestDonationOrder(FrappeTestCase):
+	def test_client_synchronises_and_clears_name_on_donation_slip(self):
+		order_script = (Path(__file__).resolve().parent / "donation_order.js").read_text()
+
+		self.assertIn('frm.__changing_donor_from_phone = true', order_script)
+		self.assertIn('set_value_if_changed(frm, "donor_phone_number", "");', order_script)
+		self.assertIn('set_value_if_changed(frm, "name_on_donation_slip", donor.donor_name || "");', order_script)
+		self.assertIn('set_value_if_changed(frm, "name_on_donation_slip", donor.donor_name || donor.name);', order_script)
+
+	def test_donor_details_replace_a_stale_name_on_donation_slip(self):
+		order = DonationOrder(
+			{
+				"doctype": "Donation Order",
+				"donor_name": "DN-TEST",
+				"name_on_donation_slip": "Previous Donor",
+			}
+		)
+		donor = frappe._dict(
+			name="DN-TEST",
+			customer_name="Current Donor",
+			donor_email="current@example.com",
+			donor_phone_number="03001234567",
+			donor_phone_digits="03001234567",
+			primary_address=None,
+			referred_by_trustee=None,
+			mohasil=None,
+			customer_pos_id=None,
+			party=None,
+			confidential_ref_co=None,
+		)
+
+		with patch.object(frappe.db, "get_value", return_value=donor):
+			order.set_donor_details()
+
+		self.assertEqual(order.name_on_donation_slip, "Current Donor")
+
 	def test_cancellation_request_keeps_desk_notification_without_email(self):
 		doc = frappe._dict(name="DO-TEST")
 		with patch.object(frappe, "get_all", return_value=["approver@example.com"]), patch.object(

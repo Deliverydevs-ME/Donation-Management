@@ -294,6 +294,19 @@ frappe.ui.form.on("Donation Order", {
 		if (frm.__setting_selected_donor_details) {
 			return;
 		}
+		if (!frm.doc.donor_phone_number) {
+			clear_donor_details(frm);
+			return;
+		}
+		if (frm.doc.donor_name) {
+			frm.__changing_donor_from_phone = true;
+			set_value_if_changed(frm, "donor_name", "");
+			set_value_if_changed(frm, "donor_email", "");
+			set_value_if_changed(frm, "name_on_donation_slip", "");
+			frappe.after_ajax(() => {
+				frm.__changing_donor_from_phone = false;
+			});
+		}
 		set_donor_from_phone(frm);
 	},
 
@@ -579,9 +592,7 @@ function set_donor_from_email(frm) {
 			if (frm.doc.is_mohasil_collection && !frm.doc.mohasil) {
 				set_value_if_changed(frm, "mohasil", donor.mohasil || "");
 			}
-			if (!frm.doc.name_on_donation_slip) {
-				set_value_if_changed(frm, "name_on_donation_slip", donor.donor_name || donor.name);
-			}
+			set_value_if_changed(frm, "name_on_donation_slip", donor.donor_name || donor.name);
 			set_previous_sponsorship_balance(frm);
 			render_donor_program_enrollments(frm);
 		},
@@ -1384,6 +1395,7 @@ function clear_donor_details(frm) {
 	frm.__donor_program_prior_paid = {};
 	frm.__donor_program_prior_paid_key = null;
 	set_value_if_changed(frm, "donor_name", "");
+	set_value_if_changed(frm, "donor_phone_number", "");
 	set_value_if_changed(frm, "donor_email", "");
 	set_value_if_changed(frm, "name_on_donation_slip", "");
 	set_value_if_changed(frm, "referred_by_trustee", "");
@@ -1428,6 +1440,9 @@ function get_phone_digits(phone_number) {
 
 function set_donor_details_from_name(frm) {
 	if (!frm.doc.donor_name) {
+		if (!frm.__changing_donor_from_phone) {
+			clear_donor_details(frm);
+		}
 		set_value_if_changed(frm, "referred_by_trustee", "");
 		set_previous_sponsorship_balance(frm);
 		render_donor_program_enrollments(frm);
@@ -1456,9 +1471,7 @@ function set_donor_details_from_name(frm) {
 			if (frm.doc.is_mohasil_collection && !frm.doc.mohasil) {
 				set_value_if_changed(frm, "mohasil", donor.mohasil || "");
 			}
-			if (!frm.doc.name_on_donation_slip && donor.donor_name) {
-				set_value_if_changed(frm, "name_on_donation_slip", donor.donor_name);
-			}
+			set_value_if_changed(frm, "name_on_donation_slip", donor.donor_name || "");
 			set_previous_sponsorship_balance(frm);
 			render_donor_program_enrollments(frm);
 			frappe.after_ajax(() => {
