@@ -847,6 +847,7 @@ def reopen_book(book, reason, issued_to_employee=None):
 	doc.reopened_by = frappe.session.user
 	doc.reopened_on = now_datetime()
 	doc.reopen_count = cint(doc.reopen_count) + 1
+	clear_cancelled_book_stock_entry_link(doc)
 	doc.save()
 	create_book_issue_stock_entry(doc)
 	create_book_assignment_issue_log(doc, "Reissued", previous_employee)
@@ -875,6 +876,7 @@ def reopen_donation_book(doc, reason, issued_to_employee=None):
 	doc.reopened_by = frappe.session.user
 	doc.reopened_on = now_datetime()
 	doc.reopen_count = cint(doc.reopen_count) + 1
+	clear_cancelled_book_stock_entry_link(doc)
 	doc.save()
 	create_book_issue_stock_entry(doc)
 	create_book_assignment_issue_log(doc, "Reissued", previous_employee)
@@ -915,6 +917,12 @@ def create_book_assignment_issue_log(doc, action, previous_employee=None):
 			"recorded_by": frappe.session.user,
 		}
 	).insert(ignore_permissions=True)
+
+
+def clear_cancelled_book_stock_entry_link(doc):
+	"""A returned book's cancelled issue must not block its next reissue."""
+	if doc.stock_entry and frappe.db.get_value("Stock Entry", doc.stock_entry, "docstatus") == 2:
+		doc.stock_entry = None
 
 
 def has_unsubmitted_donation_book_leaves(book):

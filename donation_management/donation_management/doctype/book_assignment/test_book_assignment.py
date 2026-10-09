@@ -10,6 +10,7 @@ from frappe.tests.utils import FrappeTestCase
 from donation_management.donation_management.doctype.book_assignment.book_assignment import (
 	BookAssignment,
 	cancel_book_issue_stock_entry,
+	clear_cancelled_book_stock_entry_link,
 	create_book_assignment_issue_log,
 	create_book_issue_stock_entry,
 	format_receipt_number,
@@ -158,6 +159,17 @@ class TestBookAssignment(FrappeTestCase):
 		self.assertTrue(stock_entry.flags.ignore_permissions)
 		self.assertTrue(stock_entry.flags.ignore_links)
 		stock_entry.cancel.assert_called_once_with()
+
+	def test_reopen_clears_only_a_cancelled_stock_entry_link(self):
+		doc = frappe._dict(stock_entry="MAT-STE-TEST")
+		with patch.object(frappe.db, "get_value", return_value=2):
+			clear_cancelled_book_stock_entry_link(doc)
+		self.assertIsNone(doc.stock_entry)
+
+		doc.stock_entry = "MAT-STE-ACTIVE"
+		with patch.object(frappe.db, "get_value", return_value=1):
+			clear_cancelled_book_stock_entry_link(doc)
+		self.assertEqual(doc.stock_entry, "MAT-STE-ACTIVE")
 
 	def test_submittable_doctypes_use_business_status_indicators_in_list_view(self):
 		doctype_root = Path(__file__).resolve().parents[1]
