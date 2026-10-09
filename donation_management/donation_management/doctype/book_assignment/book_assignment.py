@@ -542,6 +542,12 @@ class BookAssignment(Document):
 		validate_receipt_format(row.receipt_format, row.idx)
 		from_receipt_no = get_receipt_number_int(row.from_receipt_no, "From Receipt No")
 		to_receipt_no = get_receipt_number_int(row.to_receipt_no, "To Receipt No")
+		validate_receipt_number_matches_format(
+			row.receipt_format, row.from_receipt_no, "From Receipt No", row.idx
+		)
+		validate_receipt_number_matches_format(
+			row.receipt_format, row.to_receipt_no, "To Receipt No", row.idx
+		)
 		if from_receipt_no > to_receipt_no:
 			frappe.throw(frappe._("From Receipt No cannot be greater than To Receipt No in Assigned Books row {0}.").format(row.idx))
 
@@ -1325,6 +1331,34 @@ def validate_receipt_format(receipt_format, row_idx=None):
 		if row_idx:
 			label = frappe._("Receipt Format in Assigned Books row {0}").format(row_idx)
 		frappe.throw(frappe._("{0} must contain at least one # placeholder, for example REC-.####.").format(label))
+
+
+def validate_receipt_number_matches_format(receipt_format, receipt_no, label, row_idx=None):
+	"""Require receipt input to match the configured prefix and serial width exactly."""
+	receipt_no = str(receipt_no or "").strip()
+	placeholder = re.search(r"#+", str(receipt_format))
+	serial = re.search(r"(\d+)$", receipt_no)
+	if not placeholder or not serial:
+		return
+
+	field_label = frappe._(label)
+	if row_idx:
+		field_label = frappe._("{0} in Assigned Books row {1}").format(field_label, row_idx)
+	width = len(placeholder.group(0))
+	if len(serial.group(1)) != width:
+		frappe.throw(
+			frappe._("{0} must contain exactly {1} digits to match Receipt Format {2}.").format(
+				field_label, width, receipt_format
+			)
+		)
+
+	expected_receipt_no = format_receipt_number(receipt_format, cint(serial.group(1)))
+	if receipt_no != expected_receipt_no:
+		frappe.throw(
+			frappe._("{0} must match Receipt Format {1}. Enter {2}.").format(
+				field_label, receipt_format, expected_receipt_no
+			)
+		)
 
 
 def format_receipt_number(receipt_format, receipt_number):

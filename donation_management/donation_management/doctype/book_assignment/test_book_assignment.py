@@ -27,6 +27,7 @@ from donation_management.donation_management.doctype.book_assignment.book_assign
 	receipt_series_prefix,
 	restore_unused_book_stock,
 	return_book,
+	validate_receipt_number_matches_format,
 )
 
 
@@ -296,6 +297,18 @@ class TestBookAssignment(FrappeTestCase):
 		self.assertEqual(receipt_series_prefix("REC-.0001"), "REC-")
 		self.assertTrue(receipt_number_in_range("REC-0003", "REC-0001", "REC-0100"))
 		self.assertFalse(receipt_number_in_range("INV-0003", "REC-0001", "REC-0100"))
+
+	def test_receipt_numbers_must_match_the_format_width_and_prefix(self):
+		with self.assertRaisesRegex(frappe.ValidationError, "exactly 3 digits"):
+			validate_receipt_number_matches_format("###", "10000", "To Receipt No", 1)
+		with self.assertRaisesRegex(frappe.ValidationError, "exactly 3 digits"):
+			validate_receipt_number_matches_format("ABC-.###", "ABC-1000", "To Receipt No", 1)
+		with self.assertRaisesRegex(frappe.ValidationError, "exactly 3 digits"):
+			validate_receipt_number_matches_format("###", "01", "From Receipt No", 1)
+		with self.assertRaisesRegex(frappe.ValidationError, "must match Receipt Format"):
+			validate_receipt_number_matches_format("ABC-.###", "XYZ-001", "From Receipt No", 1)
+
+		validate_receipt_number_matches_format("ABC-.###", "ABC-001", "From Receipt No", 1)
 
 	def test_mixed_assignment_is_exhausted_only_when_all_rows_are_used(self):
 		book = BookAssignment(
