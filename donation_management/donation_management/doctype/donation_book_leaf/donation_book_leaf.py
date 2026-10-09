@@ -7,6 +7,10 @@ from frappe.utils import cint
 
 
 class DonationBookLeaf(Document):
+	def before_insert(self):
+		if not self.flags.from_book_assignment_generation:
+			frappe.throw(frappe._("Donation Book Leaves are generated automatically from Book Assignment."))
+
 	def validate(self):
 		self.validate_parent_assignment_state()
 		self.validate_locked_state()

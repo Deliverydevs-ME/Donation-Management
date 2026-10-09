@@ -24,6 +24,18 @@ class TestDonationBookLeaf(FrappeTestCase):
 		metadata = json.loads(path.read_text())
 		self.assertEqual(metadata.get("is_submittable"), 1)
 
+	def test_donation_book_leaf_cannot_be_created_manually(self):
+		metadata = json.loads(Path(__file__).with_name("donation_book_leaf.json").read_text())
+		self.assertFalse(any(permission.get("create") for permission in metadata["permissions"]))
+		self.assertIn("clear_primary_action", Path(__file__).with_name("donation_book_leaf_list.js").read_text())
+
+		leaf = DonationBookLeaf({"doctype": "Donation Book Leaf"})
+		with self.assertRaisesRegex(frappe.ValidationError, "generated automatically"):
+			leaf.before_insert()
+
+		leaf.flags.from_book_assignment_generation = True
+		leaf.before_insert()
+
 	def test_leaf_with_order_and_journal_cannot_be_cancelled_directly(self):
 		leaf = DonationBookLeaf(
 			{

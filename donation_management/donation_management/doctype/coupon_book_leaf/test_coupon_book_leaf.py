@@ -1,9 +1,12 @@
+import json
+from pathlib import Path
 from unittest.mock import Mock, patch
 
 import frappe
 from frappe.tests.utils import FrappeTestCase
 
 from donation_management.donation_management.doctype.coupon_book_leaf.coupon_book_leaf import (
+	CouponBookLeaf,
 	get_coupon_book_leaf_ranges,
 	upsert_coupon_book_leaf,
 )
@@ -14,6 +17,18 @@ class TestCouponBookLeaf(FrappeTestCase):
 		meta = frappe.get_meta("Coupon Book Leaf")
 		self.assertTrue(meta.is_submittable)
 		self.assertEqual(meta.get_field("status").options, "Pending\nUsed\nDiscarded")
+
+	def test_coupon_book_leaf_cannot_be_created_manually(self):
+		metadata = json.loads(Path(__file__).with_name("coupon_book_leaf.json").read_text())
+		self.assertFalse(any(permission.get("create") for permission in metadata["permissions"]))
+		self.assertIn("clear_primary_action", Path(__file__).with_name("coupon_book_leaf_list.js").read_text())
+
+		leaf = CouponBookLeaf({"doctype": "Coupon Book Leaf"})
+		with self.assertRaisesRegex(frappe.ValidationError, "generated automatically"):
+			leaf.before_insert()
+
+		leaf.flags.from_book_assignment_generation = True
+		leaf.before_insert()
 
 	def test_coupon_book_ranges_only_include_coupon_rows(self):
 		book = frappe._dict(
@@ -58,6 +73,7 @@ class TestCouponBookLeaf(FrappeTestCase):
 				"status": "Pending",
 			}
 		)
+		self.assertTrue(leaf.flags.from_book_assignment_generation)
 		leaf.insert.assert_called_once_with(ignore_permissions=True)
 
 	def test_coupon_entry_cancellation_returns_receipt_numbers(self):

@@ -7,6 +7,10 @@ from frappe.utils import cint, flt
 
 
 class CouponBookLeaf(Document):
+	def before_insert(self):
+		if not self.flags.from_book_assignment_generation:
+			frappe.throw(frappe._("Coupon Book Leaves are generated automatically from Book Assignment."))
+
 	def validate(self):
 		self.set_coupon_value_from_assignment()
 		self.validate_parent_assignment_state()
@@ -216,6 +220,7 @@ def upsert_coupon_book_leaf(book_doc, book_serial_no, receipt_number, coupon_val
 			"status": "Pending",
 		}
 	)
+	leaf.flags.from_book_assignment_generation = True
 	leaf.insert(ignore_permissions=True)
 	return leaf.name
 

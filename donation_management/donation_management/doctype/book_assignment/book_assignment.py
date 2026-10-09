@@ -1629,6 +1629,7 @@ def upsert_donation_book_leaf(book_doc, book_serial_no, receipt_number):
 			"status": "Pending",
 		}
 	)
+	leaf.flags.from_book_assignment_generation = True
 	leaf.insert(ignore_permissions=True)
 	return leaf.name
 
