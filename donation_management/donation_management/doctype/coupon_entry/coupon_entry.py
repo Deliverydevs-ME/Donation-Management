@@ -173,7 +173,8 @@ class CouponEntry(Document):
 	def set_accounting_details(self, book=None):
 		if not book:
 			book = _get_coupon_book_details(self.book, self.book_serial_no)
-		set_collection_accounting_details(self, "Coupon Entry", book.coupon_type)
+		set_collection_accounting_details(self)
+		self.credit_account = book.credit_account
 
 	def validate_collection_accounting(self):
 		validate_collection_accounting_details(self, "Coupon Entry", self.coupon_type, self.amount)
@@ -293,6 +294,7 @@ def _get_coupon_book_details(book_name, book_serial_no=None, allow_missing_seria
 				"coupon_type",
 				"coupon_value",
 				"coupon_color",
+				"credit_account",
 				"warehouse",
 				"total_pages",
 				"remaining_pages",

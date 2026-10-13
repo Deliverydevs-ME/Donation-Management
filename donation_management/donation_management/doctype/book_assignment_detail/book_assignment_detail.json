@@ -12,6 +12,7 @@
   "book_serial_no",
   "coupon_type",
   "coupon_value",
+  "credit_account",
   "coupon_color",
   "total_pages",
   "used_pages",
@@ -72,6 +73,15 @@
    "label": "Coupon Value",
    "options": "\n10\n50\n100\n500\n1000\n5000",
    "mandatory_depends_on": "eval:doc.book_type == 'Coupon Book'"
+  },
+  {
+   "depends_on": "eval:doc.book_type == 'Coupon Book'",
+   "fieldname": "credit_account",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Income Account",
+   "mandatory_depends_on": "eval:doc.book_type == 'Coupon Book'",
+   "options": "Account"
   },
   {
    "depends_on": "eval:doc.book_type == 'Coupon Book'",

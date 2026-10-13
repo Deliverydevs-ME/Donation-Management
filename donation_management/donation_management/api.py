@@ -614,26 +614,6 @@ def get_donation_purpose_account_mapping(company, donation_type, donation_purpos
 
 
 @frappe.whitelist()
-def get_source_accounting_details(company=None, source_type=None, donation_type=None, mode_of_payment=None):
-	company = company or get_default_company()
-	details = {
-		"company": company,
-		"mode_of_payment_type": None,
-		"debit_account": None,
-		"credit_account": None,
-		"cost_center": None,
-	}
-
-	if mode_of_payment and company:
-		details.update(get_mode_of_payment_account(company, mode_of_payment, donation_type))
-
-	if source_type and donation_type and company:
-		details.update(get_donation_source_account_mapping(company, source_type, donation_type))
-
-	return details
-
-
-@frappe.whitelist()
 def get_collection_cash_accounting_defaults(company=None, source_type=None, donation_type=None):
 	company = company or get_default_company()
 	mode_of_payment = get_default_cash_mode_of_payment()
@@ -648,9 +628,6 @@ def get_collection_cash_accounting_defaults(company=None, source_type=None, dona
 
 	if company:
 		details["debit_account"] = get_default_cash_account(company, mode_of_payment)
-
-	if source_type and donation_type and company:
-		details.update(get_donation_source_account_mapping(company, source_type, donation_type))
 
 	return details
 
@@ -710,30 +687,7 @@ def get_default_cash_account(company, mode_of_payment=None):
 	)
 
 
-def get_donation_source_account_mapping(company, source_type, donation_type):
-	mapping = frappe.db.get_value(
-		"Donation Source Account Mapping",
-		{
-			"company": company,
-			"source_type": source_type,
-			"donation_type": donation_type,
-		},
-		["credit_account", "cost_center"],
-		as_dict=True,
-	)
-	if not mapping:
-		return {
-			"credit_account": None,
-			"cost_center": None,
-		}
-
-	return {
-		"credit_account": mapping.credit_account,
-		"cost_center": mapping.cost_center,
-	}
-
-
-def set_collection_accounting_details(doc, source_type, donation_type):
+def set_collection_accounting_details(doc):
 	doc.accounting_status = doc.accounting_status or "Not Posted"
 
 	if not doc.company:
@@ -745,14 +699,6 @@ def set_collection_accounting_details(doc, source_type, donation_type):
 		doc.debit_account = get_default_cash_account(doc.company, doc.mode_of_payment)
 	else:
 		doc.mode_of_payment_type = None
-
-	if source_type and donation_type and doc.company:
-		mapping = get_donation_source_account_mapping(doc.company, source_type, donation_type)
-		if not doc.credit_account:
-			doc.credit_account = mapping.get("credit_account")
-		if not doc.accounting_cost_center:
-			doc.accounting_cost_center = mapping.get("cost_center")
-
 
 def validate_collection_accounting_details(doc, source_type, donation_type, amount):
 	if flt(amount) <= 0:

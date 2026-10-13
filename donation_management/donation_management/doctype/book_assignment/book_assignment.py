@@ -8,10 +8,9 @@ from frappe.model.document import Document
 from frappe.utils import cint, flt, now_datetime, today
 
 from donation_management.donation_management.api import (
-	create_collection_journal_entry,
+	account_matches_donation_type,
 	get_default_company,
-	set_collection_accounting_details,
-	validate_collection_accounting_details,
+	validate_account_for_company,
 )
 from donation_management.donation_management.doctype.donor.donor import validate_mohasil_employee
 
@@ -55,9 +54,7 @@ class BookAssignment(Document):
 			self.validate_page_counts()
 			self.validate_book_serial_no()
 			self.set_collected_amount_from_coupons()
-			self.set_accounting_details()
 			self.validate_cash_denominations()
-			self.validate_accounting_details()
 		else:
 			self.clear_coupon_fields()
 			self.validate_book_stock_details()
@@ -75,8 +72,6 @@ class BookAssignment(Document):
 			)
 
 			sync_coupon_book_leaves(self.name)
-		if self.docstatus == 1 and self.is_coupon_book():
-			self.create_journal_entry_for_return()
 		self.notify_when_exhausted()
 
 	def on_cancel(self):
@@ -264,6 +259,7 @@ class BookAssignment(Document):
 			if row.book_type == BOOK_TYPE_DONATION:
 				row.coupon_type = None
 				row.coupon_value = None
+				row.credit_account = None
 				row.coupon_color = None
 				row.used_receipts = get_donation_book_used_receipts(
 					self.name,
@@ -289,6 +285,7 @@ class BookAssignment(Document):
 					row.coupon_value = str(item_coupon_value)
 				if cint(row.coupon_value) not in COUPON_VALUES:
 					frappe.throw(frappe._("Coupon Value must be 10, 50, 100, 500, 1000, or 5000."))
+				self.validate_coupon_income_account(row)
 				row.coupon_color = COUPON_COLORS[row.coupon_type]
 				row.used_pages = get_assigned_coupon_used_pages(self.name, row.book_serial_no) if not self.is_new() else cint(row.used_pages)
 				row.total_pages = get_receipt_range_count(row.from_receipt_no, row.to_receipt_no)
@@ -517,6 +514,28 @@ class BookAssignment(Document):
 
 			self.used_receipts = total_used_receipts
 			self.remaining_receipts = total_remaining_receipts
+
+	def validate_coupon_income_account(self, row):
+		if not row.credit_account:
+			frappe.throw(
+				frappe._("Income Account is required for Coupon Book in Assigned Books row {0}.").format(
+					row.idx
+				)
+			)
+
+		validate_account_for_company(
+			self.company or get_default_company(),
+			row.credit_account,
+			"Income Account",
+			allowed_root_types=("Income",),
+		)
+		if not account_matches_coupon_type(row.credit_account, row.coupon_type):
+			frappe.throw(
+				frappe._("Income Account in Assigned Books row {0} must match Coupon Type {1}.").format(
+					row.idx,
+					row.coupon_type,
+				)
+			)
 			return
 
 		if not self.from_receipt_no or not self.to_receipt_no:
@@ -751,64 +770,9 @@ class BookAssignment(Document):
 		if flt(self.collected_amount) != flt(denomination_total):
 			frappe.throw(frappe._("Cash denomination total must match Total Amount Collected."))
 
-	def set_accounting_details(self):
-		if not self.is_coupon_book():
-			return
-
-		if self.status not in ("Returned", "Closed"):
-			return
-
-		set_collection_accounting_details(self, "Book Assignment", self.coupon_type)
-
-	def validate_accounting_details(self):
-		if not self.is_coupon_book():
-			return
-
-		if self.status not in ("Returned", "Closed"):
-			return
-
-		validate_collection_accounting_details(
-			self,
-			"Book Assignment",
-			self.coupon_type,
-			self.collected_amount,
-		)
-
-	def create_journal_entry_for_return(self):
-		if not self.is_coupon_book():
-			return
-
-		if self.status != "Returned":
-			return
-
-		if self.journal_entry and frappe.db.exists("Journal Entry", self.journal_entry):
-			return
-
-		create_collection_journal_entry(
-			self,
-			source_type="Book Assignment",
-			donation_type=self.coupon_type,
-			amount=self.collected_amount,
-			posting_date=today(),
-			remarks=self.get_collection_accounting_remarks(),
-			received_from=self.get_collection_received_from(),
-		)
-
 	def get_previous_status(self):
 		previous_doc = self.get_doc_before_save()
 		return previous_doc.status if previous_doc else None
-
-	def get_collection_accounting_remarks(self):
-		return "Book: {0} | Coupon Type: {1} | Warehouse: {2} | Volunteer: {3}".format(
-			self.name,
-			self.coupon_type,
-			self.warehouse,
-			self.volunteer_name or "",
-		)
-
-	def get_collection_received_from(self):
-		return "Book {0} ({1})".format(self.name, self.coupon_type)
-
 
 @frappe.whitelist()
 def issue_book(book):
@@ -963,9 +927,6 @@ def return_book(
 	collected_amount=None,
 	used_pages=None,
 	denominations=None,
-	mode_of_payment=None,
-	debit_account=None,
-	credit_account=None,
 	denomination_total=None,
 ):
 	doc = frappe.get_doc("Book Assignment", book)
@@ -1018,9 +979,6 @@ def return_book(
 	doc.used_pages = used_pages
 	doc.remaining_pages = max(total_pages - used_pages, 0)
 	doc.collected_amount = calculated_collected_amount
-	doc.mode_of_payment = mode_of_payment or doc.mode_of_payment
-	doc.debit_account = debit_account or doc.debit_account
-	doc.credit_account = credit_account or doc.credit_account
 	doc.status = "Returned"
 	doc.return_date = today()
 	doc.flags.ignore_validate_update_after_submit = True
@@ -1788,6 +1746,18 @@ def is_donation_book_item(item):
 		filter(None, [item, item_values.item_code, item_values.item_name, item_values.item_group])
 	).lower()
 	return "donation book" in search_text or "donationbook" in search_text
+
+
+def account_matches_coupon_type(account, coupon_type):
+	"""Coupon income names must identify the exact Coupon Type being issued."""
+	account_details = frappe.db.get_value("Account", account, ["name", "account_name"], as_dict=True)
+	if not account_details or not coupon_type:
+		return False
+
+	coupon_type = coupon_type.lower()
+	return coupon_type in (account_details.name or "").lower() or coupon_type in (
+		account_details.account_name or ""
+	).lower()
 
 
 @frappe.whitelist()

@@ -7,7 +7,9 @@ from frappe.utils import cint, flt, now_datetime, today
 
 from donation_management.donation_management.api import (
 	create_collection_journal_entry,
+	get_default_company,
 	set_collection_accounting_details,
+	validate_account_for_company,
 	validate_collection_accounting_details,
 )
 
@@ -129,8 +131,7 @@ class BoxCollection(Document):
 		care_of_trustee=None,
 		care_of_donor=None,
 		deployment_officer=None,
-		approval_reference=None,
-		approved_by=None,
+		credit_account=None,
 	):
 		self.issue_box(
 			action_type="Issuance",
@@ -144,8 +145,7 @@ class BoxCollection(Document):
 			care_of_trustee=care_of_trustee,
 			care_of_donor=care_of_donor,
 			deployment_officer=deployment_officer,
-			approval_reference=approval_reference,
-			approved_by=approved_by,
+			credit_account=credit_account,
 		)
 		return "Assignment date set"
 
@@ -162,8 +162,7 @@ class BoxCollection(Document):
 		care_of_trustee=None,
 		care_of_donor=None,
 		deployment_officer=None,
-		approval_reference=None,
-		approved_by=None,
+		credit_account=None,
 	):
 		self.issue_box(
 			action_type="Reissuance",
@@ -177,8 +176,7 @@ class BoxCollection(Document):
 			care_of_trustee=care_of_trustee,
 			care_of_donor=care_of_donor,
 			deployment_officer=deployment_officer,
-			approval_reference=approval_reference,
-			approved_by=approved_by,
+			credit_account=credit_account,
 		)
 		return "Reassignment date set"
 
@@ -195,10 +193,11 @@ class BoxCollection(Document):
 		care_of_trustee=None,
 		care_of_donor=None,
 		deployment_officer=None,
-		approval_reference=None,
-		approved_by=None,
+		credit_account=None,
 	):
 		self.ensure_submitted()
+		if not self.company:
+			self.company = get_default_company()
 
 		if action_type == "Issuance" and self.status not in ("Available", "Collected"):
 			frappe.throw(frappe._("Only Available or Collected boxes can be issued."))
@@ -206,7 +205,8 @@ class BoxCollection(Document):
 		if action_type == "Reissuance" and self.status != "Collected":
 			frappe.throw(frappe._("Only Collected boxes can be reissued."))
 
-		previous_location = self.donation_box_location or self.donation_location
+		if action_type == "Reissuance" and credit_account and credit_account != self.credit_account:
+			frappe.throw(frappe._("Income Account is retained from the original Box issuance."))
 		self.donation_box_location = donation_box_location or self.donation_box_location
 		self.donation_location = donation_location or self.donation_location
 		self.location_type = location_type or self.location_type
@@ -217,17 +217,12 @@ class BoxCollection(Document):
 		self.care_of_trustee = care_of_trustee or self.care_of_trustee
 		self.care_of_donor = care_of_donor or self.care_of_donor
 		self.deployment_officer = deployment_officer or self.deployment_officer
+		self.credit_account = credit_account or self.credit_account
 
 		self.populate_location_from_master(force=True)
 
 		self.validate_assignment_details()
-		if self.requires_issue_approval(action_type, previous_location):
-			if not approval_reference:
-				frappe.throw(frappe._("Approval Reference is required for {0}.").format(action_type))
-			if not approved_by:
-				frappe.throw(frappe._("Approved By is required for {0}.").format(action_type))
-			self.approval_reference = approval_reference
-			self.approved_by = approved_by
+		self.validate_income_account()
 		self.status = "Issued"
 		self.assignment_date = today()
 		self.collection_date = None
@@ -239,11 +234,15 @@ class BoxCollection(Document):
 		self.sync_donation_box_status()
 		self.create_action_log(action_type)
 
-	def requires_issue_approval(self, action_type, previous_location=None):
-		if action_type == "Issuance":
-			return True
-		current_location = self.donation_box_location or self.donation_location
-		return bool(previous_location and current_location and previous_location != current_location)
+	def validate_income_account(self):
+		if not self.credit_account:
+			frappe.throw(frappe._("Income Account is required before issuing a Donation Box."))
+		validate_account_for_company(
+			self.company,
+			self.credit_account,
+			"Income Account",
+			allowed_root_types=("Income",),
+		)
 
 	@frappe.whitelist()
 	def set_collection_date(
@@ -253,7 +252,6 @@ class BoxCollection(Document):
 		denominations=None,
 		mode_of_payment=None,
 		debit_account=None,
-		credit_account=None,
 		manual_receipt_date=None,
 		denomination_total=None,
 	):
@@ -297,8 +295,7 @@ class BoxCollection(Document):
 
 		self.mode_of_payment = mode_of_payment or self.mode_of_payment
 		self.debit_account = debit_account or self.debit_account
-		self.credit_account = credit_account or self.credit_account
-		set_collection_accounting_details(self, "Box Collection", self.donation_head)
+		set_collection_accounting_details(self)
 		validate_collection_accounting_details(
 			self,
 			"Box Collection",
@@ -534,8 +531,6 @@ class BoxCollection(Document):
 				"contact": self.contact,
 				"staff": staff,
 				"collector": self.collection_office if action_type == "Collection" else None,
-				"approval_reference": self.approval_reference,
-				"approved_by": self.approved_by,
 				"collected_amount": self.collected_amount if action_type == "Collection" else 0,
 				"mode_of_payment": self.mode_of_payment,
 				"payment_mode": self.mode_of_payment,

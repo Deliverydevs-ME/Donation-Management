@@ -185,26 +185,25 @@ function show_assignment_dialog(frm, title, method) {
 					filters: mohasil_employee_filters,
 				}),
 			},
-			{
-				fieldname: "approval_section",
-				fieldtype: "Section Break",
-				label: __("Approval"),
-			},
-			{
-				fieldname: "approval_reference",
-				fieldtype: "Data",
-				label: __("Approval Reference"),
-				reqd: 1,
-				default: frm.doc.approval_reference,
-			},
-			{
-				fieldname: "approved_by",
-				fieldtype: "Link",
-				label: __("Approved By"),
-				options: "User",
-				reqd: 1,
-				default: frm.doc.approved_by,
-			},
+			...(frm.doc.status === "Available"
+				? [
+					{
+						fieldname: "credit_account",
+						fieldtype: "Link",
+						label: __("Income Account"),
+						options: "Account",
+						reqd: 1,
+						default: frm.doc.credit_account,
+						get_query: () => ({
+							filters: {
+								company: frm.doc.company,
+								is_group: 0,
+								root_type: "Income",
+							},
+						}),
+					},
+				]
+				: []),
 		],
 		primary_action_label: title,
 		primary_action(values) {
@@ -308,10 +307,6 @@ function set_dialog_location_details(dialog) {
 function show_collection_dialog(frm) {
 	frappe.call({
 		method: "donation_management.donation_management.api.get_collection_cash_accounting_defaults",
-		args: {
-			source_type: "Box Collection",
-			donation_type: frm.doc.donation_head,
-		},
 		callback(response) {
 			build_collection_dialog(frm, response.message || {});
 		},
@@ -372,19 +367,8 @@ function build_collection_dialog(frm, accounting_defaults) {
 			fieldtype: "Link",
 			label: __("Income Account"),
 			options: "Account",
-			reqd: 1,
-			default: frm.doc.credit_account || accounting_defaults.credit_account,
-			get_query: () => {
-				const filters = {
-					is_group: 0,
-					root_type: "Income",
-				};
-				const company = accounting_defaults.company || frm.doc.company;
-				if (company) {
-					filters.company = company;
-				}
-				return { filters };
-			},
+			default: frm.doc.credit_account,
+			read_only: 1,
 		},
 		{
 			fieldname: "denomination_section",
@@ -430,7 +414,6 @@ function build_collection_dialog(frm, accounting_defaults) {
 				denominations: denomination_values,
 				mode_of_payment: values.mode_of_payment,
 				debit_account: values.debit_account,
-				credit_account: values.credit_account,
 				manual_receipt_date: values.manual_receipt_date,
 				denomination_total: values.denomination_total,
 			}).then(() => {

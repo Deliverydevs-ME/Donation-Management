@@ -37,9 +37,6 @@
   "accounting_cost_center",
   "journal_entry",
   "accounting_status",
-  "approval_section",
-  "approval_reference",
-  "approved_by",
   "received_by",
   "received_on",
   "closed_by",
@@ -290,24 +287,6 @@
    "label": "Accounting Status",
    "options": "\nNot Posted\nPosted\nCancelled",
    "read_only": 1
-  },
-  {
-   "fieldname": "approval_section",
-   "fieldtype": "Section Break",
-   "label": "Approval and Lifecycle"
-  },
-  {
-   "fieldname": "approval_reference",
-   "fieldtype": "Data",
-   "label": "Approval Reference",
-   "allow_on_submit": 1
-  },
-  {
-   "fieldname": "approved_by",
-   "fieldtype": "Link",
-   "label": "Approved By",
-   "options": "User",
-   "allow_on_submit": 1
   },
   {
    "fieldname": "received_by",

@@ -77,33 +77,17 @@ frappe.ui.form.on("Book Assignment", {
 			},
 		}));
 
-		frm.set_query("mode_of_payment", () => ({
-			filters: {
-				enabled: 1,
-				type: "Cash",
-			},
-		}));
-
-		frm.set_query("debit_account", () => {
-			const filters = {
-				is_group: 0,
-				account_type: "Cash",
-			};
-
-			if (frm.doc.company) {
-				filters.company = frm.doc.company;
-			}
-
-			return { filters };
-		});
-
-		frm.set_query("credit_account", () => {
+		frm.set_query("credit_account", "assigned_books", (doc, cdt, cdn) => {
+			const row = locals[cdt][cdn];
 			const filters = {
 				is_group: 0,
 				root_type: "Income",
 			};
 			if (frm.doc.company) {
 				filters.company = frm.doc.company;
+			}
+			if (row.coupon_type) {
+				filters.account_name = ["like", `%${row.coupon_type}%`];
 			}
 			return { filters };
 		});
@@ -790,22 +774,12 @@ function show_return_dialog(frm) {
 			book: frm.doc.name,
 		},
 		callback(response) {
-			const return_details = response.message || {};
-			frappe.call({
-				method: "donation_management.donation_management.api.get_collection_cash_accounting_defaults",
-				args: {
-					source_type: "Book Assignment",
-					donation_type: frm.doc.coupon_type,
-				},
-				callback(accounting_response) {
-					build_return_dialog(frm, accounting_response.message || {}, return_details);
-				},
-			});
+			build_return_dialog(frm, response.message || {});
 		},
 	});
 }
 
-function build_return_dialog(frm, accounting_defaults, return_details) {
+function build_return_dialog(frm, return_details) {
 	const fields = [
 		{
 			fieldname: "used_pages",
@@ -830,48 +804,6 @@ function build_return_dialog(frm, accounting_defaults, return_details) {
 			default: flt(return_details.total_amount),
 			read_only: 1,
 			reqd: 1,
-		},
-		{
-			fieldname: "accounting_section",
-			fieldtype: "Section Break",
-			label: __("Accounting"),
-		},
-		{
-			fieldname: "mode_of_payment",
-			fieldtype: "Link",
-			label: __("Mode of Payment"),
-			options: "Mode of Payment",
-			reqd: 1,
-			default: accounting_defaults.mode_of_payment || frm.doc.mode_of_payment,
-			read_only: 1,
-		},
-		{
-			fieldname: "debit_account",
-			fieldtype: "Link",
-			label: __("Debit Account"),
-			options: "Account",
-			reqd: 1,
-			default: accounting_defaults.debit_account || frm.doc.debit_account,
-			read_only: 1,
-		},
-		{
-			fieldname: "credit_account",
-			fieldtype: "Link",
-			label: __("Income Account"),
-			options: "Account",
-			reqd: 1,
-			default: frm.doc.credit_account || accounting_defaults.credit_account,
-			get_query: () => {
-				const filters = {
-					is_group: 0,
-					root_type: "Income",
-				};
-				const company = accounting_defaults.company || frm.doc.company;
-				if (company) {
-					filters.company = company;
-				}
-				return { filters };
-			},
 		},
 		{
 			fieldname: "denomination_section",
@@ -918,10 +850,7 @@ function build_return_dialog(frm, accounting_defaults, return_details) {
 				collected_amount: values.collected_amount,
 				used_pages: values.used_pages,
 				denominations: denomination_rows,
-				mode_of_payment: values.mode_of_payment,
-					debit_account: values.debit_account,
-					credit_account: values.credit_account,
-					denomination_total: values.denomination_total,
+						denomination_total: values.denomination_total,
 				},
 				freeze: true,
 				callback() {

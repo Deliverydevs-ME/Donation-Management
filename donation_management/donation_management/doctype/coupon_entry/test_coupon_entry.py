@@ -19,6 +19,18 @@ from donation_management.donation_management.doctype.coupon_entry.coupon_entry i
 
 
 class TestCoupon(FrappeTestCase):
+	def test_coupon_entry_uses_the_income_account_from_its_assignment(self):
+		entry = Coupon({"doctype": "Coupon Entry"})
+		book = frappe._dict(credit_account="Sadqa Income - JTQ")
+
+		with patch(
+			"donation_management.donation_management.doctype.coupon_entry.coupon_entry.set_collection_accounting_details"
+		) as set_defaults:
+			entry.set_accounting_details(book)
+
+		set_defaults.assert_called_once_with(entry)
+		self.assertEqual(entry.credit_account, "Sadqa Income - JTQ")
+
 	def test_coupon_is_submittable_and_uses_short_series(self):
 		self.assertTrue(frappe.get_meta("Coupon Entry").is_submittable)
 		self.assertEqual(COUPON_SERIES, "COP-.####")

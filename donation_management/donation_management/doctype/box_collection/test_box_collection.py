@@ -2,6 +2,7 @@
 # See license.txt
 
 import frappe
+from unittest.mock import patch
 from frappe.tests.utils import FrappeTestCase
 
 from donation_management.donation_management.api import get_default_company
@@ -59,31 +60,16 @@ class TestBoxCollection(FrappeTestCase):
 		employee.insert(ignore_permissions=True)
 		return employee.name
 
-	def ensure_box_collection_mapping(self, donation_head="Zakat"):
+	def get_income_account(self):
 		company = get_default_company()
-		if frappe.db.exists(
-			"Donation Source Account Mapping",
-			{"company": company, "source_type": "Box Collection", "donation_type": donation_head},
-		):
-			return
-
 		income_account = frappe.db.get_value(
 			"Account",
 			{"company": company, "root_type": "Income", "is_group": 0},
 			"name",
 		)
 		if not income_account:
-			self.skipTest("No income account is available for Box Collection mapping.")
-
-		frappe.get_doc(
-			{
-				"doctype": "Donation Source Account Mapping",
-				"company": company,
-				"source_type": "Box Collection",
-				"donation_type": donation_head,
-				"credit_account": income_account,
-			}
-		).insert(ignore_permissions=True)
+			self.skipTest("No Income account is available for Box Collection.")
+		return income_account
 
 	def test_shape_derives_from_donation_head(self):
 		box = self.make_donation_box("Zakat")
@@ -121,6 +107,13 @@ class TestBoxCollection(FrappeTestCase):
 				denominations={100: 1},
 			)
 
+	def test_issuance_requires_an_income_account(self):
+		box = self.make_donation_box()
+		box_collection = self.get_box_collection(box)
+		with patch.object(box_collection, "validate_assignment_details"):
+			with self.assertRaisesRegex(frappe.ValidationError, "Income Account is required"):
+				box_collection.issue_box("Issuance")
+
 	def test_issuance_while_issued_is_blocked(self):
 		box = self.make_donation_box()
 		box_collection = self.get_box_collection(box)
@@ -132,8 +125,7 @@ class TestBoxCollection(FrappeTestCase):
 			location_name="Test Shop",
 			donor_location="Test Address",
 			deployment_officer=dispatcher,
-			approval_reference="TEST-APPROVAL",
-			approved_by=frappe.session.user,
+			credit_account=self.get_income_account(),
 		)
 		box_collection.reload()
 		box.reload()
@@ -159,8 +151,7 @@ class TestBoxCollection(FrappeTestCase):
 			location_name="Test Shop",
 			donor_location="Test Address",
 			deployment_officer=dispatcher,
-			approval_reference="TEST-APPROVAL",
-			approved_by=frappe.session.user,
+			credit_account=self.get_income_account(),
 		)
 		box_collection.reload()
 
@@ -172,7 +163,6 @@ class TestBoxCollection(FrappeTestCase):
 			)
 
 	def test_successful_collection_logs_amount_and_denominations(self):
-		self.ensure_box_collection_mapping()
 		box = self.make_donation_box()
 		box_collection = self.get_box_collection(box)
 		donation_box_location = self.make_donation_box_location()
@@ -184,8 +174,7 @@ class TestBoxCollection(FrappeTestCase):
 			location_name="Test Shop",
 			donor_location="Test Address",
 			deployment_officer=dispatcher,
-			approval_reference="TEST-APPROVAL",
-			approved_by=frappe.session.user,
+			credit_account=self.get_income_account(),
 		)
 		box_collection.reload()
 		box_collection.set_collection_date(

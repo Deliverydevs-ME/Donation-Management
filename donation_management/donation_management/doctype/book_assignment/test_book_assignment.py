@@ -9,6 +9,7 @@ from frappe.tests.utils import FrappeTestCase
 
 from donation_management.donation_management.doctype.book_assignment.book_assignment import (
 	BookAssignment,
+	account_matches_coupon_type,
 	cancel_book_issue_stock_entry,
 	clear_cancelled_book_stock_entry_link,
 	create_book_assignment_issue_log,
@@ -32,6 +33,15 @@ from donation_management.donation_management.doctype.book_assignment.book_assign
 
 
 class TestBookAssignment(FrappeTestCase):
+	def test_coupon_income_account_must_match_the_exact_coupon_type(self):
+		with patch.object(
+			frappe.db,
+			"get_value",
+			return_value=frappe._dict(name="Sadqa Income - JTQ", account_name="Sadqa Income"),
+		):
+			self.assertTrue(account_matches_coupon_type("Sadqa Income - JTQ", "Sadqa"))
+			self.assertFalse(account_matches_coupon_type("Sadqa Income - JTQ", "Zakat"))
+
 	def test_book_assignment_cancels_its_submitted_coupon_entries(self):
 		assignment = BookAssignment({"doctype": "Book Assignment", "name": "BK-TEST"})
 		coupon = frappe._dict(flags=frappe._dict(), cancel=Mock())
