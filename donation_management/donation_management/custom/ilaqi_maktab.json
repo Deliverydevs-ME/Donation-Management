@@ -90,7 +90,7 @@
    "property": "field_order",
    "property_type": "Data",
    "row_name": null,
-   "value": "[\"maktab_name\", \"donation_location\", \"territory\", \"column_break_zwbd\", \"responsible_person\", \"head_count\", \"status\", \"financial_section\", \"fixed_contribution\", \"frequency\", \"expected_monthly_cost\"]"
+   "value": "[\"maktab_name\", \"location\", \"territory\", \"custom_column_break_371ms\", \"responsible_person\", \"effective_from_date\", \"head_count\", \"status\", \"amended_from\", \"financial_section\", \"fixed_contribution\", \"frequency\", \"expected_monthly_cost\", \"assigned_employees_section\", \"assigned_employees_html\"]"
   }
  ],
  "sync_on_migrate": 1

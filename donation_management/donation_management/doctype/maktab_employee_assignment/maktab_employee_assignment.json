@@ -7,19 +7,18 @@
  "engine": "InnoDB",
  "field_order": [
   "ilaqi_maktab",
-  "employee",
-  "start_date",
-  "end_date",
-  "salary_cost",
-  "status"
+  "assigned_employees_section",
+  "assigned_employees"
  ],
  "fields": [
   {"fieldname": "ilaqi_maktab", "fieldtype": "Link", "label": "Ilaqi Maktab", "options": "Ilaqi Maktab", "reqd": 1},
-  {"fieldname": "employee", "fieldtype": "Link", "label": "Employee", "options": "Employee", "reqd": 1},
-  {"fieldname": "start_date", "fieldtype": "Date", "label": "Start Date", "reqd": 1},
-  {"fieldname": "end_date", "fieldtype": "Date", "label": "End Date"},
-  {"fieldname": "salary_cost", "fieldtype": "Currency", "label": "Salary/Cost", "non_negative": 1},
-  {"default": "Active", "fieldname": "status", "fieldtype": "Select", "label": "Status", "options": "Active\nInactive\nCompleted"}
+  {"fieldname": "assigned_employees_section", "fieldtype": "Section Break", "label": "Assigned Employees"},
+  {"fieldname": "assigned_employees", "fieldtype": "Table", "label": "Assigned Employees", "options": "Maktab Employee Assignment Detail", "reqd": 1},
+  {"fieldname": "employee", "fieldtype": "Link", "label": "Employee", "options": "Employee", "hidden": 1, "read_only": 1},
+  {"fieldname": "start_date", "fieldtype": "Date", "label": "Start Date", "hidden": 1, "read_only": 1},
+  {"fieldname": "end_date", "fieldtype": "Date", "label": "End Date", "hidden": 1, "read_only": 1},
+  {"fieldname": "salary_cost", "fieldtype": "Currency", "label": "Salary/Cost", "hidden": 1, "non_negative": 1, "read_only": 1},
+  {"default": "Active", "fieldname": "status", "fieldtype": "Select", "label": "Status", "hidden": 1, "options": "Active\nInactive\nCompleted", "read_only": 1}
  ],
  "links": [],
  "modified": "2026-09-07 00:00:00.000000",

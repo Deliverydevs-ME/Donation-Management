@@ -44,11 +44,15 @@ class TestMaktabExpense(FrappeTestCase):
 			{
 				"doctype": "Maktab Employee Assignment",
 				"ilaqi_maktab": maktab.name,
-				"employee": employee,
-				"start_date": start_date,
-				"end_date": end_date,
-				"salary_cost": 1000,
-				"status": "Active",
+				"assigned_employees": [
+					{
+						"employee": employee,
+						"start_date": start_date,
+						"end_date": end_date,
+						"salary_cost": 1000,
+						"status": "Active",
+					}
+				],
 			}
 		)
 		assignment.insert()

@@ -37,20 +37,25 @@ class MaktabExpense(Document):
 			frappe.throw(frappe._("Employee {0} was not found.").format(self.employee))
 
 		posting_date = getdate(self.posting_date)
-		assignments = frappe.get_all(
-			"Maktab Employee Assignment",
-			filters={
+		assignments = frappe.db.sql(
+			"""
+				select detail.name
+				from `tabMaktab Employee Assignment Detail` detail
+				inner join `tabMaktab Employee Assignment` assignment on assignment.name = detail.parent
+				where assignment.ilaqi_maktab = %(ilaqi_maktab)s
+					and detail.parenttype = 'Maktab Employee Assignment'
+					and detail.parentfield = 'assigned_employees'
+					and detail.employee = %(employee)s
+					and detail.status = 'Active'
+					and detail.start_date <= %(posting_date)s
+					and (ifnull(detail.end_date, '') = '' or detail.end_date >= %(posting_date)s)
+				limit 1
+			""",
+			{
 				"ilaqi_maktab": self.ilaqi_maktab,
 				"employee": self.employee,
-				"status": "Active",
-				"start_date": ["<=", posting_date],
+				"posting_date": posting_date,
 			},
-			or_filters=[
-				["end_date", "is", "not set"],
-				["end_date", ">=", posting_date],
-			],
-			pluck="name",
-			limit=1,
 		)
 
 		if assignments:

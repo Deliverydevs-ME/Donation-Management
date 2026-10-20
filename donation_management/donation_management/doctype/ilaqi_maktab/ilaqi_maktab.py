@@ -5,12 +5,10 @@ import frappe
 from frappe.model.document import Document
 from frappe.utils import add_months, cint, flt, getdate, today
 
-from donation_management.donation_management.validations import validate_unique_field
-
 
 class IlaqiMaktab(Document):
 	def validate(self):
-		validate_unique_field(self, "maktab_name", "Maktab Name")
+		self.validate_maktab_name()
 
 		if flt(self.fixed_contribution) < 0:
 			frappe.throw(frappe._("Fixed Contribution cannot be negative."))
@@ -19,6 +17,27 @@ class IlaqiMaktab(Document):
 		if not self.status:
 			self.status = "Active"
 		self.validate_head_count_capacity()
+
+	def validate_maktab_name(self):
+		"""Allow an amendment to reuse the name of its cancelled original."""
+		if not self.maktab_name:
+			return
+
+		existing = frappe.db.exists(
+			"Ilaqi Maktab",
+			{
+				"maktab_name": self.maktab_name,
+				"name": ["!=", self.name],
+				"docstatus": ["!=", 2],
+			},
+		)
+		if existing:
+			frappe.throw(
+				frappe._("Maktab Name {0} already exists in Ilaqi Maktab {1}.").format(
+					self.maktab_name, existing
+				),
+				title=frappe._("Duplicate Maktab Name"),
+			)
 
 	def validate_head_count_capacity(self):
 		if self.is_new():
@@ -46,14 +65,26 @@ def get_active_assignment_count(ilaqi_maktab, exclude_assignment=None):
 	if not ilaqi_maktab:
 		return 0
 
-	filters = {
-		"ilaqi_maktab": ilaqi_maktab,
-		"status": "Active",
-	}
+	conditions = [
+		"assignment.ilaqi_maktab = %(ilaqi_maktab)s",
+		"detail.parenttype = 'Maktab Employee Assignment'",
+		"detail.parentfield = 'assigned_employees'",
+		"detail.status = 'Active'",
+	]
+	values = {"ilaqi_maktab": ilaqi_maktab}
 	if exclude_assignment:
-		filters["name"] = ["!=", exclude_assignment]
+		conditions.append("assignment.name != %(exclude_assignment)s")
+		values["exclude_assignment"] = exclude_assignment
 
-	return frappe.db.count("Maktab Employee Assignment", filters)
+	return frappe.db.sql(
+		"""
+			select count(detail.name)
+			from `tabMaktab Employee Assignment Detail` detail
+			inner join `tabMaktab Employee Assignment` assignment on assignment.name = detail.parent
+			where {0}
+		""".format(" and ".join(conditions)),
+		values,
+	)[0][0]
 
 
 @frappe.whitelist()
@@ -64,11 +95,24 @@ def get_assigned_employees(ilaqi_maktab):
 	doc = frappe.get_doc("Ilaqi Maktab", ilaqi_maktab)
 	doc.check_permission("read")
 
-	assignments = frappe.get_all(
-		"Maktab Employee Assignment",
-		filters={"ilaqi_maktab": ilaqi_maktab},
-		fields=["name", "employee", "start_date", "end_date", "salary_cost", "status"],
-		order_by="status asc, start_date desc, modified desc",
+	assignments = frappe.db.sql(
+		"""
+			select
+				assignment.name,
+				detail.employee,
+				detail.start_date,
+				detail.end_date,
+				detail.salary_cost,
+				detail.status
+			from `tabMaktab Employee Assignment Detail` detail
+			inner join `tabMaktab Employee Assignment` assignment on assignment.name = detail.parent
+			where assignment.ilaqi_maktab = %(ilaqi_maktab)s
+				and detail.parenttype = 'Maktab Employee Assignment'
+				and detail.parentfield = 'assigned_employees'
+			order by detail.status asc, detail.start_date desc, detail.modified desc
+		""",
+		{"ilaqi_maktab": ilaqi_maktab},
+		as_dict=True,
 	)
 	for assignment in assignments:
 		assignment.employee_name = frappe.db.get_value("Employee", assignment.employee, "employee_name")

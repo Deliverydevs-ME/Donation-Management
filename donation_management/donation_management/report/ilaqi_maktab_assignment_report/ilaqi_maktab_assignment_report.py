@@ -11,5 +11,18 @@ def execute(filters=None):
         {'label': _('Salary/Cost'), 'fieldname': 'salary_cost', 'fieldtype': 'Currency', 'width': 120},
         {'label': _('Status'), 'fieldname': 'status', 'fieldtype': 'Data', 'width': 110},
     ]
-    data = frappe.get_all('Maktab Employee Assignment', fields=['ilaqi_maktab','employee','start_date','end_date','salary_cost','status'], order_by='ilaqi_maktab, start_date desc')
+    data = frappe.db.sql('''
+        select
+            assignment.ilaqi_maktab,
+            detail.employee,
+            detail.start_date,
+            detail.end_date,
+            detail.salary_cost,
+            detail.status
+        from `tabMaktab Employee Assignment Detail` detail
+        inner join `tabMaktab Employee Assignment` assignment on assignment.name = detail.parent
+        where detail.parenttype = 'Maktab Employee Assignment'
+            and detail.parentfield = 'assigned_employees'
+        order by assignment.ilaqi_maktab, detail.start_date desc
+    ''', as_dict=True)
     return columns, data

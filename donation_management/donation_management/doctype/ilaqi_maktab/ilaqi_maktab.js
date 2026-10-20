@@ -1,8 +1,16 @@
 frappe.ui.form.on("Ilaqi Maktab", {
 	refresh(frm) {
+		set_financial_fields_read_only(frm);
 		render_assigned_employees(frm);
 	},
 });
+
+function set_financial_fields_read_only(frm) {
+	const is_submitted = frm.doc.docstatus === 1;
+	["fixed_contribution", "frequency", "expected_monthly_cost"].forEach((fieldname) => {
+		frm.set_df_property(fieldname, "read_only", is_submitted);
+	});
+}
 
 function render_assigned_employees(frm) {
 	if (!frm.fields_dict.assigned_employees_html) {
