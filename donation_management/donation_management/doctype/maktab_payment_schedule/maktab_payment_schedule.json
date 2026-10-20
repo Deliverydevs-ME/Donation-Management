@@ -19,7 +19,7 @@
  ],
  "fields": [
   {"fieldname": "ilaqi_maktab", "fieldtype": "Link", "label": "Ilaqi Maktab", "options": "Ilaqi Maktab", "reqd": 1},
-  {"fieldname": "frequency", "fieldtype": "Select", "label": "Frequency", "options": "Monthly\nQuarterly\nHalf Yearly\nYearly", "read_only": 1},
+  {"fetch_from": "ilaqi_maktab.frequency", "fieldname": "frequency", "fieldtype": "Select", "label": "Frequency", "options": "Monthly\nQuarterly\nHalf Yearly\nYearly", "read_only": 1},
   {"fieldname": "due_date", "fieldtype": "Date", "label": "Due Date", "reqd": 1},
   {"fieldname": "due_amount", "fieldtype": "Currency", "label": "Due Amount", "non_negative": 1, "reqd": 1},
   {"fieldname": "collected_amount", "fieldtype": "Currency", "label": "Collected Amount", "non_negative": 1},
