@@ -5,16 +5,21 @@ import frappe
 from frappe.model.document import Document
 from frappe.utils import flt, today
 
+from donation_management.donation_management.doctype.maktab_payment_schedule.maktab_payment_schedule import (
+	get_ledger_account,
+	validate_collection_accounts,
+)
+
 
 class MaktabPayment(Document):
 	def validate(self):
 		if not self.posting_date:
 			self.posting_date = today()
 		self.set_reference_details()
+		self.validate_schedule()
 		if flt(self.amount) <= 0:
 			frappe.throw(frappe._("Amount must be greater than zero."))
 		self.validate_accounts()
-		self.validate_schedule()
 
 	def on_submit(self):
 		self.apply_to_schedule()
@@ -36,6 +41,8 @@ class MaktabPayment(Document):
 				"mode_of_payment",
 				"donation_order",
 				"collection_person",
+				"custom_debit_account",
+				"custom_credit_account",
 			],
 			as_dict=True,
 		)
@@ -48,6 +55,8 @@ class MaktabPayment(Document):
 		self.mode_of_payment = self.mode_of_payment or schedule.mode_of_payment
 		self.donation_order = self.donation_order or schedule.donation_order
 		self.collection_person = self.collection_person or schedule.collection_person
+		self.debit_account = schedule.custom_debit_account
+		self.credit_account = schedule.custom_credit_account
 
 	def set_reference_details(self):
 		if self.ilaqi_maktab and not self.payment_schedule:
@@ -72,16 +81,16 @@ class MaktabPayment(Document):
 		self.amount = flt(self.amount) or flt(order.donation_amount)
 
 	def validate_accounts(self):
+		if self.payment_schedule:
+			validate_collection_accounts(self.debit_account, self.credit_account)
+			return
+
 		for fieldname, label in (("debit_account", "Debit Account"), ("credit_account", "Credit Account")):
 			account = self.get(fieldname)
 			if not account:
 				continue
 
-			is_group = frappe.db.get_value("Account", account, "is_group")
-			if is_group is None:
-				frappe.throw(frappe._("{0} {1} was not found.").format(label, account))
-			if is_group:
-				frappe.throw(frappe._("{0} cannot be a group account.").format(label))
+			get_ledger_account(account, label)
 
 	def apply_to_schedule(self, reverse=False):
 		if not self.payment_schedule:

@@ -50,13 +50,28 @@ class TestMaktabPayment(FrappeTestCase):
 			).insert(ignore_permissions=True)
 		return mode
 
+	def get_collection_accounts(self):
+		company = get_default_company()
+		debit_account = frappe.db.get_value(
+			"Account", {"company": company, "root_type": "Asset", "is_group": 0, "disabled": 0}, "name"
+		)
+		credit_account = frappe.db.get_value(
+			"Account", {"company": company, "root_type": "Income", "is_group": 0, "disabled": 0}, "name"
+		)
+		if not debit_account or not credit_account:
+			self.skipTest("Active Asset and Income accounts are required for Maktab Payment tests.")
+		return debit_account, credit_account
+
 	def make_schedule(self, maktab, due_amount=100):
+		debit_account, credit_account = self.get_collection_accounts()
 		schedule = frappe.get_doc(
 			{
 				"doctype": "Maktab Payment Schedule",
 				"ilaqi_maktab": maktab.name,
 				"due_date": "2026-12-01",
 				"due_amount": due_amount,
+				"custom_debit_account": debit_account,
+				"custom_credit_account": credit_account,
 			}
 		)
 		schedule.insert()
@@ -99,3 +114,5 @@ class TestMaktabPayment(FrappeTestCase):
 		self.assertEqual(schedule.mode_of_payment, mode_of_payment)
 		self.assertEqual(schedule.collection_person, collector)
 		self.assertEqual(schedule.status, "Partially Paid")
+		self.assertEqual(payment.debit_account, schedule.custom_debit_account)
+		self.assertEqual(payment.credit_account, schedule.custom_credit_account)

@@ -8,7 +8,9 @@ frappe.ui.form.on("Maktab Payment", {
 	},
 
 	donation_order(frm) {
-		fetch_donation_order_details(frm);
+		if (!frm.doc.payment_schedule) {
+			fetch_donation_order_details(frm);
+		}
 	},
 
 	ilaqi_maktab(frm) {
@@ -58,6 +60,8 @@ function fetch_schedule_details(frm) {
 			"mode_of_payment",
 			"donation_order",
 			"collection_person",
+			"custom_debit_account",
+			"custom_credit_account",
 		])
 		.then((response) => {
 			const values = response.message || {};
@@ -67,6 +71,8 @@ function fetch_schedule_details(frm) {
 			set_value_if_changed(frm, "mode_of_payment", values.mode_of_payment || "");
 			set_value_if_changed(frm, "donation_order", values.donation_order || "");
 			set_value_if_changed(frm, "collection_person", values.collection_person || "");
+			set_value_if_changed(frm, "debit_account", values.custom_debit_account || "");
+			set_value_if_changed(frm, "credit_account", values.custom_credit_account || "");
 		});
 }
 
