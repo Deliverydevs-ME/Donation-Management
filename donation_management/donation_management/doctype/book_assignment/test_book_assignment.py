@@ -33,6 +33,19 @@ from donation_management.donation_management.doctype.book_assignment.book_assign
 
 
 class TestBookAssignment(FrappeTestCase):
+	def test_defaults_do_not_require_a_company_field(self):
+		assignment = BookAssignment(
+			{
+				"doctype": "Book Assignment",
+				"book_type": "Mixed",
+				"status": "Draft",
+			}
+		)
+
+		assignment.set_defaults()
+
+		self.assertEqual(assignment.book_type, "Mixed")
+
 	def test_coupon_income_account_must_match_the_exact_coupon_type(self):
 		with patch.object(
 			frappe.db,

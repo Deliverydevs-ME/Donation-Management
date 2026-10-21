@@ -134,8 +134,6 @@ class BookAssignment(Document):
 			self.book_type = BOOK_TYPE_COUPON
 		if not self.start_date and self.status in ("Issued", "Returned", "Closed"):
 			self.start_date = today()
-		if not self.company:
-			self.company = get_default_company()
 
 	def is_coupon_book(self):
 		return self.book_type == BOOK_TYPE_COUPON
@@ -524,7 +522,7 @@ class BookAssignment(Document):
 			)
 
 		validate_account_for_company(
-			self.company or get_default_company(),
+			self.get("company") or get_default_company(),
 			row.credit_account,
 			"Income Account",
 			allowed_root_types=("Income",),
@@ -2202,12 +2200,13 @@ def create_book_issue_stock_entry(doc, posting_date=None):
 
 	from erpnext.stock.doctype.stock_entry.stock_entry_utils import make_stock_entry
 
+	company = doc.get("company") or get_default_company()
 	stock_entry = None
 	for row in rows:
 		entry_for_row = make_stock_entry(
 			item_code=row.item,
 			qty=1,
-			company=doc.company,
+			company=company,
 			from_warehouse=row.warehouse,
 			serial_no=[row.book_serial_no],
 			posting_date=posting_date or doc.start_date or today(),
