@@ -73,6 +73,7 @@ class TestMaktabPayment(FrappeTestCase):
 	def test_payment_updates_schedule_collection_details(self):
 		maktab = self.make_ilaqi_maktab(frequency="Quarterly", fixed_contribution=100)
 		schedule = self.make_schedule(maktab, due_amount=100)
+		schedule.submit()
 		mode_of_payment = self.ensure_mode_of_payment()
 		collector = self.make_employee()
 

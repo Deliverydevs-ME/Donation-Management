@@ -5,6 +5,14 @@ from frappe.utils import today
 
 class TestMaktabPaymentSchedule(FrappeTestCase):
 	def test_frequency_is_fetched_from_ilaqi_maktab(self):
+		meta = frappe.get_meta("Maktab Payment Schedule")
+		self.assertTrue(meta.is_submittable)
+		permissions = {permission.role: permission for permission in meta.permissions}
+		for role in ("System Manager", "Donation Manager"):
+			self.assertTrue(permissions[role].submit)
+			self.assertTrue(permissions[role].cancel)
+			self.assertTrue(permissions[role].amend)
+
 		maktab = frappe.get_doc(
 			{
 				"doctype": "Ilaqi Maktab",

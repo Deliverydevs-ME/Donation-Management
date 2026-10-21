@@ -108,7 +108,24 @@ class MaktabPayment(Document):
 				schedule.collection_person = self.collection_person
 		else:
 			set_latest_payment_reference(schedule)
-		schedule.save(ignore_permissions=True)
+
+		# Payment posting is an automated aggregation. It must continue updating a
+		# submitted schedule without reopening it for manual edits.
+		frappe.db.set_value(
+			"Maktab Payment Schedule",
+			schedule.name,
+			{
+				"collected_amount": schedule.collected_amount,
+				"advance_amount": schedule.advance_amount,
+				"outstanding_amount": schedule.outstanding_amount,
+				"status": schedule.status,
+				"frequency": schedule.frequency,
+				"mode_of_payment": schedule.mode_of_payment,
+				"donation_order": schedule.donation_order,
+				"collection_person": schedule.collection_person,
+			},
+			update_modified=False,
+		)
 
 
 def set_latest_payment_reference(schedule):
