@@ -55,6 +55,18 @@ class TestMaktabPaymentSchedule(FrappeTestCase):
 		self.assertEqual(frappe.get_meta("Maktab Payment Schedule").get_field("custom_debit_account").options, "Account")
 		self.assertEqual(frappe.get_meta("Maktab Payment Schedule").get_field("custom_credit_account").options, "Account")
 
+		updated_maktab = frappe.get_doc(
+			{
+				"doctype": "Ilaqi Maktab",
+				"maktab_name": f"Updated Schedule Maktab {frappe.generate_hash(length=8)}",
+				"frequency": "Yearly",
+			}
+		).insert()
+		schedule.ilaqi_maktab = updated_maktab.name
+		schedule.save()
+
+		self.assertEqual(schedule.frequency, "Yearly")
+
 	def test_responsible_person_uses_employee_name(self):
 		employee = frappe.get_doc(
 			{

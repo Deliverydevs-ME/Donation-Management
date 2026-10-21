@@ -36,7 +36,7 @@ class MaktabPaymentSchedule(Document):
 				as_dict=True,
 			)
 			if maktab:
-				self.frequency = maktab.frequency or self.frequency
+				self.frequency = maktab.frequency
 				self.custom_responsible_person = get_employee_name(maktab.responsible_person)
 
 		if not self.donation_order:

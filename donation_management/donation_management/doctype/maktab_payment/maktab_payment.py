@@ -51,7 +51,7 @@ class MaktabPayment(Document):
 		if schedule.ilaqi_maktab != self.ilaqi_maktab:
 			frappe.throw(frappe._("Payment Schedule belongs to a different Ilaqi Maktab."))
 		self.outstanding_amount = schedule.outstanding_amount
-		self.frequency = schedule.frequency or self.frequency
+		self.frequency = schedule.frequency
 		self.mode_of_payment = self.mode_of_payment or schedule.mode_of_payment
 		self.donation_order = self.donation_order or schedule.donation_order
 		self.collection_person = self.collection_person or schedule.collection_person
@@ -60,7 +60,7 @@ class MaktabPayment(Document):
 
 	def set_reference_details(self):
 		if self.ilaqi_maktab and not self.payment_schedule:
-			self.frequency = frappe.db.get_value("Ilaqi Maktab", self.ilaqi_maktab, "frequency") or self.frequency
+			self.frequency = frappe.db.get_value("Ilaqi Maktab", self.ilaqi_maktab, "frequency")
 
 		if not self.donation_order:
 			return

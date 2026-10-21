@@ -36,13 +36,18 @@ function set_value_if_changed(frm, fieldname, value) {
 }
 
 function fetch_maktab_details(frm) {
-	if (!frm.doc.ilaqi_maktab) {
+	const ilaqi_maktab = frm.doc.ilaqi_maktab;
+	if (!ilaqi_maktab) {
 		set_value_if_changed(frm, "frequency", "");
 		set_value_if_changed(frm, "custom_responsible_person", "");
 		return;
 	}
 
-	frappe.db.get_value("Ilaqi Maktab", frm.doc.ilaqi_maktab, ["frequency", "responsible_person"]).then((response) => {
+	frappe.db.get_value("Ilaqi Maktab", ilaqi_maktab, ["frequency", "responsible_person"]).then((response) => {
+		if (frm.doc.ilaqi_maktab !== ilaqi_maktab) {
+			return;
+		}
+
 		const values = response.message || {};
 		set_value_if_changed(frm, "frequency", values.frequency || "");
 
@@ -52,6 +57,10 @@ function fetch_maktab_details(frm) {
 		}
 
 		frappe.db.get_value("Employee", values.responsible_person, "employee_name").then((employee) => {
+			if (frm.doc.ilaqi_maktab !== ilaqi_maktab) {
+				return;
+			}
+
 			set_value_if_changed(frm, "custom_responsible_person", employee.message?.employee_name || "");
 		});
 	});

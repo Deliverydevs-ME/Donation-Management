@@ -14,9 +14,7 @@ frappe.ui.form.on("Maktab Payment", {
 	},
 
 	ilaqi_maktab(frm) {
-		if (!frm.doc.frequency) {
-			fetch_maktab_frequency(frm);
-		}
+		fetch_maktab_frequency(frm);
 	},
 });
 
@@ -37,11 +35,17 @@ function set_value_if_changed(frm, fieldname, value) {
 }
 
 function fetch_maktab_frequency(frm) {
-	if (!frm.doc.ilaqi_maktab) {
+	const ilaqi_maktab = frm.doc.ilaqi_maktab;
+	if (!ilaqi_maktab) {
+		set_value_if_changed(frm, "frequency", "");
 		return;
 	}
 
-	frappe.db.get_value("Ilaqi Maktab", frm.doc.ilaqi_maktab, "frequency").then((response) => {
+	frappe.db.get_value("Ilaqi Maktab", ilaqi_maktab, "frequency").then((response) => {
+		if (frm.doc.ilaqi_maktab !== ilaqi_maktab) {
+			return;
+		}
+
 		const values = response.message || {};
 		set_value_if_changed(frm, "frequency", values.frequency || "");
 	});

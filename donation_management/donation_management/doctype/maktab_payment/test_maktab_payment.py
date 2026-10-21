@@ -85,6 +85,25 @@ class TestMaktabPayment(FrappeTestCase):
 		self.assertEqual(schedule.outstanding_amount, 500)
 		self.assertEqual(schedule.status, "Pending")
 
+	def test_frequency_updates_when_ilaqi_maktab_changes(self):
+		initial_maktab = self.make_ilaqi_maktab(frequency="Monthly")
+		updated_maktab = self.make_ilaqi_maktab(frequency="Yearly")
+		payment = frappe.get_doc(
+			{
+				"doctype": "Maktab Payment",
+				"ilaqi_maktab": initial_maktab.name,
+				"frequency": "Quarterly",
+				"posting_date": "2026-01-02",
+				"amount": 100,
+			}
+		).insert()
+
+		self.assertEqual(payment.frequency, "Monthly")
+		payment.ilaqi_maktab = updated_maktab.name
+		payment.save()
+
+		self.assertEqual(payment.frequency, "Yearly")
+
 	def test_payment_updates_schedule_collection_details(self):
 		maktab = self.make_ilaqi_maktab(frequency="Quarterly", fixed_contribution=100)
 		schedule = self.make_schedule(maktab, due_amount=100)
