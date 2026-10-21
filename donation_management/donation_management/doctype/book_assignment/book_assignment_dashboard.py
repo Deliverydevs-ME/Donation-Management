@@ -7,7 +7,6 @@ def get_data():
 		"non_standard_fieldnames": {
 			"Book Assignment Issue Log": "book_assignment",
 			"Material Request": "custom_book_assignment",
-			"Purchase Receipt": "custom_book_assignment",
 		},
 		"internal_links": {
 			"Journal Entry": "journal_entry",

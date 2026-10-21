@@ -3,7 +3,6 @@ import frappe
 
 def execute():
 	ensure_purchase_source_link("Material Request", "material_request_type", "Optional donation-management link for requested books.")
-	ensure_purchase_source_link("Purchase Receipt", "supplier", "Optional donation-management link for purchased books.")
 
 
 def ensure_purchase_source_link(doctype, insert_after, description):

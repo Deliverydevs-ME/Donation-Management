@@ -16,11 +16,6 @@ def execute():
 		"material_request_type",
 		"Optional donation-management link for requested books.",
 	)
-	ensure_purchase_source_link(
-		"Purchase Receipt",
-		"supplier",
-		"Optional donation-management link for purchased books.",
-	)
 	ensure_esaal_e_sawab_purpose()
 
 	if frappe.db.exists("DocType", "Donation Book Leaf"):
