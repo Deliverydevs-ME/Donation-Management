@@ -3,17 +3,26 @@
 
 import frappe
 from frappe.model.document import Document
-from frappe.utils import cint, getdate
+from frappe.utils import getdate
 
 from donation_management.donation_management.doctype.ilaqi_maktab.ilaqi_maktab import (
-	get_active_assignment_count,
+	sync_head_count,
 )
 
 
 class MaktabEmployeeAssignment(Document):
 	def validate(self):
 		self.validate_assigned_employees()
-		self.validate_maktab_head_count()
+
+	def after_insert(self):
+		self.sync_maktab_head_counts()
+
+	def on_update(self):
+		previous = self.get_doc_before_save()
+		self.sync_maktab_head_counts(previous.ilaqi_maktab if previous else None)
+
+	def on_trash(self):
+		sync_head_count(self.ilaqi_maktab, exclude_assignment=self.name)
 
 	def validate_assigned_employees(self):
 		if not self.assigned_employees:
@@ -32,17 +41,6 @@ class MaktabEmployeeAssignment(Document):
 					frappe._("Row {0}: End Date cannot be before Start Date.").format(row.idx)
 				)
 
-	def validate_maktab_head_count(self):
-		if not self.ilaqi_maktab:
-			return
-
-		head_count = cint(frappe.db.get_value("Ilaqi Maktab", self.ilaqi_maktab, "head_count"))
-		active_assignments = get_active_assignment_count(self.ilaqi_maktab, exclude_assignment=self.name)
-		active_rows = sum(row.status == "Active" for row in self.assigned_employees)
-
-		if active_assignments + active_rows > head_count:
-			frappe.throw(
-				frappe._(
-					"Cannot assign employee to Ilaqi Maktab {0}. Head Count is {1} and active assignments would become {2}."
-				).format(self.ilaqi_maktab, head_count, active_assignments + active_rows)
-			)
+	def sync_maktab_head_counts(self, previous_maktab=None):
+		for ilaqi_maktab in {self.ilaqi_maktab, previous_maktab} - {None, ""}:
+			sync_head_count(ilaqi_maktab)

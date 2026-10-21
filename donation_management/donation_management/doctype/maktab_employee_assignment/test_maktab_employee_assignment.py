@@ -47,20 +47,28 @@ class TestMaktabEmployeeAssignment(FrappeTestCase):
 		assignment.insert()
 		return assignment
 
-	def test_active_assignments_cannot_exceed_head_count(self):
+	def test_head_count_tracks_current_active_assignments(self):
 		maktab = self.make_ilaqi_maktab(head_count=1)
 		self.make_assignment(
 			maktab,
 			[{"employee": self.make_employee("Maktab Capacity One"), "start_date": "2026-01-01"}],
 		)
+		self.make_assignment(
+			maktab,
+			[
+				{"employee": self.make_employee("Maktab Capacity Two"), "start_date": "2026-01-01"},
+				{
+					"employee": self.make_employee("Maktab Inactive"),
+					"start_date": "2026-01-01",
+					"status": "Inactive",
+				},
+			],
+		)
 
-		with self.assertRaises(frappe.ValidationError):
-			self.make_assignment(
-				maktab,
-				[{"employee": self.make_employee("Maktab Capacity Two"), "start_date": "2026-01-01"}],
-			)
+		maktab.reload()
+		self.assertEqual(maktab.head_count, 2)
 
-	def test_head_count_cannot_be_reduced_below_active_assignments(self):
+	def test_head_count_cannot_be_manually_changed(self):
 		maktab = self.make_ilaqi_maktab(head_count=2)
 		self.make_assignment(
 			maktab,
@@ -71,8 +79,29 @@ class TestMaktabEmployeeAssignment(FrappeTestCase):
 		)
 
 		maktab.head_count = 1
-		with self.assertRaises(frappe.ValidationError):
-			maktab.save()
+		maktab.save()
+		self.assertEqual(maktab.head_count, 2)
+
+	def test_head_count_refreshes_when_assignment_changes_or_is_deleted(self):
+		maktab = self.make_ilaqi_maktab()
+		assignment = self.make_assignment(
+			maktab,
+			[{"employee": self.make_employee("Maktab Head Count Refresh"), "start_date": "2026-01-01"}],
+		)
+
+		maktab.reload()
+		self.assertEqual(maktab.head_count, 1)
+
+		assignment.assigned_employees[0].status = "Inactive"
+		assignment.save()
+		maktab.reload()
+		self.assertEqual(maktab.head_count, 0)
+
+		assignment.assigned_employees[0].status = "Active"
+		assignment.save()
+		assignment.delete()
+		maktab.reload()
+		self.assertEqual(maktab.head_count, 0)
 
 	def test_multiple_employees_keep_their_own_salary_and_dates(self):
 		maktab = self.make_ilaqi_maktab(head_count=2)

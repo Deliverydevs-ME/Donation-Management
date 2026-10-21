@@ -9,6 +9,7 @@ class TestIlaqiMaktab(FrappeTestCase):
 		self.assertTrue(meta.is_submittable)
 		self.assertEqual(meta.get_field("location").options, "Location")
 		self.assertEqual(meta.get_field("effective_from_date").fieldtype, "Date")
+		self.assertTrue(meta.get_field("head_count").read_only)
 		self.assertIsNotNone(meta.get_field("amended_from"))
 		self.assertIsNone(meta.get_field("donation_location"))
 

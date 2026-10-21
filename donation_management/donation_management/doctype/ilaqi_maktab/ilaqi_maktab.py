@@ -3,12 +3,13 @@
 
 import frappe
 from frappe.model.document import Document
-from frappe.utils import add_months, cint, flt, getdate, today
+from frappe.utils import add_months, flt, getdate, today
 
 
 class IlaqiMaktab(Document):
 	def validate(self):
 		self.validate_maktab_name()
+		self.set_head_count()
 
 		if flt(self.fixed_contribution) < 0:
 			frappe.throw(frappe._("Fixed Contribution cannot be negative."))
@@ -16,7 +17,9 @@ class IlaqiMaktab(Document):
 			frappe.throw(frappe._("Expected Monthly Cost cannot be negative."))
 		if not self.status:
 			self.status = "Active"
-		self.validate_head_count_capacity()
+
+	def set_head_count(self):
+		self.head_count = get_active_assignment_count(self.name) if not self.is_new() else 0
 
 	def validate_maktab_name(self):
 		"""Allow an amendment to reuse the name of its cancelled original."""
@@ -39,18 +42,6 @@ class IlaqiMaktab(Document):
 				title=frappe._("Duplicate Maktab Name"),
 			)
 
-	def validate_head_count_capacity(self):
-		if self.is_new():
-			return
-
-		active_assignments = get_active_assignment_count(self.name)
-		if active_assignments > cint(self.head_count):
-			frappe.throw(
-				frappe._(
-					"Head Count cannot be less than active assigned employees. Current active assignments: {0}."
-				).format(active_assignments)
-			)
-
 
 def get_frequency_months(frequency):
 	return {
@@ -70,8 +61,10 @@ def get_active_assignment_count(ilaqi_maktab, exclude_assignment=None):
 		"detail.parenttype = 'Maktab Employee Assignment'",
 		"detail.parentfield = 'assigned_employees'",
 		"detail.status = 'Active'",
+		"detail.start_date <= %(current_date)s",
+		"(detail.end_date is null or detail.end_date = '' or detail.end_date >= %(current_date)s)",
 	]
-	values = {"ilaqi_maktab": ilaqi_maktab}
+	values = {"ilaqi_maktab": ilaqi_maktab, "current_date": getdate(today())}
 	if exclude_assignment:
 		conditions.append("assignment.name != %(exclude_assignment)s")
 		values["exclude_assignment"] = exclude_assignment
@@ -85,6 +78,15 @@ def get_active_assignment_count(ilaqi_maktab, exclude_assignment=None):
 		""".format(" and ".join(conditions)),
 		values,
 	)[0][0]
+
+
+def sync_head_count(ilaqi_maktab, exclude_assignment=None):
+	if not ilaqi_maktab or not frappe.db.exists("Ilaqi Maktab", ilaqi_maktab):
+		return 0
+
+	head_count = get_active_assignment_count(ilaqi_maktab, exclude_assignment=exclude_assignment)
+	frappe.db.set_value("Ilaqi Maktab", ilaqi_maktab, "head_count", head_count, update_modified=False)
+	return head_count
 
 
 @frappe.whitelist()
