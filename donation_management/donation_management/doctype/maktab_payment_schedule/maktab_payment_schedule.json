@@ -32,7 +32,7 @@
    "fieldname": "frequency",
    "fieldtype": "Select",
    "label": "Frequency",
-   "options": "Monthly\nQuarterly\nHalf Yearly\nYearly",
+   "options": "\nMonthly\nQuarterly\nHalf Yearly\nYearly",
    "read_only": 1
   },
   {
