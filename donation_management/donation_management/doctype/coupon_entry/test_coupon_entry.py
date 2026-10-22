@@ -55,6 +55,14 @@ class TestCoupon(FrappeTestCase):
 			with self.assertRaisesRegex(frappe.ValidationError, "greater than zero"):
 				coupon.validate_number_of_pages()
 
+	def test_new_coupon_requires_a_returned_book(self):
+		coupon = Coupon({"doctype": "Coupon Entry", "book": "BK-00001"})
+		with patch(
+			"donation_management.donation_management.doctype.coupon_entry.coupon_entry._get_coupon_book_details",
+			return_value=frappe._dict(status="Issued"),
+		), self.assertRaisesRegex(frappe.ValidationError, "must be Returned"):
+			coupon.set_coupon_book_details()
+
 	def test_coupon_type_can_be_detected_from_selected_item_value(self):
 		with patch.object(frappe.db, "get_value", return_value=None):
 			self.assertEqual(get_coupon_type_from_item("Sadqa Coupon Book"), "Sadqa")

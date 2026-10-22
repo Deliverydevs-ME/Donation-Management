@@ -15,6 +15,7 @@ def get_data():
 		"transactions": [
 			{"label": _("Purchase Sources"), "items": ["Material Request", "Stock Entry"]},
 			{"label": _("Coupon Processing"), "items": ["Coupon Entry", "Coupon Book Leaf"]},
+			{"label": _("Donation Processing"), "items": ["Donation Book Leaf", "Donation Book Collection"]},
 			{"label": _("Assignment History"), "items": ["Book Assignment Issue Log"]},
 			{"label": _("Accounting"), "items": ["Journal Entry"]},
 		],

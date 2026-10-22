@@ -128,19 +128,21 @@ class TestBookAssignment(FrappeTestCase):
 		self.assertIn('"Donation Book Leaf"', script)
 		self.assertIn('"Stock Entry"', script)
 
-	def test_return_dialog_uses_generic_title_and_editable_individual_totals(self):
+	def test_coupon_return_does_not_prompt_for_pages_or_denominations(self):
 		script = Path(__file__).with_name("book_assignment.js").read_text()
 
-		self.assertIn('title: __("Return Books")', script)
-		self.assertNotIn('title: __("Return Donation Book")', script)
-		self.assertIn("denomination_total_${index}", script)
-		self.assertIn("book_collections: has_individual_books ? book_collections : null", script)
+		return_function = script[script.index("function show_return_dialog"):script.index("function build_return_dialog")]
+		self.assertIn('frappe.confirm(__("Return this Coupon Book?")', return_function)
+		self.assertIn('args: { book: frm.doc.name }', return_function)
+		self.assertNotIn("denomination", return_function)
+		self.assertNotIn("used_pages", return_function)
 
 	def test_purchase_receipt_is_not_a_book_assignment_connection(self):
 		dashboard = Path(__file__).with_name("book_assignment_dashboard.py").read_text()
 		connections_patch = Path(__file__).resolve().parents[3] / "patches" / "ensure_book_assignment_connections.py"
 
 		self.assertNotIn('"Purchase Receipt"', dashboard)
+		self.assertIn('"Donation Book Collection"', dashboard)
 		self.assertNotIn('ensure_purchase_source_link("Purchase Receipt"', connections_patch.read_text())
 
 	def test_issuing_book_creates_stock_ledger_entry(self):
@@ -577,7 +579,7 @@ class TestBookAssignment(FrappeTestCase):
 		with patch.object(frappe, "get_all", return_value=[]), patch.object(frappe.db, "get_value", return_value=8):
 			self.assertEqual(get_coupon_book_total_pages("BA-00003"), 8)
 
-	def test_return_book_uses_coupon_row_value_for_calculation(self):
+	def test_coupon_return_does_not_require_usage_or_cash_denominations(self):
 		doc = frappe._dict(
 			status="Issued",
 			total_pages=10,
@@ -598,110 +600,29 @@ class TestBookAssignment(FrappeTestCase):
 			return_value=100,
 		), patch(
 			"donation_management.donation_management.doctype.book_assignment.book_assignment.get_book_used_pages",
-			return_value=3,
+			return_value=0,
 		), patch(
 			"donation_management.donation_management.doctype.book_assignment.book_assignment.get_book_collected_amount",
-			return_value=300,
+			return_value=0,
 		), patch(
 			"donation_management.donation_management.doctype.book_assignment.book_assignment.get_coupon_book_total_pages",
 			return_value=10,
 		), patch(
-			"donation_management.donation_management.doctype.book_assignment.book_assignment.generate_return_coupons"
-			), patch(
 				"donation_management.donation_management.doctype.book_assignment.book_assignment.create_book_assignment_issue_log"
-			), patch.object(frappe, "get_doc", return_value=doc), patch.object(
-				frappe, "parse_json", return_value=[]
 			), patch(
+				"donation_management.donation_management.doctype.book_assignment.book_assignment.restore_unused_book_stock"
+			), patch.object(frappe, "get_doc", return_value=doc), patch(
 				"donation_management.donation_management.doctype.book_assignment.book_assignment.today",
 				return_value="2026-10-05",
 			):
-			return_book("BA-00003", collected_amount=300, used_pages=3, denominations=[], denomination_total=300)
+			return_book("BA-00003")
 
 		self.assertEqual(doc.coupon_value, 100)
-		self.assertEqual(doc.collected_amount, 300)
-		self.assertEqual(doc.remaining_pages, 7)
-
-	def test_return_book_allows_an_empty_cash_denomination_breakdown(self):
-		doc = frappe._dict(
-			status="Issued",
-			total_pages=10,
-			coupon_value=0,
-			is_coupon_book=lambda: True,
-			name="BA-00003",
-			mode_of_payment=None,
-			debit_account=None,
-			credit_account=None,
-			flags=frappe._dict(),
-			set=lambda fieldname, value: setattr(doc, fieldname, value),
-			append=lambda fieldname, value: None,
-			save=lambda: None,
-		)
-		doc.as_dict = lambda: doc
-
-		with patch.object(frappe, "get_doc", return_value=doc), patch(
-			"donation_management.donation_management.doctype.book_assignment.book_assignment.get_coupon_value_for_book",
-			return_value=100,
-		), patch(
-			"donation_management.donation_management.doctype.book_assignment.book_assignment.get_coupon_book_total_pages",
-			return_value=10,
-		), patch(
-			"donation_management.donation_management.doctype.book_assignment.book_assignment.get_book_used_pages",
-			return_value=3,
-		), patch(
-			"donation_management.donation_management.doctype.book_assignment.book_assignment.get_book_collected_amount",
-			return_value=300,
-		), patch(
-			"donation_management.donation_management.doctype.book_assignment.book_assignment.generate_return_coupons"
-		), patch(
-			"donation_management.donation_management.doctype.book_assignment.book_assignment.create_book_assignment_issue_log"
-		), patch.object(frappe, "parse_json", return_value=[]), patch(
-			"donation_management.donation_management.doctype.book_assignment.book_assignment.today",
-			return_value="2026-10-05",
-		):
-			return_book("BA-00003", collected_amount=300, used_pages=3, denominations=[])
-
-		self.assertEqual(doc.collected_amount, 300)
-
-	def test_return_book_uses_assigned_coupon_total_when_parent_total_is_zero(self):
-		doc = frappe._dict(
-			status="Issued",
-			total_pages=0,
-			coupon_value=0,
-			is_coupon_book=lambda: True,
-			name="BA-00004",
-			mode_of_payment=None,
-			debit_account=None,
-			credit_account=None,
-			flags=frappe._dict(),
-		)
-		doc.set = lambda fieldname, value: setattr(doc, fieldname, value)
-		doc.save = lambda: None
-		doc.as_dict = lambda: doc
-
-		with patch.object(frappe, "get_doc", return_value=doc), patch(
-			"donation_management.donation_management.doctype.book_assignment.book_assignment.get_coupon_value_for_book",
-			return_value=100,
-		), patch(
-			"donation_management.donation_management.doctype.book_assignment.book_assignment.get_coupon_book_total_pages",
-			return_value=5,
-		), patch(
-			"donation_management.donation_management.doctype.book_assignment.book_assignment.get_book_used_pages",
-			return_value=3,
-		), patch(
-			"donation_management.donation_management.doctype.book_assignment.book_assignment.get_book_collected_amount",
-			return_value=300,
-		), patch(
-			"donation_management.donation_management.doctype.book_assignment.book_assignment.generate_return_coupons"
-		), patch(
-			"donation_management.donation_management.doctype.book_assignment.book_assignment.create_book_assignment_issue_log"
-		), patch.object(frappe, "parse_json", return_value=[]), patch(
-			"donation_management.donation_management.doctype.book_assignment.book_assignment.today",
-			return_value="2026-10-06",
-		):
-			return_book("BA-00004", collected_amount=300, used_pages=3, denominations=[], denomination_total=300)
-
 		self.assertEqual(doc.status, "Returned")
-		self.assertEqual(doc.remaining_pages, 2)
+		self.assertEqual(doc.used_pages, 0)
+		self.assertEqual(doc.remaining_pages, 10)
+		self.assertEqual(doc.collected_amount, 0)
+		self.assertEqual(doc.cash_denominations, [])
 
 	def test_available_stock_uses_book_assignment_lifecycle(self):
 		with patch.object(frappe.db, "sql", return_value=[(12,)]) as sql:

@@ -66,7 +66,11 @@ class BookAssignment(Document):
 	def on_update(self):
 		if self.docstatus == 1 and (self.is_donation_book() or self.has_donation_rows()):
 			sync_donation_book_leaves(self.name)
-		if self.docstatus == 1 and (self.is_coupon_book() or self.has_coupon_rows()):
+		if (
+			self.docstatus == 1
+			and self.status in ("Returned", "Closed")
+			and (self.is_coupon_book() or self.has_coupon_rows())
+		):
 			from donation_management.donation_management.doctype.coupon_book_leaf.coupon_book_leaf import (
 				sync_coupon_book_leaves,
 			)
@@ -123,12 +127,6 @@ class BookAssignment(Document):
 				frappe.db.set_value("Book Assignment Detail", row.name, "status", "Issued", update_modified=False)
 		create_book_issue_stock_entry(self)
 		create_book_assignment_issue_log(self, "Issued")
-		if self.is_coupon_book() or self.has_coupon_rows():
-			from donation_management.donation_management.doctype.coupon_book_leaf.coupon_book_leaf import (
-				sync_coupon_book_leaves,
-			)
-
-			sync_coupon_book_leaves(self.name)
 	def set_defaults(self):
 		if not self.book_type:
 			self.book_type = BOOK_TYPE_COUPON
@@ -829,6 +827,16 @@ def reopen_book(book, reason, issued_to_employee=None):
 	return doc.as_dict()
 
 
+@frappe.whitelist()
+def get_coupon_book_return_status(book):
+	"""Return the authoritative close/reopen decision for a returned Coupon Book."""
+	doc = frappe.get_doc("Book Assignment", book)
+	doc.check_permission("read")
+	if not doc.is_coupon_book() or doc.status not in ("Returned", "Closed"):
+		return frappe._dict(is_exhausted=False)
+	return frappe._dict(is_exhausted=doc.is_exhausted())
+
+
 def reopen_donation_book(doc, reason, issued_to_employee=None):
 	"""Return an eligible Donation Book to Issued for its remaining receipts."""
 	if doc.status not in ("Returned", "Closed"):
@@ -999,23 +1007,9 @@ def return_book(
 	if not doc.is_coupon_book():
 		frappe.throw(frappe._("Use Return Books for Donation Book or Mixed records."))
 
-	book_collections = frappe.parse_json(book_collections) or []
-	if book_collections:
-		return_totals = validate_coupon_book_return_collections(doc, book_collections)
-		used_pages = return_totals.used_pages
-		calculated_collected_amount = return_totals.collected_amount
-		denominations = get_total_denominations_from_return_collections(book_collections)
-		doc.flags.return_collections_validated = True
-	else:
-		used_pages = cint(used_pages)
-		calculated_collected_amount = get_book_collected_amount(book)
-
-	if used_pages <= 0:
-		frappe.throw(frappe._("Used Pages must be greater than zero when returning a Book."))
-
 	total_pages = get_coupon_book_total_pages(book)
-	if used_pages > total_pages:
-		frappe.throw(frappe._("Used Pages cannot exceed Total Pages."))
+	used_pages = get_book_used_pages(book)
+	calculated_collected_amount = get_book_collected_amount(book)
 
 	coupon_value = get_coupon_value_for_book(book)
 	doc.coupon_value = coupon_value
@@ -1024,43 +1018,9 @@ def return_book(
 		if not coupon_values or not coupon_values.issubset(COUPON_VALUES):
 			frappe.throw(frappe._("Coupon Value must be 10, 50, 100, 500, 1000, or 5000 before returning a Book."))
 
-	submitted_used_pages = get_book_used_pages(book)
-	if used_pages != submitted_used_pages:
-		frappe.throw(frappe._("Submitted Coupon Entry pages have changed. Refresh the Return dialog and try again."))
-
-	if collected_amount is not None and flt(collected_amount) != calculated_collected_amount:
-		frappe.throw(frappe._("Total Amount Collected must equal the total of submitted Coupon Entries."))
-
-	denominations = frappe.parse_json(denominations) or []
-	denomination_rows_total = sum(
-		cint(row.get("denomination")) * cint(row.get("note_count")) for row in denominations
-	)
-	manual_denomination_total = flt(denomination_total)
-	if (
-		not book_collections
-		and denomination_rows_total
-		and flt(denomination_rows_total, 2) != flt(calculated_collected_amount, 2)
-	):
-		frappe.throw(frappe._("Cash denomination total must match Total Amount Collected."))
-	if (
-		not book_collections
-		and manual_denomination_total
-		and flt(manual_denomination_total, 2) != flt(calculated_collected_amount, 2)
-	):
-		frappe.throw(frappe._("Cash denomination total must match Total Amount Collected."))
-
+	# Coupon Book usage is unknown at return time. It is derived exclusively
+	# from submitted Coupon Entries after the physical book has been returned.
 	doc.set("cash_denominations", [])
-	for row in denominations:
-		if cint(row.get("note_count")):
-			doc.append(
-				"cash_denominations",
-				{
-					"denomination": cint(row.get("denomination")),
-					"note_count": cint(row.get("note_count")),
-				},
-			)
-
-	generate_return_coupons(doc, used_pages)
 
 	doc.used_pages = used_pages
 	doc.remaining_pages = max(total_pages - used_pages, 0)
@@ -1069,6 +1029,11 @@ def return_book(
 	doc.return_date = today()
 	doc.flags.ignore_validate_update_after_submit = True
 	doc.save()
+	from donation_management.donation_management.doctype.coupon_book_leaf.coupon_book_leaf import (
+		sync_coupon_book_leaves,
+	)
+
+	sync_coupon_book_leaves(doc.name)
 	restore_unused_book_stock(doc)
 	create_book_assignment_issue_log(doc, "Returned")
 	return doc.as_dict()
@@ -1351,6 +1316,12 @@ def return_donation_book(book, collected_amount=None, denominations=None, book_c
 	doc.return_date = today()
 	doc.flags.ignore_validate_update_after_submit = True
 	doc.save()
+	if doc.has_coupon_rows():
+		from donation_management.donation_management.doctype.coupon_book_leaf.coupon_book_leaf import (
+			sync_coupon_book_leaves,
+		)
+
+		sync_coupon_book_leaves(doc.name)
 	restore_unused_book_stock(doc)
 	create_book_assignment_issue_log(doc, "Returned")
 	return doc.as_dict()
@@ -1417,7 +1388,15 @@ def set_donation_book_return_collections(doc, book_collections):
 				)
 			)
 
-		validate_return_collection_denominations(collection, collected_amount, book_serial_no)
+		if assigned_book.book_type == BOOK_TYPE_COUPON:
+			if get_denomination_total(collection) or flt(collection.get("denomination_total")):
+				frappe.throw(
+					frappe._("Cash denominations are only allowed for Donation Book Serial No {0}.").format(
+						book_serial_no
+					)
+				)
+		else:
+			validate_return_collection_denominations(collection, collected_amount, book_serial_no)
 		if assigned_book.book_type == BOOK_TYPE_DONATION:
 			assigned_book.collected_amount = flt(assigned_book.collected_amount) + collected_amount
 		total_collected_amount += collected_amount

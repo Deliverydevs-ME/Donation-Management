@@ -87,10 +87,10 @@ function set_coupon_book_details(frm) {
 			}
 			frm.toggle_reqd("book_serial_no", false);
 
-			if (frm.is_new() && (book.book_type !== "Coupon Book" && book.book_type !== "Mixed" || book.status !== "Issued" || cint(book.remaining_pages) <= 0)) {
+			if (frm.is_new() && (book.book_type !== "Coupon Book" && book.book_type !== "Mixed" || book.status !== "Returned" || cint(book.remaining_pages) <= 0)) {
 				frappe.msgprint({
-					title: __("All Pages Used"),
-					message: __("Book {0} is not an issued Coupon Book with available pages.", [
+					title: __("Coupon Book Not Available"),
+					message: __("Book {0} must be returned and have available pages before creating a Coupon Entry.", [
 						frm.doc.book,
 					]),
 					indicator: "red",

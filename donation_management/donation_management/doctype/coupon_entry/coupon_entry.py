@@ -4,7 +4,7 @@
 import frappe
 from frappe.model.document import Document
 from frappe.model.naming import make_autoname
-from frappe.utils import cint, getdate, today
+from frappe.utils import cint, flt, getdate, today
 from frappe.desk.reportview import get_match_cond
 
 from donation_management.donation_management.api import (
@@ -81,11 +81,13 @@ class CouponEntry(Document):
 
 		book = _get_coupon_book_details(self.book, self.book_serial_no)
 
-		if self.is_new() and book.status != "Issued":
-			frappe.throw(frappe._("Book {0} must be Issued before creating a Coupon.").format(self.book))
+		if self.is_new() and book.status != "Returned":
+			frappe.throw(
+				frappe._("Book {0} must be Returned before creating a Coupon Entry.").format(self.book)
+			)
 
-		if not self.is_new() and book.status not in ("Issued", "Returned", "Closed"):
-			frappe.throw(frappe._("Book {0} must be Issued, Returned, or Closed.").format(self.book))
+		if not self.is_new() and book.status not in ("Returned", "Closed"):
+			frappe.throw(frappe._("Book {0} must be Returned or Closed.").format(self.book))
 
 		self.coupon_color = book.coupon_color
 		self.coupon_type = book.coupon_type
@@ -353,7 +355,9 @@ def sync_coupon_entry_leaf_connections(coupon_entry):
 def get_used_coupon_pages(book, exclude_coupon=None, book_serial_no=None):
 	# A cancelled Coupon Entry has discarded physical pages. Keep it in the
 	# consumed count so cancellation never makes those pages available again.
-	conditions = ["book = %(book)s"]
+	# Draft entries have not consumed a physical leaf. Submitted and cancelled
+	# entries both remain consumed so a cancelled receipt is never reused.
+	conditions = ["book = %(book)s", "docstatus != 0"]
 	params = {"book": book}
 	if exclude_coupon:
 		conditions.append("name != %(exclude_coupon)s")
@@ -398,10 +402,15 @@ def sync_book_page_counts(book, exclude_coupon=None, book_serial_no=None):
 			return
 		total_pages = row.total_pages
 		used_pages = get_used_coupon_pages(book, exclude_coupon=exclude_coupon, book_serial_no=book_serial_no)
+		collected_amount = get_submitted_coupon_amount(book, book_serial_no=book_serial_no)
 		frappe.db.set_value(
 			"Book Assignment Detail",
 			row.name,
-			{"used_pages": used_pages, "remaining_pages": max(cint(total_pages) - used_pages, 0)},
+			{
+				"used_pages": used_pages,
+				"remaining_pages": max(cint(total_pages) - used_pages, 0),
+				"collected_amount": collected_amount,
+			},
 			update_modified=False,
 		)
 		return
@@ -412,15 +421,24 @@ def sync_book_page_counts(book, exclude_coupon=None, book_serial_no=None):
 
 	used_pages = get_used_coupon_pages(book, exclude_coupon=exclude_coupon)
 	remaining_pages = max(cint(total_pages) - used_pages, 0)
+	collected_amount = get_submitted_coupon_amount(book)
 	frappe.db.set_value(
 		"Book Assignment",
 		book,
 		{
 			"used_pages": used_pages,
 			"remaining_pages": remaining_pages,
+			"collected_amount": collected_amount,
 		},
 		update_modified=False,
 	)
+
+
+def get_submitted_coupon_amount(book, book_serial_no=None):
+	filters = {"book": book, "docstatus": 1}
+	if book_serial_no:
+		filters["book_serial_no"] = book_serial_no
+	return flt(frappe.db.get_value("Coupon Entry", filters, "sum(amount)"))
 
 
 @frappe.whitelist()
@@ -436,7 +454,7 @@ def get_available_books(doctype, txt, searchfield, start, page_len, filters):
 		from `tabBook Assignment`
 		where
 			docstatus < 2
-			and status = 'Issued'
+			and status = 'Returned'
 			and (
 				(book_type = 'Coupon Book' and ifnull(remaining_pages, 0) > 0)
 				or exists (
@@ -471,11 +489,13 @@ def get_available_coupon_serials(doctype, txt, searchfield, start, page_len, fil
 	return frappe.db.sql(
 		"""
 		select book_serial_no, book_serial_no
-		from `tabBook Assignment Detail`
-		where parent = %(book)s and parenttype = 'Book Assignment'
-			and book_type = 'Coupon Book' and ifnull(remaining_pages, 0) > 0
-			and book_serial_no like %(txt)s
-		order by idx limit %(start)s, %(page_len)s
+		from `tabBook Assignment Detail` detail
+		inner join `tabBook Assignment` book on book.name = detail.parent
+		where detail.parent = %(book)s and detail.parenttype = 'Book Assignment'
+			and detail.book_type = 'Coupon Book' and ifnull(detail.remaining_pages, 0) > 0
+			and book.status = 'Returned' and book.docstatus < 2
+			and detail.book_serial_no like %(txt)s
+		order by detail.idx limit %(start)s, %(page_len)s
 		""",
 		{"book": filters.book, "txt": f"%{txt}%", "start": start, "page_len": page_len},
 	)
