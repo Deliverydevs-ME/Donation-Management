@@ -55,6 +55,29 @@ class TestBookAssignment(FrappeTestCase):
 			self.assertTrue(account_matches_coupon_type("Sadqa Income - JTQ", "Sadqa"))
 			self.assertFalse(account_matches_coupon_type("Sadqa Income - JTQ", "Zakat"))
 
+	def test_coupon_income_account_validation_does_not_require_parent_receipt_fields(self):
+		assignment = BookAssignment(
+			{
+				"doctype": "Book Assignment",
+				"book_type": "Coupon Book",
+			}
+		)
+		row = frappe._dict(
+			idx=1,
+			credit_account="Hifz-ul-Quran - Zakat - JTQ",
+			coupon_type="Zakat",
+		)
+
+		with patch(
+			"donation_management.donation_management.doctype.book_assignment.book_assignment.validate_account_for_company"
+		) as validate_account, patch(
+			"donation_management.donation_management.doctype.book_assignment.book_assignment.account_matches_coupon_type",
+			return_value=True,
+		):
+			assignment.validate_coupon_income_account(row)
+
+		validate_account.assert_called_once()
+
 	def test_book_assignment_cancels_its_submitted_coupon_entries(self):
 		assignment = BookAssignment({"doctype": "Book Assignment", "name": "BK-TEST"})
 		coupon = frappe._dict(flags=frappe._dict(), cancel=Mock())

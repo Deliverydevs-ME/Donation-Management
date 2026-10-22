@@ -160,7 +160,7 @@ class BookAssignment(Document):
 		if self.is_coupon_book():
 			return cint(self.remaining_pages) <= 0
 		if self.is_donation_book():
-			return cint(self.remaining_receipts) <= 0
+			return cint(self.get("remaining_receipts")) <= 0
 		if self.is_mixed_assignment():
 			rows = [row for row in self.assigned_books or [] if row.book_type in (BOOK_TYPE_COUPON, BOOK_TYPE_DONATION)]
 			return bool(rows) and all(
@@ -512,6 +512,26 @@ class BookAssignment(Document):
 
 			self.used_receipts = total_used_receipts
 			self.remaining_receipts = total_remaining_receipts
+			return
+
+		from_receipt_no = self.get("from_receipt_no")
+		to_receipt_no = self.get("to_receipt_no")
+		if not from_receipt_no or not to_receipt_no:
+			frappe.throw(frappe._("From Receipt No and To Receipt No are required for Donation Book."))
+
+		from_receipt_number = get_receipt_number_int(from_receipt_no, "From Receipt No")
+		to_receipt_number = get_receipt_number_int(to_receipt_no, "To Receipt No")
+		if from_receipt_number > to_receipt_number:
+			frappe.throw(frappe._("From Receipt No cannot be greater than To Receipt No."))
+
+		if not self.is_new():
+			self.used_receipts = get_donation_book_used_receipts(self.name)
+		else:
+			self.used_receipts = cint(self.get("used_receipts"))
+		self.remaining_receipts = max(
+			get_receipt_range_count(from_receipt_no, to_receipt_no) - self.used_receipts,
+			0,
+		)
 
 	def validate_coupon_income_account(self, row):
 		if not row.credit_account:
@@ -534,21 +554,6 @@ class BookAssignment(Document):
 					row.coupon_type,
 				)
 			)
-			return
-
-		if not self.from_receipt_no or not self.to_receipt_no:
-			frappe.throw(frappe._("From Receipt No and To Receipt No are required for Donation Book."))
-
-		from_receipt_no = get_receipt_number_int(self.from_receipt_no, "From Receipt No")
-		to_receipt_no = get_receipt_number_int(self.to_receipt_no, "To Receipt No")
-		if from_receipt_no > to_receipt_no:
-			frappe.throw(frappe._("From Receipt No cannot be greater than To Receipt No."))
-
-		if not self.is_new():
-			self.used_receipts = get_donation_book_used_receipts(self.name)
-		else:
-			self.used_receipts = cint(self.used_receipts)
-		self.remaining_receipts = max(get_receipt_range_count(self.from_receipt_no, self.to_receipt_no) - self.used_receipts, 0)
 
 	def validate_assigned_book_receipt_range(self, row):
 		if not row.from_receipt_no or not row.to_receipt_no:
@@ -1552,13 +1557,13 @@ def get_donation_book_leaf_ranges(book_doc):
 						"to_receipt_no": row.to_receipt_no,
 					}
 				)
-	elif book_doc.from_receipt_no and book_doc.to_receipt_no:
+	elif book_doc.get("from_receipt_no") and book_doc.get("to_receipt_no"):
 		ranges.append(
 			{
 				"book_serial_no": book_doc.book_serial_no,
 				"receipt_format": getattr(book_doc, "receipt_format", None),
-				"from_receipt_no": book_doc.from_receipt_no,
-				"to_receipt_no": book_doc.to_receipt_no,
+				"from_receipt_no": book_doc.get("from_receipt_no"),
+				"to_receipt_no": book_doc.get("to_receipt_no"),
 			}
 		)
 	return ranges
