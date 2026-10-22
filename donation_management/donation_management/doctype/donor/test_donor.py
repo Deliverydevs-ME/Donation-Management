@@ -3,11 +3,16 @@
 
 import json
 from pathlib import Path
+from unittest.mock import patch
 
 from frappe.tests.utils import FrappeTestCase
 import frappe
 
-from donation_management.donation_management.doctype.donor.donor import Donor
+from donation_management.donation_management.doctype.donor.donor import (
+	Donor,
+	get_donor_tree_title,
+	get_referral_tree_children,
+)
 
 
 class TestDonorEsaalRelationships(FrappeTestCase):
@@ -63,10 +68,26 @@ class TestDonorEsaalRelationships(FrappeTestCase):
 		self.assertEqual(relationship["fieldtype"], "Data")
 		self.assertNotIn("options", relationship)
 
-from donation_management.donation_management.doctype.donor.donor import get_donor_tree_title
-
 
 class TestDonor(FrappeTestCase):
+	def test_tree_uses_donors_heading_and_root_label(self):
+		tree_script = Path(__file__).with_name("donor_tree.js").read_text()
+
+		self.assertIn('title: __("Donors")', tree_script)
+		self.assertIn('root_label: "Donors"', tree_script)
+
+	def test_tree_accepts_new_and_legacy_root_values(self):
+		module = "donation_management.donation_management.doctype.donor.donor"
+		with (
+			patch(f"{module}.frappe.has_permission"),
+			patch(f"{module}._get_donor_type_branch_node", side_effect=lambda donor_type: donor_type),
+			patch(f"{module}._has_trustee_branch_nodes", return_value=False),
+		):
+			new_root_nodes = get_referral_tree_children("Donor", "Donors")
+			legacy_root_nodes = get_referral_tree_children("Donor", "Donations")
+
+		self.assertEqual(new_root_nodes, legacy_root_nodes)
+
 	def test_donor_tree_title_shows_family_relationship(self):
 		donor = frappe._dict(
 			{

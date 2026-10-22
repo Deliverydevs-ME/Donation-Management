@@ -28,6 +28,8 @@ TRUSTEE_BRANCH = "Branch:Refered by Trustee"
 DONOR_TYPE_BRANCH_PREFIX = "Branch:Donor Type:"
 DONOR_NODE_PREFIX = "Donor:"
 TRUSTEE_NODE_PREFIX = "Trustee:"
+DONOR_TREE_ROOT = "Donors"
+LEGACY_DONOR_TREE_ROOT = "Donations"
 DONOR_TREE_BRANCH_TYPES = (
 	"Walk-in",
 	"General Donor",
@@ -344,7 +346,7 @@ def get_referral_tree_children(doctype, parent=None, **kwargs):
 	frappe.has_permission("Donor", "read", throw=True)
 	frappe.has_permission("Trustee", "read", throw=True)
 
-	if not parent or parent == "Donations":
+	if not parent or parent in {DONOR_TREE_ROOT, LEGACY_DONOR_TREE_ROOT}:
 		nodes = [_get_donor_type_branch_node(donor_type) for donor_type in DONOR_TREE_BRANCH_TYPES]
 		nodes.insert(
 			1,

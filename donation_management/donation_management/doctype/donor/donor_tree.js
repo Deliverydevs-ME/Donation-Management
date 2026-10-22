@@ -1,7 +1,7 @@
 frappe.treeview_settings["Donor"] = {
 	breadcrumb: "Donation Management",
-	title: __("Donations"),
-	root_label: "Donations",
+	title: __("Donors"),
+	root_label: "Donors",
 	get_tree_root: false,
 	disable_add_node: true,
 	get_tree_nodes:
