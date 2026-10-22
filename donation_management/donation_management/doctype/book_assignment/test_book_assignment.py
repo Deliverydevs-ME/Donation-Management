@@ -20,6 +20,7 @@ from donation_management.donation_management.doctype.book_assignment.book_assign
 	get_book_items,
 	get_coupon_book_total_pages,
 	get_book_stock_qty,
+	get_donation_book_reopen_eligibility,
 	get_donation_book_used_receipts,
 	get_receipt_range_count,
 	has_unsubmitted_donation_book_leaves,
@@ -28,6 +29,8 @@ from donation_management.donation_management.doctype.book_assignment.book_assign
 	receipt_series_prefix,
 	restore_unused_book_stock,
 	return_book,
+	validate_coupon_book_return_collections,
+	validate_return_collection_denominations,
 	validate_receipt_number_matches_format,
 )
 
@@ -124,6 +127,14 @@ class TestBookAssignment(FrappeTestCase):
 		self.assertIn('"Coupon Book Leaf"', script)
 		self.assertIn('"Donation Book Leaf"', script)
 		self.assertIn('"Stock Entry"', script)
+
+	def test_return_dialog_uses_generic_title_and_editable_individual_totals(self):
+		script = Path(__file__).with_name("book_assignment.js").read_text()
+
+		self.assertIn('title: __("Return Books")', script)
+		self.assertNotIn('title: __("Return Donation Book")', script)
+		self.assertIn("denomination_total_${index}", script)
+		self.assertIn("book_collections: has_individual_books ? book_collections : null", script)
 
 	def test_purchase_receipt_is_not_a_book_assignment_connection(self):
 		dashboard = Path(__file__).with_name("book_assignment_dashboard.py").read_text()
@@ -249,13 +260,29 @@ class TestBookAssignment(FrappeTestCase):
 			self.assertIn("get_indicator(doc)", script.read_text())
 
 	def test_donation_book_is_reopenable_while_a_leaf_is_unsubmitted(self):
-		with patch.object(frappe.db, "exists", return_value="DBL-00001") as exists:
+		with patch.object(frappe.db, "count", return_value=1) as count, patch.object(
+			frappe.db, "sql", return_value=[(0,)]
+		):
 			self.assertTrue(has_unsubmitted_donation_book_leaves("BK-00001"))
 
-		exists.assert_called_once_with(
+		count.assert_called_once_with(
 			"Donation Book Leaf",
-			{"book": "BK-00001", "status": ["not in", ("Used", "Cancelled")]},
+			{
+				"book": "BK-00001",
+				"docstatus": ["!=", 2],
+				"status": ["not in", ("Used", "Cancelled")],
+			},
 		)
+
+	def test_donation_book_reopen_requires_collection_of_used_leaves(self):
+		with patch.object(frappe.db, "count", return_value=2), patch.object(
+			frappe.db, "sql", return_value=[(3,)]
+		):
+			eligibility = get_donation_book_reopen_eligibility("BK-00001")
+
+		self.assertEqual(eligibility.remaining_leaf_count, 2)
+		self.assertEqual(eligibility.uncollected_leaf_count, 3)
+		self.assertFalse(eligibility.can_reopen)
 
 	def test_reopening_donation_book_sets_issued_status(self):
 		doc = frappe._dict(
@@ -272,8 +299,10 @@ class TestBookAssignment(FrappeTestCase):
 		with patch(
 			"donation_management.donation_management.doctype.book_assignment.book_assignment.update_donation_book_receipt_usage"
 		), patch(
-			"donation_management.donation_management.doctype.book_assignment.book_assignment.has_unsubmitted_donation_book_leaves",
-			return_value=True,
+			"donation_management.donation_management.doctype.book_assignment.book_assignment.get_donation_book_reopen_eligibility",
+			return_value=frappe._dict(remaining_leaf_count=1, uncollected_leaf_count=0, can_reopen=True),
+		), patch(
+			"donation_management.donation_management.doctype.book_assignment.book_assignment.validate_donation_book_order_total_matches_return"
 		), patch(
 			"donation_management.donation_management.doctype.book_assignment.book_assignment.sync_donation_book_leaves"
 		), patch(
@@ -333,9 +362,9 @@ class TestBookAssignment(FrappeTestCase):
 		with patch(
 			"donation_management.donation_management.doctype.book_assignment.book_assignment.update_donation_book_receipt_usage"
 		), patch(
-			"donation_management.donation_management.doctype.book_assignment.book_assignment.has_unsubmitted_donation_book_leaves",
-			return_value=False,
-		), self.assertRaisesRegex(frappe.ValidationError, "all Donation Book Leaves are submitted"):
+			"donation_management.donation_management.doctype.book_assignment.book_assignment.get_donation_book_reopen_eligibility",
+			return_value=frappe._dict(remaining_leaf_count=0, uncollected_leaf_count=0, can_reopen=False),
+		), self.assertRaisesRegex(frappe.ValidationError, "no unused Donation Book Leaves"):
 			reopen_donation_book(doc, "Continue collecting receipts")
 
 	def test_receipt_ranges_are_inclusive(self):
@@ -478,6 +507,64 @@ class TestBookAssignment(FrappeTestCase):
 		self.assertEqual(details["coupon_value"], 10)
 		self.assertEqual(details["used_pages"], 3)
 		self.assertEqual(details["total_amount"], 120)
+
+	def test_return_details_are_split_by_coupon_book_serial(self):
+		rows = [
+			frappe._dict(book_serial_no="CB-001", coupon_value="50", total_pages=10),
+			frappe._dict(book_serial_no="CB-002", coupon_value="100", total_pages=5),
+		]
+		with patch.object(frappe, "get_all", return_value=rows), patch(
+			"donation_management.donation_management.doctype.book_assignment.book_assignment.get_assigned_coupon_used_pages",
+			side_effect=lambda _book, serial: {"CB-001": 2, "CB-002": 3}[serial],
+		), patch(
+			"donation_management.donation_management.doctype.book_assignment.book_assignment.get_book_collected_amount",
+			side_effect=lambda _book, serial=None: {"CB-001": 100, "CB-002": 300}[serial],
+		):
+			details = get_book_return_details("BA-00005")
+
+		self.assertEqual(details["used_pages"], 5)
+		self.assertEqual(details["total_amount"], 400)
+		self.assertEqual(details["total_pages"], 15)
+		self.assertEqual([row["book_serial_no"] for row in details["book_collections"]], ["CB-001", "CB-002"])
+
+	def test_manual_denomination_total_is_allowed_without_note_counts(self):
+		validate_return_collection_denominations(
+			{"denomination_total": 300},
+			300,
+			"CB-001",
+		)
+
+	def test_manual_denomination_total_must_match_collected_amount(self):
+		with self.assertRaises(frappe.ValidationError):
+			validate_return_collection_denominations(
+				{"denomination_total": 250},
+				300,
+				"CB-001",
+			)
+
+	def test_coupon_return_collections_are_validated_per_serial(self):
+		doc = frappe._dict(
+			name="BA-00005",
+			assigned_books=[
+				frappe._dict(book_type="Coupon Book", book_serial_no="CB-001", total_pages=10),
+				frappe._dict(book_type="Coupon Book", book_serial_no="CB-002", total_pages=5),
+			],
+		)
+		collections = [
+			{"book_serial_no": "CB-001", "used_pages": 2, "collected_amount": 100, "denomination_total": 100},
+			{"book_serial_no": "CB-002", "used_pages": 3, "collected_amount": 300, "denomination_total": 300},
+		]
+		with patch(
+			"donation_management.donation_management.doctype.book_assignment.book_assignment.get_assigned_coupon_used_pages",
+			side_effect=lambda _book, serial: {"CB-001": 2, "CB-002": 3}[serial],
+		), patch(
+			"donation_management.donation_management.doctype.book_assignment.book_assignment.get_book_collected_amount",
+			side_effect=lambda _book, serial=None: {"CB-001": 100, "CB-002": 300}[serial],
+		):
+			totals = validate_coupon_book_return_collections(doc, collections)
+
+		self.assertEqual(totals.used_pages, 5)
+		self.assertEqual(totals.collected_amount, 400)
 
 	def test_coupon_total_pages_use_assigned_coupon_book_rows(self):
 		rows = [frappe._dict(total_pages=4), frappe._dict(total_pages=6)]

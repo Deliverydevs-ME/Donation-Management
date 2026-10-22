@@ -586,14 +586,46 @@ function add_action_buttons(frm) {
 	} else if (frm.doc.status === "Returned") {
 		frm.add_custom_button(__("Close"), () => close_book(frm), __("Actions"));
 		if (frm.has_perm("write")) {
-			frm.add_custom_button(__("Reopen"), () => show_reopen_dialog(frm), __("Actions"));
+			if (is_donation_book_assignment(frm)) {
+				add_donation_book_reopen_button_if_eligible(frm);
+			} else {
+				frm.add_custom_button(__("Reopen"), () => show_reopen_dialog(frm), __("Actions"));
+			}
 		}
 		if ([book_type_coupon, book_type_mixed].includes(frm.doc.book_type)) {
 			frm.add_custom_button(__("Request Page Adjustment"), () => create_page_adjustment(frm), __("Actions"));
 		}
 	} else if (frm.doc.status === "Closed" && frm.has_perm("write")) {
-		frm.add_custom_button(__("Reopen"), () => show_reopen_dialog(frm), __("Actions"));
+		if (is_donation_book_assignment(frm)) {
+			add_donation_book_reopen_button_if_eligible(frm);
+		} else {
+			frm.add_custom_button(__("Reopen"), () => show_reopen_dialog(frm), __("Actions"));
+		}
 	}
+}
+
+function is_donation_book_assignment(frm) {
+	return (
+		frm.doc.book_type === book_type_donation ||
+		(frm.doc.assigned_books || []).some((row) => row.book_type === book_type_donation)
+	);
+}
+
+function add_donation_book_reopen_button_if_eligible(frm) {
+	const book_name = frm.doc.name;
+	frappe.call({
+		method: "donation_management.donation_management.doctype.book_assignment.book_assignment.get_donation_book_reopen_status",
+		args: { book: book_name },
+		callback(response) {
+			if (
+				frm.doc.name === book_name &&
+				["Returned", "Closed"].includes(frm.doc.status) &&
+				response.message?.can_reopen
+			) {
+				frm.add_custom_button(__("Reopen"), () => show_reopen_dialog(frm), __("Actions"));
+			}
+		},
+	});
 }
 
 function show_reopen_dialog(frm) {
@@ -655,11 +687,26 @@ function issue_book(frm) {
 }
 
 function show_donation_book_return_dialog(frm) {
+	frappe.call({
+		method: "donation_management.donation_management.doctype.book_assignment.book_assignment.get_book_return_details",
+		args: {
+			book: frm.doc.name,
+		},
+		callback(response) {
+			build_donation_book_return_dialog(frm, response.message || {});
+		},
+	});
+}
+
+function build_donation_book_return_dialog(frm, return_details) {
 	const assigned_books = get_donation_book_return_rows(frm);
 	if (!assigned_books.length) {
 		frappe.msgprint(__("No assigned books were found for this Donation Book."));
 		return;
 	}
+	const coupon_details = Object.fromEntries(
+		(return_details.book_collections || []).map((row) => [row.book_serial_no, row])
+	);
 
 	const fields = [
 		{
@@ -672,10 +719,14 @@ function show_donation_book_return_dialog(frm) {
 	];
 
 	assigned_books.forEach((book_row, index) => {
+		const coupon_detail = coupon_details[book_row.book_serial_no];
 		fields.push({
 			fieldname: `book_section_${index}`,
 			fieldtype: "Section Break",
-			label: __("Cash Denominations for {0}", [book_row.book_serial_no]),
+			label: __("Cash Denominations for {0} ({1})", [
+				book_row.book_serial_no,
+				book_row.book_type || frm.doc.book_type,
+			]),
 		});
 		fields.push({
 			fieldname: `book_serial_no_${index}`,
@@ -692,10 +743,24 @@ function show_donation_book_return_dialog(frm) {
 			fieldname: `collected_amount_${index}`,
 			fieldtype: "Currency",
 			label: __("Collected Amount"),
-			reqd: 1,
+			reqd: coupon_detail ? 0 : 1,
 			non_negative: 1,
-			onchange: () => update_donation_book_return_totals(dialog, assigned_books),
+			default: flt(coupon_detail && coupon_detail.total_amount),
+			read_only: coupon_detail ? 1 : 0,
+			onchange: () => update_donation_book_collected_total(dialog, assigned_books),
 		});
+		if (coupon_detail) {
+			fields.push({
+				fieldname: `coupon_usage_${index}`,
+				fieldtype: "Data",
+				label: __("Coupon Usage"),
+				default: __("{0} used pages at {1}", [
+					cint(coupon_detail.used_pages),
+					format_currency(coupon_detail.coupon_value),
+				]),
+				read_only: 1,
+			});
+		}
 		fields.push({
 			fieldname: `denomination_section_${index}`,
 			fieldtype: "Section Break",
@@ -708,23 +773,23 @@ function show_donation_book_return_dialog(frm) {
 				label: __("{0} Rs Notes", [denomination]),
 				default: 0,
 				non_negative: 1,
-				onchange: () => update_donation_book_return_totals(dialog, assigned_books),
+				onchange: () => update_donation_book_row_denomination_total(dialog, index),
 			});
 		});
 		fields.push({
 			fieldname: `denomination_total_${index}`,
 			fieldtype: "Currency",
 			label: __("Denomination Total"),
-			read_only: 1,
+			non_negative: 1,
 		});
 	});
 
 	const dialog = new frappe.ui.Dialog({
-		title: __("Return Donation Book"),
+		title: __("Return Books"),
 		fields,
 		primary_action_label: __("Return"),
 		primary_action(values) {
-			update_donation_book_return_totals(dialog, assigned_books);
+			update_donation_book_collected_total(dialog, assigned_books);
 			if (!validate_donation_book_return_collections(dialog, assigned_books)) {
 				return;
 			}
@@ -747,7 +812,7 @@ function show_donation_book_return_dialog(frm) {
 	});
 
 	dialog.show();
-	update_donation_book_return_totals(dialog, assigned_books);
+	update_donation_book_collected_total(dialog, assigned_books);
 }
 
 function set_volunteer_area(frm) {
@@ -780,23 +845,19 @@ function show_return_dialog(frm) {
 }
 
 function build_return_dialog(frm, return_details) {
+	const has_individual_books = Boolean((return_details.book_collections || []).length);
+	const coupon_books = has_individual_books
+		? return_details.book_collections
+		: [
+				{
+					book_serial_no: frm.doc.book_serial_no || __("Coupon Book"),
+					used_pages: return_details.used_pages,
+					coupon_value: return_details.coupon_value || frm.doc.coupon_value,
+					total_amount: return_details.total_amount,
+					total_pages: return_details.total_pages,
+				},
+		  ];
 	const fields = [
-		{
-			fieldname: "used_pages",
-			fieldtype: "Int",
-			label: __("Used Pages"),
-			reqd: 1,
-			non_negative: 1,
-			default: cint(return_details.used_pages),
-			read_only: 1,
-		},
-		{
-			fieldname: "coupon_value",
-			fieldtype: "Currency",
-			label: __("Coupon Value"),
-			default: cint(return_details.coupon_value) || cint(frm.doc.coupon_value),
-			read_only: 1,
-		},
 		{
 			fieldname: "collected_amount",
 			fieldtype: "Currency",
@@ -805,52 +866,110 @@ function build_return_dialog(frm, return_details) {
 			read_only: 1,
 			reqd: 1,
 		},
-		{
-			fieldname: "denomination_section",
-			fieldtype: "Section Break",
-			label: __("Cash Denominations"),
-		},
 	];
 
-	denominations.forEach((denomination) => {
+	coupon_books.forEach((book_row, index) => {
 		fields.push({
-			fieldname: `denomination_${denomination}`,
+			fieldname: `book_section_${index}`,
+			fieldtype: "Section Break",
+			label: __("Cash Denominations for {0} (Coupon Book)", [book_row.book_serial_no]),
+		});
+		fields.push({
+			fieldname: `used_pages_${index}`,
 			fieldtype: "Int",
-			label: __("{0} Rs Notes", [denomination]),
-			default: 0,
+			label: __("Used Pages"),
+			default: cint(book_row.used_pages),
 			non_negative: 1,
-			onchange: () => update_return_denomination_total(dialog),
+			read_only: 1,
+		});
+		fields.push({
+			fieldname: `coupon_value_${index}`,
+			fieldtype: "Currency",
+			label: __("Coupon Value"),
+			default: cint(book_row.coupon_value),
+			read_only: 1,
+		});
+		fields.push({
+			fieldname: `book_column_${index}`,
+			fieldtype: "Column Break",
+		});
+		fields.push({
+			fieldname: `collected_amount_${index}`,
+			fieldtype: "Currency",
+			label: __("Collected Amount"),
+			default: flt(book_row.total_amount),
+			non_negative: 1,
+			read_only: 1,
+		});
+		fields.push({
+			fieldname: `denomination_section_${index}`,
+			fieldtype: "Section Break",
+			label: __("Denominations"),
+		});
+
+		denominations.forEach((denomination) => {
+			fields.push({
+				fieldname: `denomination_${index}_${denomination}`,
+				fieldtype: "Int",
+				label: __("{0} Rs Notes", [denomination]),
+				default: 0,
+				non_negative: 1,
+				onchange: () => update_return_denomination_total(dialog, index),
+			});
+		});
+
+		fields.push({
+			fieldname: `denomination_total_${index}`,
+			fieldtype: "Currency",
+			label: __("Denomination Total"),
+			non_negative: 1,
 		});
 	});
 
-	fields.push({
-		fieldname: "denomination_total",
-		fieldtype: "Currency",
-		label: __("Denomination Total"),
-	});
-
 	const dialog = new frappe.ui.Dialog({
-		title: __("Return Book"),
+		title: __("Return Books"),
 		fields,
 		primary_action_label: __("Return"),
 		primary_action(values) {
-			if (!validate_return_denomination_total(dialog, return_details.total_pages)) {
+			if (!validate_return_denomination_totals(dialog, coupon_books)) {
 				return;
 			}
 
 			const denomination_rows = denominations.map((denomination) => ({
 				denomination,
-				note_count: cint(values[`denomination_${denomination}`]),
+				note_count: coupon_books.reduce(
+					(total, _book_row, index) =>
+						total + cint(values[`denomination_${index}_${denomination}`]),
+					0
+				),
 			}));
+			const book_collections = coupon_books.map((book_row, index) => {
+				const collection = {
+					book_serial_no: book_row.book_serial_no,
+					used_pages: cint(values[`used_pages_${index}`]),
+					collected_amount: flt(values[`collected_amount_${index}`]),
+					denomination_total: flt(values[`denomination_total_${index}`]),
+				};
+				denominations.forEach((denomination) => {
+					collection[`denomination_${denomination}`] = cint(
+						values[`denomination_${index}_${denomination}`]
+					);
+				});
+				return collection;
+			});
 
 			frappe.call({
 				method: "donation_management.donation_management.doctype.book_assignment.book_assignment.return_book",
-			args: {
-				book: frm.doc.name,
-				collected_amount: values.collected_amount,
-				used_pages: values.used_pages,
-				denominations: denomination_rows,
-						denomination_total: values.denomination_total,
+				args: {
+					book: frm.doc.name,
+					collected_amount: values.collected_amount,
+					used_pages: return_details.used_pages,
+					denominations: denomination_rows,
+					denomination_total: book_collections.reduce(
+						(total, row) => total + flt(row.denomination_total),
+						0
+					),
+					book_collections: has_individual_books ? book_collections : null,
 				},
 				freeze: true,
 				callback() {
@@ -862,47 +981,55 @@ function build_return_dialog(frm, return_details) {
 	});
 
 	dialog.show();
-	const used_pages = cint(return_details.used_pages);
-	const coupon_value = cint(return_details.coupon_value) || cint(frm.doc.coupon_value);
-	dialog.set_value("used_pages", used_pages);
-	dialog.set_value("coupon_value", coupon_value);
 	dialog.set_value("collected_amount", flt(return_details.total_amount));
-	update_return_denomination_total(dialog);
 }
 
-function update_return_denomination_total(dialog) {
+function update_return_denomination_total(dialog, index) {
 	let total = 0;
 	denominations.forEach((denomination) => {
-		total += denomination * flt(dialog.get_value(`denomination_${denomination}`));
+		total += denomination * flt(dialog.get_value(`denomination_${index}_${denomination}`));
 	});
-	if (total) {
-		dialog.set_value("denomination_total", total);
-	}
+	dialog.set_value(`denomination_total_${index}`, total);
 }
 
-function validate_return_denomination_total(dialog, total_pages) {
-	const used_pages = cint(dialog.get_value("used_pages"));
-	const collected_amount = flt(dialog.get_value("collected_amount"));
-	const denomination_total = flt(dialog.get_value("denomination_total"));
-
-	if (used_pages <= 0 || collected_amount <= 0) {
+function validate_return_denomination_totals(dialog, coupon_books) {
+	const total_used_pages = coupon_books.reduce((total, row) => total + cint(row.used_pages), 0);
+	const total_collected_amount = coupon_books.reduce(
+		(total, row) => total + flt(row.total_amount),
+		0
+	);
+	if (total_used_pages <= 0 || total_collected_amount <= 0) {
 		frappe.msgprint(__("Used Pages must be greater than zero."));
 		return false;
 	}
 
-	if (used_pages > cint(total_pages)) {
-		frappe.msgprint(__("Used Pages cannot exceed Total Pages."));
-		return false;
-	}
+	for (let index = 0; index < coupon_books.length; index += 1) {
+		const book_row = coupon_books[index];
+		const used_pages = cint(dialog.get_value(`used_pages_${index}`));
+		const collected_amount = flt(dialog.get_value(`collected_amount_${index}`));
+		const denomination_total = flt(dialog.get_value(`denomination_total_${index}`));
 
-	if (denomination_total && collected_amount !== denomination_total) {
-		frappe.msgprint(
-			__("Denomination total {0} must match Total Amount Collected {1}.", [
-				format_currency(denomination_total),
-				format_currency(collected_amount),
-			])
-		);
-		return false;
+		if (used_pages > cint(book_row.total_pages)) {
+			frappe.msgprint(
+				__("Used Pages cannot exceed Total Pages for Book Serial No {0}.", [
+					book_row.book_serial_no,
+				])
+			);
+			return false;
+		}
+		if (denomination_total && collected_amount !== denomination_total) {
+			frappe.msgprint(
+				__(
+					"Denomination total {0} must match Collected Amount {1} for Book Serial No {2}.",
+					[
+						format_currency(denomination_total),
+						format_currency(collected_amount),
+						book_row.book_serial_no,
+					]
+				)
+			);
+			return false;
+		}
 	}
 
 	return true;
@@ -912,15 +1039,20 @@ function get_donation_book_return_rows(frm) {
 	return (frm.doc.assigned_books || []).filter((row) => row.book_serial_no);
 }
 
-function update_donation_book_return_totals(dialog, assigned_books) {
+function update_donation_book_collected_total(dialog, assigned_books) {
 	let total_collected_amount = 0;
 	assigned_books.forEach((_book_row, index) => {
 		const collected_amount = flt(dialog.get_value(`collected_amount_${index}`));
-		const denomination_total = get_donation_book_row_denomination_total(dialog, index);
 		total_collected_amount += collected_amount;
-		dialog.set_value(`denomination_total_${index}`, denomination_total);
 	});
 	dialog.set_value("collected_amount", total_collected_amount);
+}
+
+function update_donation_book_row_denomination_total(dialog, index) {
+	dialog.set_value(
+		`denomination_total_${index}`,
+		get_donation_book_row_denomination_total(dialog, index)
+	);
 }
 
 function get_donation_book_row_denomination_total(dialog, index) {
@@ -938,18 +1070,25 @@ function validate_donation_book_return_collections(dialog, assigned_books) {
 		const collected_amount = flt(dialog.get_value(`collected_amount_${index}`));
 		const denomination_total = flt(dialog.get_value(`denomination_total_${index}`));
 
-		if (collected_amount <= 0) {
-			frappe.msgprint(__("Collected Amount must be greater than zero for Book Serial No {0}.", [book_serial_no]));
+		if (collected_amount <= 0 && assigned_books[index].book_type !== book_type_coupon) {
+			frappe.msgprint(
+				__("Collected Amount must be greater than zero for Book Serial No {0}.", [
+					book_serial_no,
+				])
+			);
 			return false;
 		}
 
 		if (denomination_total && collected_amount !== denomination_total) {
 			frappe.msgprint(
-				__("Denomination total {0} must match Collected Amount {1} for Book Serial No {2}.", [
-					format_currency(denomination_total),
-					format_currency(collected_amount),
-					book_serial_no,
-				])
+				__(
+					"Denomination total {0} must match Collected Amount {1} for Book Serial No {2}.",
+					[
+						format_currency(denomination_total),
+						format_currency(collected_amount),
+						book_serial_no,
+					]
+				)
 			);
 			return false;
 		}
@@ -969,9 +1108,12 @@ function get_donation_book_return_collections(values, assigned_books) {
 		const collection = {
 			book_serial_no: book_row.book_serial_no,
 			collected_amount: flt(values[`collected_amount_${index}`]),
+			denomination_total: flt(values[`denomination_total_${index}`]),
 		};
 		denominations.forEach((denomination) => {
-			collection[`denomination_${denomination}`] = cint(values[`denomination_${index}_${denomination}`]);
+			collection[`denomination_${denomination}`] = cint(
+				values[`denomination_${index}_${denomination}`]
+			);
 		});
 		return collection;
 	});

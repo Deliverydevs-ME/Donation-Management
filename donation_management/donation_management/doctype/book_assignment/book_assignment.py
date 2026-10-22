@@ -769,6 +769,8 @@ class BookAssignment(Document):
 		# to return a book. Validate it only when the user has entered counts.
 		if not has_note_count:
 			return
+		if self.flags.get("return_collections_validated"):
+			return
 
 		if flt(self.collected_amount) != flt(denomination_total):
 			frappe.throw(frappe._("Cash denomination total must match Total Amount Collected."))
@@ -834,10 +836,22 @@ def reopen_donation_book(doc, reason, issued_to_employee=None):
 
 	update_donation_book_receipt_usage(doc.name)
 	doc.reload()
-	if not has_unsubmitted_donation_book_leaves(doc.name):
+	reopen_eligibility = get_donation_book_reopen_eligibility(doc)
+	if not reopen_eligibility.remaining_leaf_count:
 		frappe.throw(
-			frappe._("This Donation Book cannot be reopened because all Donation Book Leaves are submitted.")
+			frappe._("This Donation Book cannot be reopened because it has no unused Donation Book Leaves remaining.")
 		)
+	if reopen_eligibility.uncollected_leaf_count:
+		frappe.throw(
+			frappe._(
+				"This Donation Book cannot be reopened because {0} used Donation Book Leaf(s) have not been "
+				"included in a submitted Donation Book Collection. Submit the outstanding leaves first."
+			).format(reopen_eligibility.uncollected_leaf_count)
+		)
+
+	# A completed collection confirms the receipts, while this check confirms the
+	# cash declared for each serial matches the corresponding Donation Orders.
+	validate_donation_book_order_total_matches_return(doc)
 
 	previous_employee = doc.issued_to_employee
 	set_reissued_employee(doc, issued_to_employee)
@@ -899,16 +913,62 @@ def clear_cancelled_book_stock_entry_link(doc):
 
 
 def has_unsubmitted_donation_book_leaves(book):
-	"""A book remains reopenable while at least one active leaf is not Used."""
-	return bool(
-		frappe.db.exists(
+	"""Backward-compatible helper for determining whether a receipt remains available."""
+	return bool(get_donation_book_reopen_eligibility(book).remaining_leaf_count)
+
+
+def get_donation_book_reopen_eligibility(book):
+	"""Return the server-authoritative reconciliation state for a Donation Book."""
+	book_name = book.name if hasattr(book, "name") else book
+	remaining_leaf_count = cint(
+		frappe.db.count(
 			"Donation Book Leaf",
 			{
-				"book": book,
+				"book": book_name,
+				"docstatus": ["!=", 2],
 				"status": ["not in", ("Used", "Cancelled")],
 			},
 		)
 	)
+	uncollected_leaf_count = cint(
+		frappe.db.sql(
+			"""
+			select count(leaf.name)
+			from `tabDonation Book Leaf` leaf
+			where leaf.book = %(book)s
+				and leaf.docstatus != 2
+				and leaf.status = 'Used'
+				and not exists (
+					select collection_detail.name
+					from `tabDonation Book Collection Detail` collection_detail
+					inner join `tabDonation Book Collection` collection_doc
+						on collection_doc.name = collection_detail.parent
+					where collection_doc.book = leaf.book
+						and collection_doc.docstatus = 1
+						and collection_detail.book_serial_no = leaf.book_serial_no
+						and collection_detail.receipt_number = leaf.receipt_number
+				)
+			""",
+			{"book": book_name},
+		)[0][0]
+	)
+	return frappe._dict(
+		remaining_leaf_count=remaining_leaf_count,
+		uncollected_leaf_count=uncollected_leaf_count,
+		can_reopen=bool(remaining_leaf_count and not uncollected_leaf_count),
+	)
+
+
+@frappe.whitelist()
+def get_donation_book_reopen_status(book):
+	"""Expose the same reopen decision to the form without trusting the client."""
+	doc = frappe.get_doc("Book Assignment", book)
+	doc.check_permission("read")
+	if not (doc.is_donation_book() or doc.has_donation_rows()):
+		return frappe._dict(can_reopen=False)
+	if doc.status not in ("Returned", "Closed"):
+		return frappe._dict(can_reopen=False)
+	return get_donation_book_reopen_eligibility(doc)
 
 
 @frappe.whitelist()
@@ -931,16 +991,25 @@ def return_book(
 	used_pages=None,
 	denominations=None,
 	denomination_total=None,
+	book_collections=None,
 ):
 	doc = frappe.get_doc("Book Assignment", book)
 	if doc.status != "Issued":
 		frappe.throw(frappe._("Only issued Books can be returned."))
 	if not doc.is_coupon_book():
-		frappe.throw(frappe._("Use Return Donation Book for Donation Book records."))
+		frappe.throw(frappe._("Use Return Books for Donation Book or Mixed records."))
 
-	coupon_value = get_coupon_value_for_book(book)
-	doc.coupon_value = coupon_value
-	used_pages = cint(used_pages)
+	book_collections = frappe.parse_json(book_collections) or []
+	if book_collections:
+		return_totals = validate_coupon_book_return_collections(doc, book_collections)
+		used_pages = return_totals.used_pages
+		calculated_collected_amount = return_totals.collected_amount
+		denominations = get_total_denominations_from_return_collections(book_collections)
+		doc.flags.return_collections_validated = True
+	else:
+		used_pages = cint(used_pages)
+		calculated_collected_amount = get_book_collected_amount(book)
+
 	if used_pages <= 0:
 		frappe.throw(frappe._("Used Pages must be greater than zero when returning a Book."))
 
@@ -948,14 +1017,17 @@ def return_book(
 	if used_pages > total_pages:
 		frappe.throw(frappe._("Used Pages cannot exceed Total Pages."))
 
+	coupon_value = get_coupon_value_for_book(book)
+	doc.coupon_value = coupon_value
 	if coupon_value not in COUPON_VALUES:
-		frappe.throw(frappe._("Coupon Value must be 10, 50, 100, 500, 1000, or 5000 before returning a Book."))
+		coupon_values = {cint(row.coupon_value) for row in doc.assigned_books or [] if row.book_type == BOOK_TYPE_COUPON}
+		if not coupon_values or not coupon_values.issubset(COUPON_VALUES):
+			frappe.throw(frappe._("Coupon Value must be 10, 50, 100, 500, 1000, or 5000 before returning a Book."))
 
 	submitted_used_pages = get_book_used_pages(book)
 	if used_pages != submitted_used_pages:
 		frappe.throw(frappe._("Submitted Coupon Entry pages have changed. Refresh the Return dialog and try again."))
 
-	calculated_collected_amount = get_book_collected_amount(book)
 	if collected_amount is not None and flt(collected_amount) != calculated_collected_amount:
 		frappe.throw(frappe._("Total Amount Collected must equal the total of submitted Coupon Entries."))
 
@@ -963,7 +1035,18 @@ def return_book(
 	denomination_rows_total = sum(
 		cint(row.get("denomination")) * cint(row.get("note_count")) for row in denominations
 	)
-	if denomination_rows_total and flt(denomination_rows_total) != calculated_collected_amount:
+	manual_denomination_total = flt(denomination_total)
+	if (
+		not book_collections
+		and denomination_rows_total
+		and flt(denomination_rows_total, 2) != flt(calculated_collected_amount, 2)
+	):
+		frappe.throw(frappe._("Cash denomination total must match Total Amount Collected."))
+	if (
+		not book_collections
+		and manual_denomination_total
+		and flt(manual_denomination_total, 2) != flt(calculated_collected_amount, 2)
+	):
 		frappe.throw(frappe._("Cash denomination total must match Total Amount Collected."))
 
 	doc.set("cash_denominations", [])
@@ -989,6 +1072,59 @@ def return_book(
 	restore_unused_book_stock(doc)
 	create_book_assignment_issue_log(doc, "Returned")
 	return doc.as_dict()
+
+
+def validate_coupon_book_return_collections(doc, book_collections):
+	coupon_rows = {
+		row.book_serial_no: row
+		for row in doc.assigned_books or []
+		if row.book_type == BOOK_TYPE_COUPON and row.book_serial_no
+	}
+	if not coupon_rows:
+		frappe.throw(frappe._("Assigned Coupon Books are required before returning Books."))
+
+	seen_serials = set()
+	total_used_pages = 0
+	total_collected_amount = 0
+	for collection in book_collections:
+		book_serial_no = collection.get("book_serial_no")
+		row = coupon_rows.get(book_serial_no)
+		if not row:
+			frappe.throw(frappe._("Book Serial No {0} is not an assigned Coupon Book.").format(book_serial_no))
+		if book_serial_no in seen_serials:
+			frappe.throw(frappe._("Book Serial No {0} is repeated in return details.").format(book_serial_no))
+		seen_serials.add(book_serial_no)
+
+		used_pages = get_assigned_coupon_used_pages(doc.name, book_serial_no)
+		collected_amount = get_book_collected_amount(doc.name, book_serial_no)
+		if cint(collection.get("used_pages")) != used_pages:
+			frappe.throw(
+				frappe._("Submitted Coupon Entry pages changed for Book Serial No {0}. Refresh and try again.").format(
+					book_serial_no
+				)
+			)
+		if flt(collection.get("collected_amount"), 2) != flt(collected_amount, 2):
+			frappe.throw(
+				frappe._("Collected Amount changed for Book Serial No {0}. Refresh and try again.").format(
+					book_serial_no
+				)
+			)
+		if used_pages > cint(row.total_pages):
+			frappe.throw(frappe._("Used Pages cannot exceed Total Pages for Book Serial No {0}.").format(book_serial_no))
+
+		validate_return_collection_denominations(collection, collected_amount, book_serial_no)
+		total_used_pages += used_pages
+		total_collected_amount += collected_amount
+
+	missing_serials = set(coupon_rows) - seen_serials
+	if missing_serials:
+		frappe.throw(
+			frappe._("Return details are missing for Coupon Book Serial No {0}.").format(
+				", ".join(sorted(missing_serials))
+			)
+		)
+
+	return frappe._dict(used_pages=total_used_pages, collected_amount=total_collected_amount)
 
 
 def generate_return_coupons(doc, used_pages):
@@ -1018,17 +1154,21 @@ def generate_return_coupons(doc, used_pages):
 
 
 @frappe.whitelist()
-def get_book_collected_amount(book):
+def get_book_collected_amount(book, book_serial_no=None):
 	if not book:
 		return 0
+
+	filters = {
+		"book": book,
+		"docstatus": 1,
+	}
+	if book_serial_no:
+		filters["book_serial_no"] = book_serial_no
 
 	return flt(
 		frappe.db.get_value(
 			"Coupon Entry",
-			{
-				"book": book,
-				"docstatus": 1,
-			},
+			filters,
 			"sum(amount)",
 		)
 	)
@@ -1038,7 +1178,39 @@ def get_book_collected_amount(book):
 def get_book_return_details(book):
 	"""Return submitted coupon usage and the amount needed by the Return dialog."""
 	if not book:
-		return {"used_pages": 0, "coupon_value": 0, "total_amount": 0, "total_pages": 0}
+		return {"used_pages": 0, "coupon_value": 0, "total_amount": 0, "total_pages": 0, "book_collections": []}
+
+	coupon_rows = frappe.get_all(
+		"Book Assignment Detail",
+		filters={
+			"parent": book,
+			"parenttype": "Book Assignment",
+			"parentfield": "assigned_books",
+			"book_type": BOOK_TYPE_COUPON,
+		},
+		fields=["book_serial_no", "coupon_value", "total_pages"],
+		order_by="idx",
+	)
+	if coupon_rows:
+		book_collections = []
+		for row in coupon_rows:
+			book_collections.append(
+				{
+					"book_serial_no": row.book_serial_no,
+					"used_pages": get_assigned_coupon_used_pages(book, row.book_serial_no),
+					"coupon_value": cint(row.coupon_value),
+					"total_amount": get_book_collected_amount(book, row.book_serial_no),
+					"total_pages": cint(row.total_pages),
+				}
+			)
+
+		return {
+			"used_pages": sum(row["used_pages"] for row in book_collections),
+			"coupon_value": book_collections[0]["coupon_value"] if len(book_collections) == 1 else 0,
+			"total_amount": sum(row["total_amount"] for row in book_collections),
+			"total_pages": sum(row["total_pages"] for row in book_collections),
+			"book_collections": book_collections,
+		}
 
 	used_pages = get_book_used_pages(book)
 	total_amount = get_book_collected_amount(book)
@@ -1049,6 +1221,7 @@ def get_book_return_details(book):
 		"coupon_value": coupon_value,
 		"total_amount": total_amount,
 		"total_pages": total_pages,
+		"book_collections": [],
 	}
 
 
@@ -1157,14 +1330,23 @@ def return_donation_book(book, collected_amount=None, denominations=None, book_c
 	if book_collections:
 		collected_amount = set_donation_book_return_collections(doc, book_collections)
 		denominations = get_total_denominations_from_return_collections(book_collections)
+		doc.flags.return_collections_validated = True
 	else:
 		collected_amount = flt(collected_amount)
+		donation_rows = [row for row in (doc.assigned_books or []) if row.book_type == BOOK_TYPE_DONATION]
+		if len(donation_rows) != 1:
+			frappe.throw(
+				frappe._("Enter a returned amount for each Book Serial No before returning this Donation Book.")
+			)
+		donation_rows[0].collected_amount = flt(donation_rows[0].collected_amount) + collected_amount
 
 	if collected_amount <= 0:
 		frappe.throw(frappe._("Total Amount Collected is required when returning a Donation Book."))
 
 	set_cash_denominations(doc, denominations)
-	doc.collected_amount = collected_amount
+	# Keep the assignment total cumulative across issue / return cycles. Each
+	# Donation Book row retains its own cumulative amount for serial-level checks.
+	doc.collected_amount = flt(doc.collected_amount) + collected_amount
 	doc.status = "Returned"
 	doc.return_date = today()
 	doc.flags.ignore_validate_update_after_submit = True
@@ -1193,12 +1375,12 @@ def set_donation_book_return_collections(doc, book_collections):
 	if not book_collections:
 		frappe.throw(frappe._("Book return collection details are required."))
 
-	assigned_serials = {
-		row.book_serial_no
+	assigned_books = {
+		row.book_serial_no: row
 		for row in doc.assigned_books
 		if row.book_serial_no
 	}
-	if not assigned_serials:
+	if not assigned_books:
 		frappe.throw(frappe._("Assigned Books are required before returning a Donation Book."))
 
 	seen_serials = set()
@@ -1207,7 +1389,7 @@ def set_donation_book_return_collections(doc, book_collections):
 		book_serial_no = collection.get("book_serial_no")
 		if not book_serial_no:
 			frappe.throw(frappe._("Book Serial No is required in return collection details."))
-		if book_serial_no not in assigned_serials:
+		if book_serial_no not in assigned_books:
 			frappe.throw(
 				frappe._("Book Serial No {0} is not assigned to Book {1}.").format(
 					book_serial_no,
@@ -1218,26 +1400,39 @@ def set_donation_book_return_collections(doc, book_collections):
 			frappe.throw(frappe._("Book Serial No {0} is repeated in return collection details.").format(book_serial_no))
 		seen_serials.add(book_serial_no)
 
+		assigned_book = assigned_books[book_serial_no]
 		collected_amount = flt(collection.get("collected_amount"))
-		denomination_total = get_denomination_total(collection)
-		if collected_amount <= 0:
+		if assigned_book.book_type == BOOK_TYPE_COUPON:
+			expected_amount = get_book_collected_amount(doc.name, book_serial_no)
+			if flt(collected_amount, 2) != flt(expected_amount, 2):
+				frappe.throw(
+					frappe._("Collected Amount changed for Book Serial No {0}. Refresh and try again.").format(
+						book_serial_no
+					)
+				)
+		elif collected_amount <= 0:
 			frappe.throw(
 				frappe._("Collected Amount must be greater than zero for Book Serial No {0}.").format(
 					book_serial_no,
 				)
 			)
-		if denomination_total and flt(collected_amount, 2) != flt(denomination_total, 2):
-			frappe.throw(
-				frappe._("Cash denomination total must match Collected Amount for Book Serial No {0}.").format(
-					book_serial_no,
-				)
-			)
 
-		for denomination in DENOMINATIONS:
-			note_count = cint(collection.get(f"denomination_{denomination}"))
-			if note_count < 0:
-				frappe.throw(frappe._("Note count cannot be negative for denomination {0}.").format(denomination))
+		validate_return_collection_denominations(collection, collected_amount, book_serial_no)
+		if assigned_book.book_type == BOOK_TYPE_DONATION:
+			assigned_book.collected_amount = flt(assigned_book.collected_amount) + collected_amount
 		total_collected_amount += collected_amount
+
+	missing_donation_serials = {
+		serial_no
+		for serial_no, assigned_book in assigned_books.items()
+		if assigned_book.book_type == BOOK_TYPE_DONATION and serial_no not in seen_serials
+	}
+	if missing_donation_serials:
+		frappe.throw(
+			frappe._("Enter a returned amount for each Donation Book Serial No: {0}.").format(
+				", ".join(sorted(missing_donation_serials))
+			)
+		)
 
 	return total_collected_amount
 
@@ -1263,6 +1458,23 @@ def get_denomination_total(collection):
 		denomination * cint(collection.get(f"denomination_{denomination}"))
 		for denomination in DENOMINATIONS
 	)
+
+
+def validate_return_collection_denominations(collection, collected_amount, book_serial_no):
+	for denomination in DENOMINATIONS:
+		note_count = cint(collection.get(f"denomination_{denomination}"))
+		if note_count < 0:
+			frappe.throw(frappe._("Note count cannot be negative for denomination {0}.").format(denomination))
+
+	note_total = get_denomination_total(collection)
+	manual_total = flt(collection.get("denomination_total"))
+	for denomination_total in (note_total, manual_total):
+		if denomination_total and flt(collected_amount, 2) != flt(denomination_total, 2):
+			frappe.throw(
+				frappe._("Cash denomination total must match Collected Amount for Book Serial No {0}.").format(
+					book_serial_no,
+				)
+			)
 
 
 def get_receipt_range_count(from_receipt_no, to_receipt_no):
@@ -1443,6 +1655,45 @@ def get_donation_book_order_total(book, exclude_order=None, donation_book_serial
 			values,
 		)[0][0]
 	)
+
+
+def get_donation_book_returned_amount(book, donation_book_serial_no=None):
+	"""Return the declared amount for one Donation Book serial.
+
+	Older single-serial assignments stored only the parent total, so retain that
+	fallback while new and mixed assignments use the serial-specific amount.
+	"""
+	if not book:
+		return 0
+
+	if donation_book_serial_no:
+		serial_amount = frappe.db.get_value(
+			"Book Assignment Detail",
+			{
+				"parent": book,
+				"parenttype": "Book Assignment",
+				"parentfield": "assigned_books",
+				"book_type": BOOK_TYPE_DONATION,
+				"book_serial_no": donation_book_serial_no,
+			},
+			"collected_amount",
+		)
+		if serial_amount is not None and flt(serial_amount):
+			return flt(serial_amount)
+
+		donation_serial_count = frappe.db.count(
+			"Book Assignment Detail",
+			{
+				"parent": book,
+				"parenttype": "Book Assignment",
+				"parentfield": "assigned_books",
+				"book_type": BOOK_TYPE_DONATION,
+			},
+		)
+		if donation_serial_count > 1:
+			return 0
+
+	return flt(frappe.db.get_value("Book Assignment", book, "collected_amount"))
 
 
 def update_donation_book_receipt_usage(book):
@@ -1676,6 +1927,24 @@ def refresh_donation_book_leaf_usage(book):
 
 
 def validate_donation_book_order_total_matches_return(doc):
+	donation_rows = [row for row in (doc.assigned_books or []) if row.book_type == BOOK_TYPE_DONATION]
+	if donation_rows:
+		for row in donation_rows:
+			order_total = get_donation_book_order_total(doc.name, donation_book_serial_no=row.book_serial_no)
+			returned_amount = get_donation_book_returned_amount(doc.name, row.book_serial_no)
+			if flt(order_total, 2) != flt(returned_amount, 2):
+				frappe.throw(
+					frappe._(
+						"Donation Book Serial No {0} cannot be reconciled because Donation Orders total {1}, "
+						"but its returned amount is {2}."
+					).format(
+						row.book_serial_no,
+						frappe.format_value(order_total, {"fieldtype": "Currency"}),
+						frappe.format_value(returned_amount, {"fieldtype": "Currency"}),
+					)
+				)
+		return
+
 	order_total = get_donation_book_order_total(doc.name)
 	if flt(order_total, 2) != flt(doc.collected_amount, 2):
 		frappe.throw(

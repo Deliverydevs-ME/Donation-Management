@@ -188,6 +188,16 @@ def get_book_assignment_details(book, book_serial_no=None):
 		"leaf.status = 'Used'",
 		"ifnull(leaf.donation_order, '') != ''",
 		"order_doc.docstatus = 1",
+		"""not exists (
+			select collection_detail.name
+			from `tabDonation Book Collection Detail` collection_detail
+			inner join `tabDonation Book Collection` collection_doc
+				on collection_doc.name = collection_detail.parent
+			where collection_doc.book = leaf.book
+				and collection_doc.docstatus = 1
+				and collection_detail.book_serial_no = leaf.book_serial_no
+				and collection_detail.receipt_number = leaf.receipt_number
+		)""",
 	]
 	values = {"book": book}
 	if book_serial_no:

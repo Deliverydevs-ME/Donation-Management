@@ -26,6 +26,7 @@ from donation_management.donation_management.api import (
 )
 from donation_management.donation_management.doctype.book_assignment.book_assignment import (
 	get_donation_book_order_total,
+	get_donation_book_returned_amount,
 	get_donation_book_used_receipts,
 	get_receipt_range_count,
 	receipt_number_in_range,
@@ -780,7 +781,10 @@ class DonationOrder(Document):
 			)
 
 	def get_donation_book_returned_amount(self):
-		return flt(frappe.db.get_value("Book Assignment", self.donation_book, "collected_amount"))
+		return get_donation_book_returned_amount(
+			self.donation_book,
+			self.donation_book_serial_no,
+		)
 
 	def update_linked_donation_book_usage(self):
 		books = set()
