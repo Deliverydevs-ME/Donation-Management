@@ -129,7 +129,7 @@ class TestBookAssignment(FrappeTestCase):
 		dashboard = Path(__file__).with_name("book_assignment_dashboard.py").read_text()
 		connections_patch = Path(__file__).resolve().parents[3] / "patches" / "ensure_book_assignment_connections.py"
 
-		self.assertNotIn('"Purchase Receipt": "custom_book_assignment"', dashboard)
+		self.assertNotIn('"Purchase Receipt"', dashboard)
 		self.assertNotIn('ensure_purchase_source_link("Purchase Receipt"', connections_patch.read_text())
 
 	def test_issuing_book_creates_stock_ledger_entry(self):
