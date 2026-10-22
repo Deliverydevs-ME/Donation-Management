@@ -63,6 +63,10 @@ class TestCoupon(FrappeTestCase):
 		), self.assertRaisesRegex(frappe.ValidationError, "must be Returned"):
 			coupon.set_coupon_book_details()
 
+	def test_coupon_serial_query_qualifies_joined_serial_column(self):
+		source = Path(__file__).with_name("coupon_entry.py").read_text()
+		self.assertIn("select detail.book_serial_no, detail.book_serial_no", source)
+
 	def test_coupon_type_can_be_detected_from_selected_item_value(self):
 		with patch.object(frappe.db, "get_value", return_value=None):
 			self.assertEqual(get_coupon_type_from_item("Sadqa Coupon Book"), "Sadqa")

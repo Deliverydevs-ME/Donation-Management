@@ -488,7 +488,7 @@ def get_available_coupon_serials(doctype, txt, searchfield, start, page_len, fil
 		return []
 	return frappe.db.sql(
 		"""
-		select book_serial_no, book_serial_no
+		select detail.book_serial_no, detail.book_serial_no
 		from `tabBook Assignment Detail` detail
 		inner join `tabBook Assignment` book on book.name = detail.parent
 		where detail.parent = %(book)s and detail.parenttype = 'Book Assignment'
