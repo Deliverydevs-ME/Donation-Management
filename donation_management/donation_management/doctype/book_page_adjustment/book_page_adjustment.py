@@ -12,9 +12,11 @@ class BookPageAdjustment(Document):
 		self.validate_affected_pages()
 
 	def on_submit(self):
-		if self.status == "Draft":
-			self.status = "Pending Donation Manager"
-			self.db_set("status", self.status, update_modified=False)
+		self.apply_approved_adjustment()
+
+	def on_update_after_submit(self):
+		"""Apply the operational change when the configured Workflow reaches Approved."""
+		self.apply_approved_adjustment()
 
 	def validate_book(self):
 		if not self.book:
@@ -30,8 +32,11 @@ class BookPageAdjustment(Document):
 			)
 
 	def validate_affected_pages(self):
-		if cint(self.affected_pages) <= 0:
-			frappe.throw(frappe._("Affected Pages must be greater than zero."))
+		page_numbers = self.get_affected_page_numbers()
+		if page_numbers:
+			self.affected_pages = len(page_numbers)
+		elif self.is_new() or not cint(self.affected_pages):
+			frappe.throw(frappe._("Add at least one page in the Affected Pages table."))
 
 		if not self.book:
 			return
@@ -41,6 +46,14 @@ class BookPageAdjustment(Document):
 			frappe.throw(frappe._("Book Assignment {0} was not found.").format(self.book))
 
 		total_pages = get_coupon_book_total_pages(self.book, self.book_serial_no, book_details)
+		if page_numbers and max(page_numbers) > total_pages:
+			frappe.throw(
+				frappe._("Affected Page {0} cannot exceed Total Pages ({1}).").format(
+					max(page_numbers),
+					total_pages,
+				)
+			)
+
 		if cint(self.affected_pages) > total_pages:
 			frappe.throw(
 				frappe._("Affected Pages ({0}) cannot exceed Total Pages ({1}).").format(
@@ -49,40 +62,31 @@ class BookPageAdjustment(Document):
 				)
 			)
 
-	@frappe.whitelist()
-	def approve_by_donation_manager(self):
-		self.check_permission("write")
-		if self.status != "Pending Donation Manager":
-			frappe.throw(frappe._("Only requests pending Donation Manager approval can be approved at this stage."))
+	def get_affected_page_numbers(self):
+		"""Return distinct selected page numbers and retain old submitted requests."""
+		page_numbers = []
+		for row in self.get("affected_page_details") or []:
+			page_no = cint(row.page_no)
+			if page_no <= 0:
+				frappe.throw(frappe._("Affected Page No must be greater than zero."))
+			if page_no in page_numbers:
+				frappe.throw(frappe._("Affected Page {0} has been added more than once.").format(page_no))
+			page_numbers.append(page_no)
+		return page_numbers
 
-		self.status = "Pending Finance Manager"
-		self.donation_manager = frappe.session.user
-		self.donation_manager_approved_on = now_datetime()
-		self.save(ignore_permissions=True)
-		return self.status
+	def apply_approved_adjustment(self):
+		"""Workflow owns approval; this applies the change once its final state is Approved."""
+		if self.status != "Approved" or cint(self.adjustment_applied):
+			return
 
-	@frappe.whitelist()
-	def reject_request(self):
-		self.check_permission("write")
-		if self.status not in ("Pending Donation Manager", "Pending Finance Manager"):
-			frappe.throw(frappe._("Only pending requests can be rejected."))
-
-		self.status = "Rejected"
-		self.save(ignore_permissions=True)
-		return self.status
-
-	@frappe.whitelist()
-	def approve_by_finance_manager(self):
-		self.check_permission("write")
-		if self.status != "Pending Finance Manager":
-			frappe.throw(frappe._("Only requests pending Finance Manager approval can be approved at this stage."))
-
-		self.status = "Approved"
-		self.finance_manager = frappe.session.user
-		self.finance_manager_approved_on = now_datetime()
-		self.save(ignore_permissions=True)
 		self.apply_adjustment_to_book()
-		return self.status
+		self.db_set(
+			{
+				"adjustment_applied": 1,
+				"adjustment_applied_on": now_datetime(),
+			},
+			update_modified=False,
+		)
 
 	def apply_adjustment_to_book(self):
 		book = frappe.get_doc("Book Assignment", self.book)
@@ -96,7 +100,8 @@ class BookPageAdjustment(Document):
 				frappe.throw(frappe._("Coupon Book Serial No {0} was not found in Book Assignment {1}.").format(self.book_serial_no, self.book))
 			row.total_pages = max(cint(row.total_pages) - affected, cint(row.used_pages))
 			row.remaining_pages = max(cint(row.total_pages) - cint(row.used_pages), 0)
-			book.flags.ignore_validate = True
+			clear_cancelled_stock_entry_link(book)
+			book.flags.ignore_validate_update_after_submit = True
 			book.save(ignore_permissions=True)
 			return
 
@@ -107,8 +112,15 @@ class BookPageAdjustment(Document):
 			book.total_pages = max(cint(book.total_pages) - affected, cint(book.used_pages))
 
 		book.remaining_pages = max(cint(book.total_pages) - cint(book.used_pages), 0)
-		book.flags.ignore_validate = True
+		clear_cancelled_stock_entry_link(book)
+		book.flags.ignore_validate_update_after_submit = True
 		book.save(ignore_permissions=True)
+
+
+def clear_cancelled_stock_entry_link(book):
+	"""Avoid retaining a link to the issue Stock Entry cancelled on book return."""
+	if book.stock_entry and frappe.db.get_value("Stock Entry", book.stock_entry, "docstatus") == 2:
+		book.stock_entry = None
 
 
 @frappe.whitelist()

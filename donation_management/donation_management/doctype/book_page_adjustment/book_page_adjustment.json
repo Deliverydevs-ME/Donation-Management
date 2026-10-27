@@ -9,6 +9,7 @@
   "book",
   "book_serial_no",
   "adjustment_type",
+  "affected_page_details",
   "affected_pages",
   "column_break_adj",
   "requested_by",
@@ -16,12 +17,7 @@
   "reason",
   "status_section",
   "status",
-  "donation_manager_approval",
-  "donation_manager",
-  "donation_manager_approved_on",
-  "finance_manager_approval",
-  "finance_manager",
-  "finance_manager_approved_on",
+  "adjustment_applied_on",
   "amended_from"
  ],
  "fields": [
@@ -51,12 +47,18 @@
    "reqd": 1
   },
   {
+   "fieldname": "affected_page_details",
+   "fieldtype": "Table",
+   "label": "Affected Pages",
+   "options": "Book Page Adjustment Page"
+  },
+  {
    "fieldname": "affected_pages",
    "fieldtype": "Int",
    "in_list_view": 1,
-   "label": "Affected Pages",
+   "label": "Affected Page Count",
    "non_negative": 1,
-   "reqd": 1
+   "read_only": 1
   },
   {
    "fieldname": "column_break_adj",
@@ -86,56 +88,29 @@
   {
    "fieldname": "status_section",
    "fieldtype": "Section Break",
-   "label": "Approval Status"
+   "label": "Workflow Status"
   },
   {
    "default": "Draft",
    "fieldname": "status",
-   "fieldtype": "Select",
+   "fieldtype": "Data",
    "in_list_view": 1,
-   "label": "Status",
-   "options": "\nDraft\nPending Donation Manager\nPending Finance Manager\nApproved\nRejected",
+   "label": "Workflow Status",
    "allow_on_submit": 1,
    "read_only": 1
   },
   {
-   "fieldname": "donation_manager_approval",
-   "fieldtype": "Section Break",
-   "label": "Donation Manager Approval"
-  },
-  {
-   "fieldname": "donation_manager",
-   "fieldtype": "Link",
-   "allow_on_submit": 1,
-   "label": "Approved By (Donation Manager)",
-   "options": "User",
+   "fieldname": "adjustment_applied",
+   "fieldtype": "Check",
+   "hidden": 1,
+   "label": "Adjustment Applied",
+   "no_copy": 1,
    "read_only": 1
   },
   {
-   "fieldname": "donation_manager_approved_on",
+   "fieldname": "adjustment_applied_on",
    "fieldtype": "Datetime",
-   "allow_on_submit": 1,
-   "label": "Donation Manager Approved On",
-   "read_only": 1
-  },
-  {
-   "fieldname": "finance_manager_approval",
-   "fieldtype": "Section Break",
-   "label": "Finance Manager Approval"
-  },
-  {
-   "fieldname": "finance_manager",
-   "fieldtype": "Link",
-   "allow_on_submit": 1,
-   "label": "Approved By (Finance Manager)",
-   "options": "User",
-   "read_only": 1
-  },
-  {
-   "fieldname": "finance_manager_approved_on",
-   "fieldtype": "Datetime",
-   "allow_on_submit": 1,
-   "label": "Finance Manager Approved On",
+   "label": "Adjustment Applied On",
    "read_only": 1
   },
   {
