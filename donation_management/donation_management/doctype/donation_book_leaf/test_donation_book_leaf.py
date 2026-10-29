@@ -23,6 +23,8 @@ class TestDonationBookLeaf(FrappeTestCase):
 		path = Path(__file__).with_name("donation_book_leaf.json")
 		metadata = json.loads(path.read_text())
 		self.assertEqual(metadata.get("is_submittable"), 1)
+		self.assertEqual(metadata.get("title_field"), "receipt_number")
+		self.assertEqual(metadata.get("show_title_field_in_link"), 1)
 
 	def test_donation_book_leaf_cannot_be_created_manually(self):
 		metadata = json.loads(Path(__file__).with_name("donation_book_leaf.json").read_text())
