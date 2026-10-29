@@ -1,6 +1,8 @@
 # Copyright (c) 2026, osama.ahmed@deliverydevs.com and contributors
 # For license information, please see license.txt
 
+import re
+
 import frappe
 from frappe.model.document import Document
 from frappe.utils import cint, now_datetime
@@ -33,10 +35,7 @@ class BookPageAdjustment(Document):
 
 	def validate_affected_pages(self):
 		page_numbers = self.get_affected_page_numbers()
-		if page_numbers:
-			self.affected_pages = len(page_numbers)
-		elif self.is_new() or not cint(self.affected_pages):
-			frappe.throw(frappe._("Add at least one page in the Affected Pages table."))
+		self.affected_page_count = len(page_numbers)
 
 		if not self.book:
 			return
@@ -54,24 +53,40 @@ class BookPageAdjustment(Document):
 				)
 			)
 
-		if cint(self.affected_pages) > total_pages:
+		if cint(self.affected_page_count) > total_pages:
 			frappe.throw(
 				frappe._("Affected Pages ({0}) cannot exceed Total Pages ({1}).").format(
-					self.affected_pages,
+					self.affected_page_count,
 					total_pages,
 				)
 			)
 
 	def get_affected_page_numbers(self):
-		"""Return distinct selected page numbers and retain old submitted requests."""
+		"""Parse comma-separated page numbers and inclusive page ranges."""
+		selection = str(self.affected_pages or "").strip()
+		if not selection:
+			frappe.throw(frappe._("Enter at least one affected page, such as 9,10,11 or 9-15."))
+
 		page_numbers = []
-		for row in self.get("affected_page_details") or []:
-			page_no = cint(row.page_no)
-			if page_no <= 0:
-				frappe.throw(frappe._("Affected Page No must be greater than zero."))
-			if page_no in page_numbers:
-				frappe.throw(frappe._("Affected Page {0} has been added more than once.").format(page_no))
-			page_numbers.append(page_no)
+		for entry in selection.split(","):
+			part = entry.strip()
+			match = re.fullmatch(r"(\d+)(?:\s*-\s*(\d+))?", part)
+			if not match:
+				frappe.throw(
+					frappe._("Affected Pages must use comma-separated page numbers or ranges, such as 9,10,11 or 9-15.")
+				)
+
+			start_page = cint(match.group(1))
+			end_page = cint(match.group(2) or start_page)
+			if start_page <= 0 or end_page < start_page:
+				frappe.throw(
+					frappe._("Each affected page range must start with a positive number and end at the same or a later page.")
+				)
+
+			for page_no in range(start_page, end_page + 1):
+				if page_no in page_numbers:
+					frappe.throw(frappe._("Affected Page {0} has been added more than once.").format(page_no))
+				page_numbers.append(page_no)
 		return page_numbers
 
 	def apply_approved_adjustment(self):
@@ -90,7 +105,7 @@ class BookPageAdjustment(Document):
 
 	def apply_adjustment_to_book(self):
 		book = frappe.get_doc("Book Assignment", self.book)
-		affected = cint(self.affected_pages)
+		affected = cint(self.affected_page_count)
 		if book.assigned_books:
 			row = next(
 				(row for row in book.assigned_books if row.book_serial_no == self.book_serial_no and row.book_type == "Coupon Book"),

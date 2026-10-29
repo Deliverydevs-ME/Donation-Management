@@ -9,8 +9,8 @@
   "book",
   "book_serial_no",
   "adjustment_type",
-  "affected_page_details",
   "affected_pages",
+  "affected_page_count",
   "column_break_adj",
   "requested_by",
   "request_date",
@@ -47,15 +47,16 @@
    "reqd": 1
   },
   {
-   "fieldname": "affected_page_details",
-   "fieldtype": "Table",
+   "fieldname": "affected_pages",
+   "description": "Enter page numbers or ranges, for example: 9,10,11 or 9-15.",
+   "fieldtype": "Data",
+   "in_list_view": 1,
    "label": "Affected Pages",
-   "options": "Book Page Adjustment Page"
+   "reqd": 1
   },
   {
-   "fieldname": "affected_pages",
+   "fieldname": "affected_page_count",
    "fieldtype": "Int",
-   "in_list_view": 1,
    "label": "Affected Page Count",
    "non_negative": 1,
    "read_only": 1

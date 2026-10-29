@@ -41,6 +41,7 @@ def ensure_roles():
 def ensure_item_coupon_value_field():
 	fieldname = "custom_donation_coupon_value"
 	if frappe.db.exists("Custom Field", {"dt": "Item", "fieldname": fieldname}):
+		frappe.db.set_value("Custom Field", {"dt": "Item", "fieldname": fieldname}, "in_list_view", 0)
 		return
 
 	frappe.get_doc(
@@ -53,6 +54,7 @@ def ensure_item_coupon_value_field():
 			"options": ITEM_COUPON_VALUES,
 			"insert_after": "item_group",
 			"description": "Used by Donation Management coupon/book workflows.",
+			"in_list_view": 0,
 		}
 	).insert(ignore_permissions=True)
 

@@ -2042,6 +2042,10 @@ def get_book_items(doctype, txt, searchfield, start, page_len, filters):
 				or item.item_code like '%%Fidya%%'
 				or item.item_name like '%%Fidya%%'
 				or item.item_group like '%%Fidya%%'
+				or item.name like '%%Sadqa%%'
+				or item.item_code like '%%Sadqa%%'
+				or item.item_name like '%%Sadqa%%'
+				or item.item_group like '%%Sadqa%%'
 			)
 		"""
 	elif filters.get("book_type") == BOOK_TYPE_DONATION:
@@ -2077,11 +2081,15 @@ def get_book_items(doctype, txt, searchfield, start, page_len, filters):
 					or item.item_code like '%%Fitra%%'
 					or item.item_name like '%%Fitra%%'
 					or item.item_group like '%%Fitra%%'
-					or item.name like '%%Fidya%%'
-					or item.item_code like '%%Fidya%%'
-					or item.item_name like '%%Fidya%%'
-					or item.item_group like '%%Fidya%%'
-				)
+						or item.name like '%%Fidya%%'
+						or item.item_code like '%%Fidya%%'
+						or item.item_name like '%%Fidya%%'
+						or item.item_group like '%%Fidya%%'
+						or item.name like '%%Sadqa%%'
+						or item.item_code like '%%Sadqa%%'
+						or item.item_name like '%%Sadqa%%'
+						or item.item_group like '%%Sadqa%%'
+					)
 				or (
 					item.name like '%%Donation Book%%'
 					or item.item_code like '%%Donation Book%%'

@@ -413,6 +413,7 @@ def sync_book_page_counts(book, exclude_coupon=None, book_serial_no=None):
 			},
 			update_modified=False,
 		)
+		sync_book_assignment_coupon_totals(book)
 		return
 
 	total_pages = frappe.db.get_value("Book Assignment", book, "total_pages")
@@ -430,6 +431,32 @@ def sync_book_page_counts(book, exclude_coupon=None, book_serial_no=None):
 			"remaining_pages": remaining_pages,
 			"collected_amount": collected_amount,
 		},
+		update_modified=False,
+	)
+
+
+def sync_book_assignment_coupon_totals(book):
+	"""Keep the assignment-level amount aligned with every submitted Coupon Entry."""
+	assigned_books = frappe.get_all(
+		"Book Assignment Detail",
+		filters={
+			"parent": book,
+			"parenttype": "Book Assignment",
+			"parentfield": "assigned_books",
+		},
+		fields=["book_type", "collected_amount"],
+	)
+	if not assigned_books:
+		return
+
+	donation_book_amount = sum(
+		flt(row.collected_amount) for row in assigned_books if row.book_type == "Donation Book"
+	)
+	frappe.db.set_value(
+		"Book Assignment",
+		book,
+		"collected_amount",
+		get_submitted_coupon_amount(book) + donation_book_amount,
 		update_modified=False,
 	)
 

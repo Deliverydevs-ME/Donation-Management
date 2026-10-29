@@ -175,6 +175,17 @@ class TestDonationOrder(FrappeTestCase):
 	def test_esaal_e_sawab_key_requires_person_name(self):
 		self.assertIsNone(get_esaal_e_sawab_key("", "Father"))
 
+	def test_esaal_e_sawab_is_not_required_after_its_purpose_is_replaced(self):
+		order = DonationOrder(
+			{
+				"doctype": "Donation Order",
+				"donation_purpose": "Esaal e Sawab",
+				"purpose_details": [{"donation_purpose": "General Donation"}],
+			}
+		)
+
+		self.assertFalse(order.is_esaal_e_sawab_order())
+
 	def test_esaal_selection_accepts_registered_person(self):
 		order = DonationOrder(
 			{

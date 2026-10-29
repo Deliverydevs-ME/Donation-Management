@@ -944,11 +944,12 @@ class DonationOrder(Document):
 		self.student_mode = purposes[0].student_mode
 
 	def is_esaal_e_sawab_order(self):
-		return any(
-			row.donation_purpose == ESAAL_E_SAWAB_PURPOSE
-			for row in self.get("purpose_details", [])
-			if row.donation_purpose
-		) or self.donation_purpose == ESAAL_E_SAWAB_PURPOSE
+		purpose_rows = self.get("purpose_details", [])
+		if purpose_rows:
+			return any(
+				row.donation_purpose == ESAAL_E_SAWAB_PURPOSE for row in purpose_rows if row.donation_purpose
+			)
+		return self.donation_purpose == ESAAL_E_SAWAB_PURPOSE
 
 	def add_legacy_purpose_row_if_needed(self):
 		if self.purpose_details or not (self.donation_type and self.purpose_of_donation and self.donation_purpose):

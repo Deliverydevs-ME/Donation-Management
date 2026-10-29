@@ -417,6 +417,7 @@ class TestBookAssignment(FrappeTestCase):
 
 		query = next(call.args[0] for call in sql.call_args_list if "tabItem" in call.args[0])
 		self.assertIn("Coupon", query)
+		self.assertIn("Sadqa", query)
 		self.assertIn("Donation Book", query)
 
 	def test_saved_book_type_item_queries_remain_type_specific(self):

@@ -29,28 +29,21 @@ class TestBookPageAdjustment(FrappeTestCase):
 			with self.assertRaisesRegex(frappe.ValidationError, "Coupon Book Serial No is required"):
 				get_coupon_book_total_pages("BA-TEST", None, book_details)
 
-	def test_affected_page_grid_returns_distinct_page_numbers(self):
+	def test_affected_pages_field_parses_page_numbers_and_ranges(self):
 		adjustment = BookPageAdjustment(
 			{
 				"doctype": "Book Page Adjustment",
-				"affected_page_details": [
-					{"page_no": 9},
-					{"page_no": 10},
-					{"page_no": 11},
-				]
+				"affected_pages": "9,10,11,15-17",
 			}
 		)
 
-		self.assertEqual(adjustment.get_affected_page_numbers(), [9, 10, 11])
+		self.assertEqual(adjustment.get_affected_page_numbers(), [9, 10, 11, 15, 16, 17])
 
-	def test_affected_page_grid_rejects_duplicate_page_numbers(self):
+	def test_affected_pages_field_rejects_duplicate_page_numbers(self):
 		adjustment = BookPageAdjustment(
 			{
 				"doctype": "Book Page Adjustment",
-				"affected_page_details": [
-					{"page_no": 9},
-					{"page_no": 9},
-				]
+				"affected_pages": "9-11,10",
 			}
 		)
 

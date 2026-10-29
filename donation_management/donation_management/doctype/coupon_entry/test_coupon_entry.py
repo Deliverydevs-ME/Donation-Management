@@ -14,6 +14,7 @@ from donation_management.donation_management.doctype.coupon_entry.coupon_entry i
 	COUPON_SERIES,
 	Coupon,
 	_get_coupon_book_details,
+	sync_book_assignment_coupon_totals,
 	sync_coupon_entry_leaf_connections,
 )
 
@@ -102,6 +103,27 @@ class TestCoupon(FrappeTestCase):
 		self.assertEqual(book.remaining_pages, 999)
 		self.assertEqual(book.coupon_type, "Sadqa")
 		self.assertEqual(book.volunteer_name, "HR-EMP-01094")
+
+	def test_coupon_entries_update_the_assignment_total_across_all_coupon_books(self):
+		assignment_rows = [
+			frappe._dict(book_type="Coupon Book", collected_amount=100),
+			frappe._dict(book_type="Coupon Book", collected_amount=200),
+			frappe._dict(book_type="Donation Book", collected_amount=300),
+		]
+
+		with patch.object(frappe, "get_all", return_value=assignment_rows), patch(
+			"donation_management.donation_management.doctype.coupon_entry.coupon_entry.get_submitted_coupon_amount",
+			return_value=300,
+		), patch.object(frappe.db, "set_value") as set_value:
+			sync_book_assignment_coupon_totals("BK-TEST")
+
+		set_value.assert_called_once_with(
+			"Book Assignment",
+			"BK-TEST",
+			"collected_amount",
+			600,
+			update_modified=False,
+		)
 
 	def test_parent_assignment_lookup_does_not_require_child_receipt_columns(self):
 		parent = frappe._dict(book_type="Mixed", status="Issued", remaining_pages=0)

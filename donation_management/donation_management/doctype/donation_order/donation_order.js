@@ -1152,6 +1152,8 @@ function update_purpose_row_details(frm, cdt, cdn) {
 
 	if (!row.donation_type || !row.donation_purpose || !frm.doc.company) {
 		sync_primary_purpose_fields(frm);
+		sync_esaal_e_sawab_requirement(frm);
+		update_beneficiary_fields(frm, true);
 		return;
 	}
 
@@ -1192,7 +1194,7 @@ function update_purpose_row_details(frm, cdt, cdn) {
 			set_child_value_if_changed(cdt, cdn, "purpose_path", purpose.purpose_path || "");
 			frm.doc.requires_student = purpose.requires_student || 0;
 			frm.doc.requires_prisoner = purpose.requires_prisoner || 0;
-			frm.doc.requires_esaal_e_sawab = purpose.purpose_name === "Esaal e Sawab" ? 1 : 0;
+				sync_esaal_e_sawab_requirement(frm);
 			frm.doc.student_mode = purpose.student_mode || "";
 
 			frappe.call({
@@ -1994,9 +1996,15 @@ function update_beneficiary_fields(frm, clear_hidden_values) {
 }
 
 function is_esaal_e_sawab_order(frm) {
-	return (frm.doc.purpose_details || []).some(
-		(row) => row.donation_purpose === "Esaal e Sawab"
-	) || frm.doc.donation_purpose === "Esaal e Sawab";
+	const purpose_rows = frm.doc.purpose_details || [];
+	if (purpose_rows.length) {
+		return purpose_rows.some((row) => row.donation_purpose === "Esaal e Sawab");
+	}
+	return frm.doc.donation_purpose === "Esaal e Sawab";
+}
+
+function sync_esaal_e_sawab_requirement(frm) {
+	set_value_if_changed(frm, "requires_esaal_e_sawab", is_esaal_e_sawab_order(frm) ? 1 : 0);
 }
 
 function configure_esaal_person_grid(frm, people = []) {
