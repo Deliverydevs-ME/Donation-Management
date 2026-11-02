@@ -11,6 +11,7 @@
   "action_date",
   "employee",
   "previous_employee",
+	 "stock_entry",
   "reopen_reason",
   "recorded_by"
  ],
@@ -29,7 +30,7 @@
    "fieldtype": "Select",
    "in_list_view": 1,
    "label": "Action",
-   "options": "\nIssued\nReturned\nReissued",
+   "options": "\nIssued\nReturned\nReissued\nConsumed",
    "read_only": 1,
    "reqd": 1
   },
@@ -55,6 +56,13 @@
    "fieldtype": "Link",
    "label": "Previous Employee",
    "options": "Employee",
+   "read_only": 1
+  },
+  {
+   "fieldname": "stock_entry",
+   "fieldtype": "Link",
+   "label": "Stock Entry",
+   "options": "Stock Entry",
    "read_only": 1
   },
   {

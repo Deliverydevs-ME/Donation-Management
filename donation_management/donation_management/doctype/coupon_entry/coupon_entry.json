@@ -32,6 +32,7 @@
   "posting_date",
   "section_break_miro",
   "number_of_pages",
+	 "remaining_pages",
   "amount",
   "accounting_section",
   "company",
@@ -198,6 +199,12 @@
    "label": "Number of Pages",
    "non_negative": 1,
    "reqd": 1
+  },
+  {
+   "fieldname": "remaining_pages",
+   "fieldtype": "Int",
+   "label": "Remaining Pages",
+   "read_only": 1
   },
   {
    "fieldname": "amount",

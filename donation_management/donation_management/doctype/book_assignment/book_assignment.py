@@ -86,7 +86,7 @@ class BookAssignment(Document):
 			cancel_leaves_for_book_assignment as cancel_coupon_book_leaves,
 		)
 
-		cancel_book_issue_stock_entry(self)
+		cancel_book_stock_entries(self)
 		self.cancel_linked_coupon_entries()
 		cancel_leaves_for_book_assignment(self.name)
 		cancel_coupon_book_leaves(self.name)
@@ -102,10 +102,8 @@ class BookAssignment(Document):
 			"Coupon Entry",
 			filters={"book": self.name, "docstatus": 1},
 			pluck="name",
-			ignore_permissions=True,
 		):
 			coupon = frappe.get_doc("Coupon Entry", coupon_name)
-			coupon.flags.ignore_permissions = True
 			coupon.cancel()
 
 	def on_submit(self):
@@ -125,8 +123,8 @@ class BookAssignment(Document):
 		for row in self.assigned_books or []:
 			if row.name:
 				frappe.db.set_value("Book Assignment Detail", row.name, "status", "Issued", update_modified=False)
-		create_book_issue_stock_entry(self)
-		create_book_assignment_issue_log(self, "Issued")
+		stock_entry = create_book_issue_stock_entry(self)
+		create_book_assignment_issue_log(self, "Issued", stock_entry=stock_entry)
 	def set_defaults(self):
 		if not self.book_type:
 			self.book_type = BOOK_TYPE_COUPON
@@ -820,10 +818,9 @@ def reopen_book(book, reason, issued_to_employee=None):
 	doc.reopened_by = frappe.session.user
 	doc.reopened_on = now_datetime()
 	doc.reopen_count = cint(doc.reopen_count) + 1
-	clear_cancelled_book_stock_entry_link(doc)
 	doc.save()
-	create_book_issue_stock_entry(doc)
-	create_book_assignment_issue_log(doc, "Reissued", previous_employee)
+	stock_entry = create_book_issue_stock_entry(doc)
+	create_book_assignment_issue_log(doc, "Reissued", previous_employee, stock_entry)
 	return doc.as_dict()
 
 
@@ -871,10 +868,9 @@ def reopen_donation_book(doc, reason, issued_to_employee=None):
 	doc.reopened_by = frappe.session.user
 	doc.reopened_on = now_datetime()
 	doc.reopen_count = cint(doc.reopen_count) + 1
-	clear_cancelled_book_stock_entry_link(doc)
 	doc.save()
-	create_book_issue_stock_entry(doc)
-	create_book_assignment_issue_log(doc, "Reissued", previous_employee)
+	stock_entry = create_book_issue_stock_entry(doc)
+	create_book_assignment_issue_log(doc, "Reissued", previous_employee, stock_entry)
 	sync_donation_book_leaves(doc.name)
 	return doc.as_dict()
 
@@ -898,10 +894,9 @@ def set_reissued_employee(doc, issued_to_employee):
 		doc.set_volunteer_area()
 
 
-def create_book_assignment_issue_log(doc, action, previous_employee=None):
+def create_book_assignment_issue_log(doc, action, previous_employee=None, stock_entry=None):
 	"""Keep an immutable custody history for every issue and reissue."""
-	frappe.get_doc(
-		{
+	log = {
 			"doctype": "Book Assignment Issue Log",
 			"book_assignment": doc.name,
 			"action": action,
@@ -910,8 +905,10 @@ def create_book_assignment_issue_log(doc, action, previous_employee=None):
 			"previous_employee": previous_employee,
 			"reopen_reason": doc.reopen_reason if action == "Reissued" else None,
 			"recorded_by": frappe.session.user,
-		}
-	).insert(ignore_permissions=True)
+	}
+	if stock_entry:
+		log["stock_entry"] = stock_entry
+	frappe.get_doc(log).insert(ignore_permissions=True)
 
 
 def clear_cancelled_book_stock_entry_link(doc):
@@ -1034,8 +1031,8 @@ def return_book(
 	)
 
 	sync_coupon_book_leaves(doc.name)
-	restore_unused_book_stock(doc)
-	create_book_assignment_issue_log(doc, "Returned")
+	stock_entry = return_book_stock_to_source(doc)
+	create_book_assignment_issue_log(doc, "Returned", stock_entry=stock_entry)
 	return doc.as_dict()
 
 
@@ -1269,6 +1266,7 @@ def get_assigned_coupon_used_pages(book, book_serial_no):
 @frappe.whitelist()
 def close_book(book):
 	doc = frappe.get_doc("Book Assignment", book)
+	doc.check_permission("write")
 	if doc.status != "Returned":
 		frappe.throw(frappe._("Only returned Books can be closed."))
 	if doc.is_donation_book() or doc.has_donation_rows():
@@ -1278,9 +1276,8 @@ def close_book(book):
 	if not doc.is_exhausted():
 		frappe.throw(frappe._("Book Assignment cannot be closed while pages or receipts remain unused."))
 
-	doc.status = "Closed"
-	doc.flags.ignore_validate_update_after_submit = True
-	doc.save()
+	consume_exhausted_book_stock(doc)
+	mark_book_closed(doc)
 	return doc.as_dict()
 
 
@@ -1322,8 +1319,8 @@ def return_donation_book(book, collected_amount=None, denominations=None, book_c
 		)
 
 		sync_coupon_book_leaves(doc.name)
-	restore_unused_book_stock(doc)
-	create_book_assignment_issue_log(doc, "Returned")
+	stock_entry = return_book_stock_to_source(doc)
+	create_book_assignment_issue_log(doc, "Returned", stock_entry=stock_entry)
 	return doc.as_dict()
 
 
@@ -1734,6 +1731,7 @@ def update_donation_book_receipt_usage(book):
 		update_modified=False,
 	)
 	sync_donation_book_leaves(book)
+	maybe_consume_exhausted_book(book)
 
 
 def sync_donation_book_leaves(book):
@@ -1757,6 +1755,24 @@ def sync_donation_book_leaves(book):
 
 	refresh_donation_book_leaf_usage(book)
 	update_book_latest_manual_receipt_date(book)
+
+
+def maybe_consume_exhausted_book(book):
+	"""Automatically consume and close a book after every physical page is used."""
+	doc = frappe.get_doc("Book Assignment", book)
+	if doc.docstatus != 1 or doc.status in ("Closed", "Cancelled") or not doc.is_exhausted():
+		return
+
+	consume_exhausted_book_stock(doc)
+	mark_book_closed(doc)
+
+
+def mark_book_closed(doc):
+	if doc.status == "Closed":
+		return
+	doc.status = "Closed"
+	doc.flags.ignore_validate_update_after_submit = True
+	doc.save()
 
 
 def update_book_latest_manual_receipt_date(book):
@@ -2451,13 +2467,69 @@ def has_submitted_book_stock_entry(stock_entry):
 
 
 def create_book_issue_stock_entry(doc, posting_date=None):
-	"""Issue every assigned serial through ERPNext so stock reports stay correct."""
-	if has_submitted_book_stock_entry(doc.stock_entry):
+	"""Transfer assigned books from their source Warehouse to the employee Warehouse."""
+	return create_book_stock_entry(
+		doc,
+		stock_action="Reissued" if cint(doc.get("reopen_count")) else "Issued",
+		purpose="Material Transfer",
+		from_warehouse=lambda row: row.warehouse,
+		to_warehouse=get_employee_book_warehouse(doc),
+		posting_date=posting_date,
+	)
+
+
+def return_book_stock_to_source(doc, posting_date=None):
+	"""Return books from the employee Warehouse to their original source Warehouse."""
+	if is_legacy_material_issue(doc):
+		cancel_book_issue_stock_entry(doc)
 		return doc.stock_entry
+
+	return create_book_stock_entry(
+		doc,
+		stock_action="Returned",
+		purpose="Material Transfer",
+		from_warehouse=lambda row: get_employee_book_warehouse(doc),
+		to_warehouse=lambda row: row.warehouse,
+		posting_date=posting_date or today(),
+	)
+
+
+def consume_exhausted_book_stock(doc, posting_date=None):
+	"""Consume a fully used book exactly once, from its current physical Warehouse."""
+	if not doc.is_exhausted():
+		frappe.throw(frappe._("Book Assignment cannot be consumed while pages or receipts remain unused."))
+
+	stock_entry = create_book_stock_entry(
+		doc,
+		stock_action="Consumed",
+		purpose="Material Issue",
+		from_warehouse=lambda row: get_book_consumption_warehouse(doc, row),
+		posting_date=posting_date or today(),
+	)
+	if not frappe.db.exists("Book Assignment Issue Log", {"stock_entry": stock_entry, "action": "Consumed"}):
+		create_book_assignment_issue_log(doc, "Consumed", stock_entry=stock_entry)
+	return stock_entry
+
+
+def create_book_stock_entry(doc, stock_action, purpose, from_warehouse, to_warehouse=None, posting_date=None):
+	"""Create one traceable stock movement for the physical books on an assignment."""
+	existing_entry = None
+	if stock_action == "Consumed" and has_book_stock_entry_links():
+		existing_entry = frappe.db.get_value(
+			"Stock Entry",
+			{
+				"custom_book_assignment": doc.name,
+				"custom_book_stock_action": stock_action,
+				"docstatus": 1,
+			},
+			"name",
+		)
+	if existing_entry:
+		return existing_entry
 
 	rows = get_assigned_book_stock_rows(doc)
 	if not rows:
-		frappe.throw(frappe._("At least one Item, Warehouse, and Book Serial No are required to issue stock."))
+		frappe.throw(frappe._("At least one Item, Warehouse, and Book Serial No are required for the stock movement."))
 
 	from erpnext.stock.doctype.stock_entry.stock_entry_utils import make_stock_entry
 
@@ -2468,10 +2540,11 @@ def create_book_issue_stock_entry(doc, posting_date=None):
 			item_code=row.item,
 			qty=1,
 			company=company,
-			from_warehouse=row.warehouse,
+			from_warehouse=from_warehouse(row),
+			to_warehouse=to_warehouse(row) if callable(to_warehouse) else to_warehouse,
 			serial_no=[row.book_serial_no],
 			posting_date=posting_date or doc.start_date or today(),
-			purpose="Material Issue",
+			purpose=purpose,
 			do_not_save=True,
 		)
 		if stock_entry is None:
@@ -2481,10 +2554,9 @@ def create_book_issue_stock_entry(doc, posting_date=None):
 			item.pop("name", None)
 			stock_entry.append("items", item)
 
-	stock_entry.remarks = "Book Assignment {0}: issued to {1}".format(
-		doc.name,
-		doc.issued_to_employee or doc.volunteer_name or "",
-	)
+	stock_entry.custom_book_assignment = doc.name
+	stock_entry.custom_book_stock_action = stock_action
+	stock_entry.remarks = "Book Assignment {0}: {1}".format(doc.name, stock_action)
 	stock_entry.flags.ignore_permissions = True
 	stock_entry.insert(ignore_permissions=True)
 	stock_entry.submit()
@@ -2494,11 +2566,49 @@ def create_book_issue_stock_entry(doc, posting_date=None):
 	return stock_entry.name
 
 
-def restore_unused_book_stock(doc):
-	"""Reverse the issue only when the returned book still has usable pages."""
-	if not has_unused_book_capacity(doc):
-		return
-	cancel_book_issue_stock_entry(doc)
+def get_employee_book_warehouse(doc):
+	"""Find the employee Warehouse by name without an Employee mapping field."""
+	employee = frappe.db.get_value(
+		"Employee", doc.issued_to_employee, ["employee_name", "status"], as_dict=True
+	)
+	if not employee or not employee.employee_name:
+		frappe.throw(frappe._("An active Employee is required to determine the book Warehouse."))
+	if employee.status and employee.status != "Active":
+		frappe.throw(frappe._("Issued To Employee {0} must be active.").format(doc.issued_to_employee))
+
+	warehouse = frappe.db.get_value(
+		"Warehouse",
+		{
+			"warehouse_name": employee.employee_name,
+			"company": doc.get("company") or get_default_company(),
+			"is_group": 0,
+			"disabled": 0,
+		},
+		"name",
+	)
+	if not warehouse:
+		frappe.throw(
+			frappe._("Create an active Warehouse named {0} for Employee {1} before issuing this book.").format(
+				employee.employee_name, doc.issued_to_employee
+			)
+		)
+	return warehouse
+
+
+def get_book_consumption_warehouse(doc, row):
+	return row.warehouse if doc.status == "Returned" else get_employee_book_warehouse(doc)
+
+
+def is_legacy_material_issue(doc):
+	return bool(
+		doc.stock_entry
+		and frappe.db.get_value("Stock Entry", doc.stock_entry, "purpose") == "Material Issue"
+		and (not has_book_stock_entry_links() or not frappe.db.get_value("Stock Entry", doc.stock_entry, "custom_book_assignment"))
+	)
+
+
+def has_book_stock_entry_links():
+	return frappe.get_meta("Stock Entry").has_field("custom_book_assignment")
 
 
 def has_unused_book_capacity(doc):
@@ -2512,16 +2622,27 @@ def has_unused_book_capacity(doc):
 	return cint(doc.get("remaining_pages")) > 0 or cint(doc.get("remaining_receipts")) > 0
 
 
-def cancel_book_issue_stock_entry(doc):
-	if not has_submitted_book_stock_entry(doc.stock_entry):
-		return
+def cancel_book_stock_entries(doc):
+	"""Cancel linked stock movements in reverse order using normal Frappe permissions."""
+	stock_entries = []
+	if has_book_stock_entry_links():
+		stock_entries = frappe.get_all(
+			"Stock Entry",
+			filters={"custom_book_assignment": doc.name, "docstatus": 1},
+			pluck="name",
+			order_by="posting_date desc, creation desc",
+		)
+	if not stock_entries and has_submitted_book_stock_entry(doc.stock_entry):
+		stock_entries = [doc.stock_entry]
 
-	stock_entry = frappe.get_doc("Stock Entry", doc.stock_entry)
-	stock_entry.flags.ignore_permissions = True
-	# The Book Assignment owns this Stock Entry. Its link must not prevent the
-	# authorised return/cancellation from reversing the stock movement.
-	stock_entry.flags.ignore_links = True
-	stock_entry.cancel()
+	for stock_entry_name in stock_entries:
+		frappe.get_doc("Stock Entry", stock_entry_name).cancel()
+
+
+def cancel_book_issue_stock_entry(doc):
+	"""Backward-compatible legacy helper for historical Material Issue records."""
+	if has_submitted_book_stock_entry(doc.stock_entry):
+		frappe.get_doc("Stock Entry", doc.stock_entry).cancel()
 
 
 @frappe.whitelist()

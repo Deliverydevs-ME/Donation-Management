@@ -107,6 +107,7 @@ function set_coupon_book_details(frm) {
 			set_derived_value(frm, "volunteer_name", book.volunteer_name || "");
 			set_derived_value(frm, "area", book.volunteer_area || "");
 			set_derived_value(frm, "warehouse", book.warehouse || "");
+			set_derived_value(frm, "remaining_pages", cint(book.remaining_pages));
 			frm.__coupon_value = cint(book.coupon_value);
 			if (!cint(frm.doc.number_of_pages)) {
 				set_derived_value(frm, "number_of_pages", 1);

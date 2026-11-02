@@ -10,6 +10,7 @@ from frappe.tests.utils import FrappeTestCase
 from donation_management.donation_management.doctype.book_assignment.book_assignment import (
 	BookAssignment,
 	account_matches_coupon_type,
+	cancel_book_stock_entries,
 	cancel_book_issue_stock_entry,
 	clear_cancelled_book_stock_entry_link,
 	create_book_assignment_issue_log,
@@ -27,7 +28,7 @@ from donation_management.donation_management.doctype.book_assignment.book_assign
 	reopen_donation_book,
 	receipt_number_in_range,
 	receipt_series_prefix,
-	restore_unused_book_stock,
+	return_book_stock_to_source,
 	return_book,
 	validate_coupon_book_return_collections,
 	validate_return_collection_denominations,
@@ -90,7 +91,7 @@ class TestBookAssignment(FrappeTestCase):
 		):
 			assignment.cancel_linked_coupon_entries()
 
-		self.assertTrue(coupon.flags.ignore_permissions)
+		self.assertFalse(coupon.flags.get("ignore_permissions"))
 		coupon.cancel.assert_called_once_with()
 
 	def test_book_assignment_cancellation_sets_cancelled_status(self):
@@ -174,6 +175,9 @@ class TestBookAssignment(FrappeTestCase):
 		with patch.object(frappe.db, "get_value", return_value=None), patch.object(
 			frappe.db, "set_value"
 		) as set_value, patch(
+			"donation_management.donation_management.doctype.book_assignment.book_assignment.get_employee_book_warehouse",
+			return_value="Employee Warehouse - JTQ",
+		), patch(
 			"erpnext.stock.doctype.stock_entry.stock_entry_utils.make_stock_entry",
 			return_value=stock_entry,
 		) as make_stock_entry:
@@ -184,9 +188,10 @@ class TestBookAssignment(FrappeTestCase):
 			qty=1,
 			company="JTQ",
 			from_warehouse="Stores - JTQ",
+			to_warehouse="Employee Warehouse - JTQ",
 			serial_no=["SCB-0001"],
 			posting_date="2026-10-08",
-			purpose="Material Issue",
+			purpose="Material Transfer",
 			do_not_save=True,
 		)
 		stock_entry.insert.assert_called_once_with(ignore_permissions=True)
@@ -195,36 +200,36 @@ class TestBookAssignment(FrappeTestCase):
 			"Book Assignment", "BK-TEST", "stock_entry", "MAT-STE-TEST", update_modified=False
 		)
 
-	def test_return_with_unused_pages_reverses_issue_stock_entry(self):
-		doc = frappe._dict(is_exhausted=lambda: False)
+	def test_return_transfers_book_back_to_its_original_warehouse(self):
+		doc = frappe._dict(name="BK-TEST", stock_entry="MAT-STE-ISSUE")
 		with patch(
-			"donation_management.donation_management.doctype.book_assignment.book_assignment.cancel_book_issue_stock_entry"
-		) as cancel_stock_entry:
-			restore_unused_book_stock(doc)
+			"donation_management.donation_management.doctype.book_assignment.book_assignment.is_legacy_material_issue",
+			return_value=False,
+		), patch(
+			"donation_management.donation_management.doctype.book_assignment.book_assignment.get_employee_book_warehouse",
+			return_value="Employee Warehouse - JTQ",
+		), patch(
+			"donation_management.donation_management.doctype.book_assignment.book_assignment.create_book_stock_entry",
+			return_value="MAT-STE-RETURN",
+		) as create_stock_entry:
+			self.assertEqual(return_book_stock_to_source(doc), "MAT-STE-RETURN")
 
-		cancel_stock_entry.assert_called_once_with(doc)
+		self.assertEqual(create_stock_entry.call_args.kwargs["stock_action"], "Returned")
+		self.assertEqual(create_stock_entry.call_args.kwargs["purpose"], "Material Transfer")
 
-	def test_return_with_no_remaining_pages_keeps_issue_stock_entry(self):
-		doc = frappe._dict(is_exhausted=lambda: True)
-		with patch(
-			"donation_management.donation_management.doctype.book_assignment.book_assignment.cancel_book_issue_stock_entry"
-		) as cancel_stock_entry:
-			restore_unused_book_stock(doc)
-
-		cancel_stock_entry.assert_not_called()
-
-	def test_return_can_cancel_parent_owned_stock_entry(self):
-		doc = frappe._dict(stock_entry="MAT-STE-TEST")
+	def test_book_assignment_cancellation_uses_normal_stock_entry_permissions(self):
+		doc = frappe._dict(name="BK-TEST", stock_entry="MAT-STE-TEST")
 		stock_entry = frappe._dict(flags=frappe._dict())
 		stock_entry.cancel = Mock()
 
-		with patch.object(frappe.db, "get_value", return_value=1), patch.object(
+		with patch(
+			"donation_management.donation_management.doctype.book_assignment.book_assignment.has_book_stock_entry_links",
+			return_value=True,
+		), patch.object(frappe, "get_all", return_value=["MAT-STE-TEST"]), patch.object(
 			frappe, "get_doc", return_value=stock_entry
 		):
-			cancel_book_issue_stock_entry(doc)
+			cancel_book_stock_entries(doc)
 
-		self.assertTrue(stock_entry.flags.ignore_permissions)
-		self.assertTrue(stock_entry.flags.ignore_links)
 		stock_entry.cancel.assert_called_once_with()
 
 	def test_reopen_clears_only_a_cancelled_stock_entry_link(self):
@@ -611,7 +616,8 @@ class TestBookAssignment(FrappeTestCase):
 		), patch(
 				"donation_management.donation_management.doctype.book_assignment.book_assignment.create_book_assignment_issue_log"
 			), patch(
-				"donation_management.donation_management.doctype.book_assignment.book_assignment.restore_unused_book_stock"
+				"donation_management.donation_management.doctype.book_assignment.book_assignment.return_book_stock_to_source",
+				return_value="MAT-STE-RETURN",
 			), patch.object(frappe, "get_doc", return_value=doc), patch(
 				"donation_management.donation_management.doctype.book_assignment.book_assignment.today",
 				return_value="2026-10-05",

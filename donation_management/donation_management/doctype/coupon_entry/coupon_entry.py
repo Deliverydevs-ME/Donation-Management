@@ -99,6 +99,7 @@ class CouponEntry(Document):
 		self.receipt_format = book.get("receipt_format")
 		self.from_receipt_no = book.get("from_receipt_no")
 		self.to_receipt_no = book.get("to_receipt_no")
+		self.remaining_pages = cint(book.get("remaining_pages"))
 		if not self.company:
 			self.company = get_default_company()
 
@@ -414,6 +415,7 @@ def sync_book_page_counts(book, exclude_coupon=None, book_serial_no=None):
 			update_modified=False,
 		)
 		sync_book_assignment_coupon_totals(book)
+		maybe_consume_exhausted_coupon_book(book)
 		return
 
 	total_pages = frappe.db.get_value("Book Assignment", book, "total_pages")
@@ -433,6 +435,15 @@ def sync_book_page_counts(book, exclude_coupon=None, book_serial_no=None):
 		},
 		update_modified=False,
 	)
+	maybe_consume_exhausted_coupon_book(book)
+
+
+def maybe_consume_exhausted_coupon_book(book):
+	from donation_management.donation_management.doctype.book_assignment.book_assignment import (
+		maybe_consume_exhausted_book,
+	)
+
+	maybe_consume_exhausted_book(book)
 
 
 def sync_book_assignment_coupon_totals(book):
