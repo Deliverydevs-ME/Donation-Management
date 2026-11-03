@@ -34,8 +34,6 @@ class BookAssignment(Document):
 	def validate(self):
 		self.set_defaults()
 		self.validate_book_type()
-		if self.issued_to_warehouse and (not self.docstatus or self.status == "Draft"):
-			self.set_issued_to_employee_from_warehouse()
 		self.set_book_serial_numbers()
 		self.validate_status_transition()
 		if self.is_mixed_assignment() or self.assigned_books or self.is_new():
@@ -386,13 +384,6 @@ class BookAssignment(Document):
 	def set_coupon_employee_details(self):
 		self.volunteer_name = self.issued_to_employee
 
-	def set_issued_to_employee_from_warehouse(self):
-		"""Derive the operational employee from the selected employee-named Warehouse."""
-		if not self.issued_to_warehouse:
-			return
-
-		self.issued_to_employee = get_warehouse_employee(self.issued_to_warehouse, self.get("company"))
-
 	def set_used_pages_from_coupons(self):
 		if self.is_new():
 			return
@@ -485,7 +476,8 @@ class BookAssignment(Document):
 		self.set("assigned_books", [])
 
 	def validate_donation_book_details(self):
-		validate_mohasil_employee(self.issued_to_employee, "Issued To Employee")
+		if self.issued_to_employee:
+			validate_mohasil_employee(self.issued_to_employee, "Issued To Employee")
 
 		if not is_donation_book_item(self.item):
 			frappe.throw(frappe._("Only Donation Book Items can be selected for Donation Book."))
@@ -886,7 +878,6 @@ def set_reissued_warehouse(doc, issued_to_warehouse):
 		frappe.throw(frappe._("Issued To Warehouse is required when reopening a Book."))
 
 	get_book_target_warehouse(doc)
-	doc.set_issued_to_employee_from_warehouse()
 	if doc.is_coupon_book() or doc.has_coupon_rows():
 		doc.set_coupon_employee_details()
 		doc.set_volunteer_area()
@@ -2214,7 +2205,7 @@ def get_mohasil_donation_books(doctype, txt, searchfield, start, page_len, filte
 			coalesce(nullif(book.book_serial_numbers, ''), serials.book_serial_numbers, book.name) as book_serial_numbers,
 			book.status,
 			book.warehouse,
-			book.issued_to_employee
+			book.issued_to_warehouse
 		from `tabBook Assignment` book
 		left join (
 			select parent, group_concat(book_serial_no order by idx separator ', ') as book_serial_numbers
@@ -2225,7 +2216,6 @@ def get_mohasil_donation_books(doctype, txt, searchfield, start, page_len, filte
 			on serials.parent = book.name
 			where book.book_type in %(book_types)s
 			and book.status = %(status)s
-			and book.issued_to_employee = %(mohasil)s
 			and (
 				book.remaining_receipts > 0
 				or exists (
@@ -2279,7 +2269,6 @@ def get_mohasil_donation_book_serials(doctype, txt, searchfield, start, page_len
 			on book.name = detail.parent
 			where book.book_type in %(book_types)s
 				and book.status = %(status)s
-				and book.issued_to_employee = %(mohasil)s
 				and book.docstatus != 2
 			and detail.parentfield = 'assigned_books'
 			and detail.book_type = %(donation_book_type)s
@@ -2324,8 +2313,7 @@ def get_donation_book_for_serial(book_serial_no=None, mohasil=None):
 		where detail.book_serial_no = %(book_serial_no)s
 				and book.book_type in %(book_types)s
 			and book.status = %(status)s
-			and book.issued_to_employee = %(mohasil)s
-			and book.docstatus != 2
+				and book.docstatus != 2
 			and detail.parentfield = 'assigned_books'
 			and detail.book_type = %(donation_book_type)s
 		limit 1
@@ -2365,8 +2353,7 @@ def get_mohasil_donation_book_leaves(doctype, txt, searchfield, start, page_len,
 		where detail.book_type = %(donation_book_type)s
 			and book.book_type in %(book_types)s
 			and book.status = %(status)s
-			and book.issued_to_employee = %(mohasil)s
-			and (%(book)s = '' or book.name = %(book)s)
+				and (%(book)s = '' or book.name = %(book)s)
 			and (%(book_serial_no)s = '' or detail.book_serial_no = %(book_serial_no)s)
 			and book.docstatus != 2
 			and leaf.status in ('Pending', 'Received', 'Returned Unused')
@@ -2587,30 +2574,6 @@ def get_book_target_warehouse(doc):
 			frappe._("Issued To Warehouse {0} must belong to Company {1}.").format(warehouse.name, company)
 		)
 	return warehouse.name
-
-
-def get_warehouse_employee(warehouse_name, company=None):
-	"""Resolve the active Employee whose name is used for the selected Warehouse."""
-	warehouse = frappe.db.get_value(
-		"Warehouse", warehouse_name, ["name", "warehouse_name", "company", "is_group", "disabled"], as_dict=True
-	)
-	if not warehouse or cint(warehouse.disabled) or cint(warehouse.is_group):
-		frappe.throw(frappe._("Issued To Warehouse {0} must be an active, non-group Warehouse.").format(warehouse_name))
-	if company and warehouse.company and warehouse.company != company:
-		frappe.throw(
-			frappe._("Issued To Warehouse {0} must belong to Company {1}.").format(warehouse.name, company)
-		)
-
-	employee = frappe.db.get_value(
-		"Employee", {"employee_name": warehouse.warehouse_name, "status": "Active"}, "name"
-	)
-	if not employee:
-		frappe.throw(
-			frappe._("Create an active Employee named {0} before using Warehouse {1} for a Book Assignment.").format(
-				warehouse.warehouse_name, warehouse.name
-			)
-		)
-	return employee
 
 
 def get_legacy_employee_book_warehouse(doc):

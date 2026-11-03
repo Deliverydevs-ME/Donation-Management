@@ -477,7 +477,6 @@ class DonationOrder(Document):
 			where detail.book_serial_no = %(book_serial_no)s
 				and book.book_type in ('Donation Book', 'Mixed')
 				and book.status = 'Returned'
-				and book.issued_to_employee = %(mohasil)s
 				and book.docstatus != 2
 			and detail.parentfield = 'assigned_books'
 			and detail.book_type = 'Donation Book'
@@ -489,12 +488,7 @@ class DonationOrder(Document):
 			},
 		)
 		if not result:
-			frappe.throw(
-				frappe._("Donation Book Serial No {0} is not available for Mohasil {1}.").format(
-					self.donation_book_serial_no,
-					self.mohasil,
-				)
-			)
+			frappe.throw(frappe._("Donation Book Serial No {0} is not available.").format(self.donation_book_serial_no))
 		self.donation_book = result[0][0]
 
 	def validate_donation_book_for_mohasil(self):
@@ -504,7 +498,6 @@ class DonationOrder(Document):
 			[
 				"book_type",
 				"status",
-				"issued_to_employee",
 				"start_date",
 				"from_receipt_no",
 				"to_receipt_no",
@@ -523,15 +516,6 @@ class DonationOrder(Document):
 					"and complete the cash collection before creating a Donation Order."
 				).format(self.donation_book, book.status or frappe._("Draft"))
 			)
-		if book.issued_to_employee != self.mohasil:
-			frappe.throw(
-				frappe._("Donation Book {0} is issued to {1}, not selected Mohasil {2}.").format(
-					self.donation_book,
-					book.issued_to_employee or frappe._("nobody"),
-					self.mohasil,
-				)
-			)
-
 		if self.manual_receipt_date and book.start_date and getdate(self.manual_receipt_date) < getdate(book.start_date):
 			frappe.throw(
 				frappe._("Manual Receipt Date cannot be before Donation Book Start Date {0}.").format(
@@ -2166,7 +2150,6 @@ def _get_donation_book_leaf_for_mohasil(leaf_name, mohasil, current_order=None):
 		select
 			book.name as book,
 			book.status as book_status,
-			book.issued_to_employee,
 			detail.book_type
 		from `tabBook Assignment Detail` detail
 		inner join `tabBook Assignment` book on book.name = detail.parent
@@ -2186,14 +2169,6 @@ def _get_donation_book_leaf_for_mohasil(leaf_name, mohasil, current_order=None):
 		frappe.throw(frappe._("Donation Book Leaf {0} is not a Donation Book leaf.").format(leaf.name))
 	if assignment.book_status != "Returned":
 		frappe.throw(frappe._("Donation Book {0} must be Returned before its leaf can be used.").format(leaf.book))
-	if assignment.issued_to_employee != mohasil:
-		frappe.throw(
-			frappe._("Donation Book Leaf {0} is not assigned to selected Mohasil {1}.").format(
-				leaf.name,
-				mohasil,
-			)
-		)
-
 	return leaf
 
 
