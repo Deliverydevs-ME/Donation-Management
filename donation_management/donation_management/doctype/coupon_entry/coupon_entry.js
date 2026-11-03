@@ -3,17 +3,14 @@
 
 frappe.ui.form.on("Coupon Entry", {
 	setup(frm) {
-		frm.set_query("book", () => ({
-			query: "donation_management.donation_management.doctype.coupon_entry.coupon_entry.get_available_books",
-		}));
 		frm.set_query("book_serial_no", () => ({
 			query: "donation_management.donation_management.doctype.coupon_entry.coupon_entry.get_available_coupon_serials",
-			filters: { book: frm.doc.book },
+			filters: {},
 		}));
 	},
 
 	refresh(frm) {
-		if (frm.doc.book) {
+		if (frm.doc.book_serial_no) {
 			set_coupon_book_details(frm);
 		}
 		if (frm.doc.docstatus === 1) {
@@ -35,14 +32,8 @@ frappe.ui.form.on("Coupon Entry", {
 		frm.dashboard.refresh();
 	},
 
-	book(frm) {
-		set_coupon_book_details(frm);
-	},
-
 	book_serial_no(frm) {
-		if (frm.doc.book) {
-			set_coupon_book_details(frm);
-		}
+		set_coupon_book_details(frm);
 	},
 
 	number_of_pages(frm) {
@@ -51,51 +42,38 @@ frappe.ui.form.on("Coupon Entry", {
 });
 
 function set_coupon_book_details(frm) {
-	if (!frm.doc.book) {
+	if (!frm.doc.book_serial_no) {
 		return;
 	}
 
 	const request_id = (frm.__coupon_details_request_id || 0) + 1;
 	frm.__coupon_details_request_id = request_id;
-	const requested_book = frm.doc.book;
 	const requested_book_serial_no = frm.doc.book_serial_no;
 
 	frappe.call({
-		method: "donation_management.donation_management.doctype.coupon_entry.coupon_entry.get_coupon_book_details",
+		method: "donation_management.donation_management.doctype.coupon_entry.coupon_entry.get_coupon_book_details_by_serial",
 		args: {
-			book: frm.doc.book,
 			book_serial_no: frm.doc.book_serial_no,
+			include_unavailable: frm.doc.docstatus === 1 ? 1 : 0,
 		},
 		callback(response) {
 			if (
 				request_id !== frm.__coupon_details_request_id
-				|| frm.doc.book !== requested_book
 				|| frm.doc.book_serial_no !== requested_book_serial_no
 			) {
 				return;
 			}
 
 			const book = response.message || {};
-			if (book.requires_book_serial_no && !frm.doc.book_serial_no) {
-				frm.toggle_reqd("book_serial_no", true);
-				frm.__coupon_value = 0;
-				set_derived_value(frm, "coupon_color", "");
-				set_derived_value(frm, "volunteer_name", "");
-				set_derived_value(frm, "area", "");
-				set_derived_value(frm, "warehouse", "");
-				return;
-			}
-			frm.toggle_reqd("book_serial_no", false);
-
 			if (frm.is_new() && (book.book_type !== "Coupon Book" && book.book_type !== "Mixed" || book.status !== "Returned" || cint(book.remaining_pages) <= 0)) {
 				frappe.msgprint({
 					title: __("Coupon Book Not Available"),
 					message: __("Book {0} must be returned and have available pages before creating a Coupon Entry.", [
-						frm.doc.book,
+						book.book,
 					]),
 					indicator: "red",
 				});
-				frm.set_value("book", "");
+				frm.set_value("book_serial_no", "");
 				set_derived_value(frm, "coupon_color", "");
 				set_derived_value(frm, "volunteer_name", "");
 				set_derived_value(frm, "area", "");
@@ -103,6 +81,7 @@ function set_coupon_book_details(frm) {
 				return;
 			}
 
+			set_derived_value(frm, "book", book.book || "");
 			set_derived_value(frm, "coupon_color", book.coupon_color || "");
 			set_derived_value(frm, "volunteer_name", book.volunteer_name || "");
 			set_derived_value(frm, "area", book.volunteer_area || "");

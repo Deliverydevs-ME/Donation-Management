@@ -8,10 +8,6 @@ from frappe.utils import cint, flt, getdate, now_datetime, today
 from donation_management.donation_management.doctype.donor.donor import (
 	ESAAL_RELATIONSHIP_LIMITS,
 	normalize_phone,
-	validate_mohasil_employee,
-)
-from donation_management.donation_management.doctype.donation_location_assignment.donation_location_assignment import (
-	get_assignment_for_date,
 )
 from donation_management.donation_management.doctype.donor_program_enrollment.donor_program_enrollment import (
 	upsert_donor_program_enrollment,
@@ -286,8 +282,6 @@ class DonationOrder(Document):
 			self.party = donor.party
 		if hasattr(self, "confidential_ref_co"):
 			self.confidential_ref_co = donor.confidential_ref_co
-		if cint(self.is_mohasil_collection) and not self.mohasil:
-			self.mohasil = donor.mohasil
 		# This is donor-derived information. Always refresh it so a previous
 		# donor's name cannot remain on an Order after the donor is changed.
 		self.name_on_donation_slip = donor.customer_name
@@ -299,33 +293,12 @@ class DonationOrder(Document):
 			if not self.mohasil:
 				frappe.throw(
 					frappe._(
-						"Mohasil is required for Mohasil Collection. Select the Mohasil before selecting a Donation Book."
+						"Mohasil Warehouse is required for Mohasil Collection. Select the warehouse before selecting a Donation Book."
 					)
 				)
-
-			assignment = get_assignment_for_date(self.mohasil, posting_date)
-			if not assignment:
-				frappe.throw(
-					frappe._(
-						"No active Donation Location Assignment found for Mohasil {0} on {1}. "
-						"Create or activate a Donation Location Assignment for this Mohasil and date."
-					).format(
-						self.mohasil,
-						frappe.format_value(posting_date, {"fieldtype": "Date"}),
-					)
-				)
-
-			if self.donation_location and self.donation_location != assignment.donation_location:
-				frappe.throw(
-					frappe._("Donation Location must be {0} for Mohasil {1} on {2}.").format(
-						assignment.donation_location,
-						self.mohasil,
-						frappe.format_value(posting_date, {"fieldtype": "Date"}),
-					)
-				)
-
-			self.donation_location = assignment.donation_location
-			self.location_assignment = assignment.name
+			if not self.donation_location:
+				frappe.throw(frappe._("Donation Location is required."))
+			self.location_assignment = None
 			return
 
 		self.location_assignment = None
@@ -337,7 +310,7 @@ class DonationOrder(Document):
 			return
 
 		if not self.mohasil:
-			frappe.throw(frappe._("Mohasil is required before selecting a Donation Book Leaf."))
+			frappe.throw(frappe._("Mohasil Warehouse is required before selecting a Donation Book Leaf."))
 
 		leaf = _get_donation_book_leaf_for_mohasil(
 			self.donation_book_leaf,
@@ -433,19 +406,19 @@ class DonationOrder(Document):
 			return
 
 		if self.manual_receipt_number and not self.mohasil:
-			frappe.throw(frappe._("Mohasil is required when Manual Receipt Number is entered."))
+			frappe.throw(frappe._("Mohasil Warehouse is required when Manual Receipt Number is entered."))
 
 		if self.mohasil:
-			validate_mohasil_employee(self.mohasil, "Mohasil")
+			validate_mohasil_warehouse(self.mohasil)
 
 		if not self.mohasil:
-			frappe.throw(frappe._("Mohasil is required for Mohasil Collection."))
+			frappe.throw(frappe._("Mohasil Warehouse is required for Mohasil Collection."))
 
 		if not self.donation_book_serial_no:
 			frappe.throw(
 				frappe._(
 					"Donation Book Serial No is required for Mohasil Collection. "
-					"Select a returned Donation Book Serial No assigned to the selected Mohasil."
+					"Select a returned Donation Book Serial No assigned to the selected Mohasil Warehouse."
 				)
 			)
 
@@ -478,6 +451,7 @@ class DonationOrder(Document):
 				and book.book_type in ('Donation Book', 'Mixed')
 				and book.status = 'Returned'
 				and book.docstatus != 2
+				and book.issued_to_warehouse = %(mohasil)s
 			and detail.parentfield = 'assigned_books'
 			and detail.book_type = 'Donation Book'
 			limit 1
@@ -488,7 +462,11 @@ class DonationOrder(Document):
 			},
 		)
 		if not result:
-			frappe.throw(frappe._("Donation Book Serial No {0} is not available.").format(self.donation_book_serial_no))
+			frappe.throw(
+				frappe._("Donation Book Serial No {0} is not available for the selected Mohasil Warehouse.").format(
+					self.donation_book_serial_no
+				)
+			)
 		self.donation_book = result[0][0]
 
 	def validate_donation_book_for_mohasil(self):
@@ -502,6 +480,7 @@ class DonationOrder(Document):
 				"from_receipt_no",
 				"to_receipt_no",
 				"remaining_receipts",
+				"issued_to_warehouse",
 			],
 			as_dict=True,
 		)
@@ -515,6 +494,12 @@ class DonationOrder(Document):
 					"Donation Book {0} is currently {1}. Use the Return action on the Book Assignment "
 					"and complete the cash collection before creating a Donation Order."
 				).format(self.donation_book, book.status or frappe._("Draft"))
+			)
+		if book.issued_to_warehouse != self.mohasil:
+			frappe.throw(
+				frappe._("Donation Book {0} is not assigned to Mohasil Warehouse {1}.").format(
+					self.donation_book, self.mohasil
+				)
 			)
 		if self.manual_receipt_date and book.start_date and getdate(self.manual_receipt_date) < getdate(book.start_date):
 			frappe.throw(
@@ -2150,6 +2135,7 @@ def _get_donation_book_leaf_for_mohasil(leaf_name, mohasil, current_order=None):
 		select
 			book.name as book,
 			book.status as book_status,
+			book.issued_to_warehouse,
 			detail.book_type
 		from `tabBook Assignment Detail` detail
 		inner join `tabBook Assignment` book on book.name = detail.parent
@@ -2169,7 +2155,20 @@ def _get_donation_book_leaf_for_mohasil(leaf_name, mohasil, current_order=None):
 		frappe.throw(frappe._("Donation Book Leaf {0} is not a Donation Book leaf.").format(leaf.name))
 	if assignment.book_status != "Returned":
 		frappe.throw(frappe._("Donation Book {0} must be Returned before its leaf can be used.").format(leaf.book))
+	if assignment.issued_to_warehouse != mohasil:
+		frappe.throw(
+			frappe._("Donation Book Leaf {0} is not assigned to Mohasil Warehouse {1}.").format(leaf.name, mohasil)
+		)
 	return leaf
+
+
+def validate_mohasil_warehouse(warehouse):
+	"""A Mohasil collection is controlled by the warehouse holding the returned book."""
+	warehouse_details = frappe.db.get_value(
+		"Warehouse", warehouse, ["name", "disabled", "is_group"], as_dict=True
+	)
+	if not warehouse_details or cint(warehouse_details.disabled) or cint(warehouse_details.is_group):
+		frappe.throw(frappe._("Select an active, non-group Warehouse for Mohasil Collection."))
 
 
 @frappe.whitelist()

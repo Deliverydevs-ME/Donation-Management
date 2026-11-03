@@ -10,9 +10,9 @@ const allowed_sponsorship_purposes = [
 	"Sponsorship - Maktab",
 ];
 const bank_draft_mode_of_payment = "Bank Draft";
-const mohasil_employee_filters = {
-	status: "Active",
-	designation: "Mohasil",
+const mohasil_warehouse_filters = {
+	disabled: 0,
+	is_group: 0,
 };
 
 frappe.ui.form.on("Donation Order", {
@@ -39,7 +39,7 @@ frappe.ui.form.on("Donation Order", {
 		});
 
 		frm.set_query("mohasil", () => ({
-			filters: mohasil_employee_filters,
+			filters: mohasil_warehouse_filters,
 		}));
 
 		frm.set_query("donation_location", () => ({}));
@@ -49,7 +49,7 @@ frappe.ui.form.on("Donation Order", {
 				show_link_dependency_message(
 					frm,
 					"donation_book_serial_no",
-					__("Select a Mohasil first. Only returned Donation Book Serial Nos assigned to that Mohasil can be selected.")
+					__("Select a Mohasil Warehouse first. Only returned Donation Book Serial Nos assigned to that warehouse can be selected.")
 				);
 			}
 
@@ -63,7 +63,7 @@ frappe.ui.form.on("Donation Order", {
 
 		frm.set_query("donation_book_leaf", () => {
 			if (cint(frm.doc.is_mohasil_collection) && !frm.doc.mohasil) {
-				show_link_dependency_message(frm, "donation_book_leaf", __("Select a Mohasil first."));
+				show_link_dependency_message(frm, "donation_book_leaf", __("Select a Mohasil Warehouse first."));
 			} else if (cint(frm.doc.is_mohasil_collection) && !frm.doc.donation_book_serial_no) {
 				show_link_dependency_message(
 					frm,
@@ -1524,7 +1524,7 @@ function set_donation_book_from_serial(frm) {
 			if (!book.name) {
 				show_donation_order_message(
 					__("Donation Book Not Available"),
-					__("The selected Donation Book Serial No is not available for the selected Mohasil. Select a returned book assigned to this Mohasil.")
+					__("The selected Donation Book Serial No is not available for the selected Mohasil Warehouse. Select a returned book assigned to this warehouse.")
 				);
 				set_value_if_changed(frm, "donation_book", "");
 				set_value_if_changed(frm, "donation_book_leaf", "");
@@ -1536,7 +1536,7 @@ function set_donation_book_from_serial(frm) {
 		error() {
 			show_donation_order_message(
 				__("Donation Book Lookup Failed"),
-				__("The Donation Book could not be loaded. Confirm that Mohasil and Donation Book Serial No are selected, then try again.")
+				__("The Donation Book could not be loaded. Confirm that Mohasil Warehouse and Donation Book Serial No are selected, then try again.")
 			);
 		},
 	});
@@ -1558,7 +1558,7 @@ function set_donation_book_from_leaf(frm) {
 			if (!leaf.name) {
 				show_donation_order_message(
 					__("Donation Book Leaf Not Available"),
-					__("The selected Donation Book Leaf is not available. Select an unused leaf belonging to the selected Mohasil and returned Donation Book.")
+					__("The selected Donation Book Leaf is not available. Select an unused leaf belonging to the selected Mohasil Warehouse and returned Donation Book.")
 				);
 				return;
 			}
@@ -1579,7 +1579,7 @@ function set_donation_book_from_leaf(frm) {
 		error() {
 			show_donation_order_message(
 				__("Donation Book Leaf Lookup Failed"),
-				__("The Donation Book Leaf could not be loaded. Select Mohasil and Donation Book Serial No first, then try again.")
+				__("The Donation Book Leaf could not be loaded. Select Mohasil Warehouse and Donation Book Serial No first, then try again.")
 			);
 		},
 	});
@@ -1719,24 +1719,16 @@ function get_donation_order_client_validation_errors(frm) {
 
 	if (is_mohasil_collection) {
 		if (!doc.mohasil) {
-			add_error(__("Select a Mohasil for Mohasil Collection."));
+			add_error(__("Select a Mohasil Warehouse for Mohasil Collection."));
 		}
 		if (!doc.donation_book_serial_no) {
-			add_error(__("Select a returned Donation Book Serial No assigned to the selected Mohasil."));
+			add_error(__("Select a returned Donation Book Serial No assigned to the selected Mohasil Warehouse."));
 		}
 		if (!doc.donation_book_leaf) {
 			add_error(__("Select an unused Donation Book Leaf."));
 		}
-		if (!doc.location_assignment) {
-			add_error(
-				__(
-					"No Donation Location Assignment is loaded for this Mohasil and Posting Date. " +
-					"Create or activate the assignment before saving."
-				)
-			);
-		}
 		if (!doc.donation_location) {
-			add_error(__("A Donation Location must be loaded from the Mohasil's active location assignment."));
+			add_error(__("Select a Donation Location for Mohasil Collection."));
 		}
 	}
 
@@ -1876,51 +1868,14 @@ function show_donation_order_message(title, message) {
 }
 
 function set_mohasil_from_selected_donor(frm) {
-	if (!frm.doc.donor_name || frm.doc.mohasil) {
-		return;
-	}
-
-	frappe.db.get_value("Donor", frm.doc.donor_name, "mohasil").then((response) => {
-		const mohasil = response && response.message && response.message.mohasil;
-		if (frm.doc.is_mohasil_collection && !frm.doc.mohasil && mohasil) {
-			set_value_if_changed(frm, "mohasil", mohasil);
-			set_effective_donation_location(frm);
-		}
-	});
+	// The selected Mohasil is a Warehouse, while Donor.mohasil is an Employee.
+	// Do not copy an Employee identifier into the Warehouse field.
 }
 
 function set_effective_donation_location(frm) {
-	if (!cint(frm.doc.is_mohasil_collection) || !frm.doc.mohasil || !frm.doc.donation_posting_date) {
-		return;
+	if (cint(frm.doc.is_mohasil_collection)) {
+		set_value_if_changed(frm, "location_assignment", "");
 	}
-
-	frappe.call({
-		method: "donation_management.donation_management.api.get_effective_donation_location",
-		args: {
-			employee: frm.doc.mohasil,
-			donation_date: frm.doc.donation_posting_date,
-		},
-		callback(response) {
-			const assignment = response.message || {};
-			if (!assignment.assignment) {
-				set_value_if_changed(frm, "donation_location", "");
-				set_value_if_changed(frm, "location_assignment", "");
-				show_donation_order_message(
-					__("Donation Location Assignment Missing"),
-					__("No active Donation Location Assignment was found for the selected Mohasil and Donation Posting Date. Create or activate an assignment before saving.")
-				);
-				return;
-			}
-			set_value_if_changed(frm, "donation_location", assignment.donation_location || "");
-			set_value_if_changed(frm, "location_assignment", assignment.assignment || "");
-		},
-		error() {
-			show_donation_order_message(
-				__("Donation Location Lookup Failed"),
-				__("The Donation Location could not be loaded. Confirm the Mohasil and Donation Posting Date, then try again.")
-			);
-		},
-	});
 }
 
 function get_effective_mode_of_payment_type(frm) {

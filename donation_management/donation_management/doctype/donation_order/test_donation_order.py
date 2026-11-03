@@ -255,14 +255,14 @@ class TestDonationOrder(FrappeTestCase):
 		)
 
 		with patch(
-			"donation_management.donation_management.doctype.donor.donor.validate_mohasil_employee"
+			"donation_management.donation_management.doctype.donation_order.donation_order.validate_mohasil_warehouse"
 			), patch.object(order, "set_donation_book_from_serial"), patch.object(
 			order, "validate_donation_book_for_mohasil"
 		):
 			with self.assertRaisesRegex(frappe.ValidationError, "Donation Book Leaf is required"):
 				order.validate_mohasil_details()
 
-	def test_mohasil_location_error_explains_how_to_fix_assignment(self):
+	def test_mohasil_collection_requires_donation_location(self):
 		order = DonationOrder(
 			{
 				"doctype": "Donation Order",
@@ -272,12 +272,8 @@ class TestDonationOrder(FrappeTestCase):
 			}
 		)
 
-		with patch(
-			"donation_management.donation_management.doctype.donation_order.donation_order.get_assignment_for_date",
-			return_value=None,
-		):
-			with self.assertRaisesRegex(frappe.ValidationError, "Create or activate a Donation Location Assignment"):
-				order.set_and_validate_donation_location()
+		with self.assertRaisesRegex(frappe.ValidationError, "Donation Location is required"):
+			order.set_and_validate_donation_location()
 
 	def test_mohasil_leaf_receipt_can_match_the_single_purpose_row(self):
 		order = DonationOrder(
@@ -320,7 +316,7 @@ class TestDonationOrder(FrappeTestCase):
 		assignment = frappe._dict(
 			book="BK-TEST",
 			book_status="Returned",
-			issued_to_employee="EMP-TEST",
+			issued_to_warehouse="EMP-TEST",
 			book_type="Donation Book",
 		)
 

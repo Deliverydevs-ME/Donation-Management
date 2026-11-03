@@ -283,7 +283,6 @@
    "fieldname": "collected_amount",
    "fieldtype": "Currency",
    "label": "Total Amount Collected",
-   "mandatory_depends_on": "eval:(doc.book_type == 'Coupon Book' || doc.book_type == 'Donation Book' || doc.book_type == 'Mixed') && (doc.status == 'Returned' || doc.status == 'Closed')",
    "non_negative": 1,
    "read_only": 1
   },

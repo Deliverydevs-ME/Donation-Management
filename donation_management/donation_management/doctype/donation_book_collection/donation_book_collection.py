@@ -8,6 +8,7 @@ from frappe.utils import cint, today
 
 class DonationBookCollection(Document):
 	def validate(self):
+		self.set_book_from_serial()
 		self.validate_book()
 		self.validate_book_serial_no()
 		self.populate_assignment_details_if_empty()
@@ -54,7 +55,7 @@ class DonationBookCollection(Document):
 	def validate_assignment_details(self, require_rows=False):
 		if not self.book_assignment_details:
 			if require_rows:
-				frappe.throw(frappe._("Fetch at least one submitted Donation Book Leaf before submitting."))
+				frappe.throw(frappe._("At least one submitted Donation Book Leaf is required before submitting."))
 			return
 
 		assigned_serials = {row.book_serial_no for row in self.get_assigned_serials() if row.book_serial_no}
@@ -76,7 +77,31 @@ class DonationBookCollection(Document):
 			seen.add(key)
 
 		if seen != fetched_receipts:
-			frappe.throw(frappe._("Receipt details have changed. Fetch Submitted Receipts again before saving."))
+			frappe.throw(frappe._("Receipt details have changed. Save the document again to refresh submitted receipts."))
+
+	def set_book_from_serial(self):
+		"""Derive the assignment from the selected Donation Book serial server-side."""
+		if not self.book_serial_no:
+			return
+
+		result = frappe.db.sql(
+			"""
+			select book.name
+			from `tabBook Assignment Detail` detail
+			inner join `tabBook Assignment` book on book.name = detail.parent
+			where detail.parenttype = 'Book Assignment'
+				and detail.parentfield = 'assigned_books'
+				and detail.book_type = 'Donation Book'
+				and detail.book_serial_no = %(book_serial_no)s
+				and book.docstatus != 2
+				and book.status in ('Issued', 'Returned', 'Closed')
+			limit 1
+			""",
+			{"book_serial_no": self.book_serial_no},
+		)
+		if not result:
+			frappe.throw(frappe._("Book Serial No {0} is not available for Donation Book Collection.").format(self.book_serial_no))
+		self.book = result[0][0]
 
 	def validate_book(self):
 		book = frappe.db.get_value(
@@ -241,10 +266,8 @@ def get_book_assignment_details(book, book_serial_no=None):
 @frappe.whitelist()
 @frappe.validate_and_sanitize_search_inputs
 def get_donation_book_serials(doctype, txt, searchfield, start, page_len, filters=None):
-	"""Return donation serials only after a Book Assignment is selected."""
+	"""Return Donation Book serials, with their assignment, for direct selection."""
 	filters = frappe._dict(filters or {})
-	if not filters.get("book"):
-		return []
 
 	return frappe.db.sql(
 		"""
@@ -252,8 +275,7 @@ def get_donation_book_serials(doctype, txt, searchfield, start, page_len, filter
 			concat(detail.book_serial_no, ' - ', book.name)
 		from `tabBook Assignment Detail` detail
 		inner join `tabBook Assignment` book on book.name = detail.parent
-		where detail.parent = %(book)s
-			and detail.parenttype = 'Book Assignment'
+		where detail.parenttype = 'Book Assignment'
 			and detail.parentfield = 'assigned_books'
 			and detail.book_type = %(donation_book_type)s
 			and ifnull(detail.book_serial_no, '') != ''
@@ -264,7 +286,6 @@ def get_donation_book_serials(doctype, txt, searchfield, start, page_len, filter
 		limit %(start)s, %(page_len)s
 		""",
 		{
-			"book": filters.get("book"),
 			"donation_book_type": "Donation Book",
 			"statuses": ("Issued", "Returned", "Closed"),
 			"search": "%{}%".format(txt or ""),
@@ -272,3 +293,33 @@ def get_donation_book_serials(doctype, txt, searchfield, start, page_len, filter
 			"page_len": cint(page_len),
 		},
 	)
+
+
+@frappe.whitelist()
+def get_donation_book_assignment_for_serial(book_serial_no):
+	"""Return the assignment displayed read-only after a serial is selected."""
+	if not book_serial_no:
+		return {}
+
+	result = frappe.db.sql(
+		"""
+		select book.name
+		from `tabBook Assignment Detail` detail
+		inner join `tabBook Assignment` book on book.name = detail.parent
+		where detail.parenttype = 'Book Assignment'
+			and detail.parentfield = 'assigned_books'
+			and detail.book_type = 'Donation Book'
+			and detail.book_serial_no = %(book_serial_no)s
+			and book.docstatus != 2
+			and book.status in ('Issued', 'Returned', 'Closed')
+		limit 1
+		""",
+		{"book_serial_no": book_serial_no},
+		as_dict=True,
+	)
+	if not result:
+		return {}
+
+	assignment = frappe.get_doc("Book Assignment", result[0].name)
+	assignment.check_permission("read")
+	return {"book": assignment.name}

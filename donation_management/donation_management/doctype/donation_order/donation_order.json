@@ -295,9 +295,9 @@
    "fieldtype": "Link",
    "in_list_view": 1,
    "in_standard_filter": 1,
-   "label": "Mohasil",
+   "label": "Mohasil Warehouse",
    "mandatory_depends_on": "eval:doc.is_mohasil_collection",
-   "options": "Employee"
+   "options": "Warehouse"
   },
   {
    "depends_on": "eval:doc.is_mohasil_collection",

@@ -25,12 +25,12 @@ class BookPageAdjustment(Document):
 			return
 
 		book_details = frappe.db.get_value("Book Assignment", self.book, ["book_type", "status"], as_dict=True)
-		if not book_details or book_details.book_type not in ("Coupon Book", "Mixed"):
-			frappe.throw(frappe._("Page adjustments can only be requested for Coupon Book records."))
+		if not book_details or book_details.book_type not in ("Coupon Book", "Donation Book", "Mixed"):
+			frappe.throw(frappe._("Page adjustments can only be requested for Coupon Book or Donation Book records."))
 
 		if book_details.status not in ("Issued", "Returned", "Closed"):
 			frappe.throw(
-				frappe._("Page adjustments can only be requested for Issued, Returned, or Closed coupon books.")
+				frappe._("Page adjustments can only be requested for Issued, Returned, or Closed books.")
 			)
 
 	def validate_affected_pages(self):
@@ -108,13 +108,28 @@ class BookPageAdjustment(Document):
 		affected = cint(self.affected_page_count)
 		if book.assigned_books:
 			row = next(
-				(row for row in book.assigned_books if row.book_serial_no == self.book_serial_no and row.book_type == "Coupon Book"),
+				(
+					row
+					for row in book.assigned_books
+					if row.book_serial_no == self.book_serial_no
+					and row.book_type in ("Coupon Book", "Donation Book")
+				),
 				None,
 			)
 			if not row:
-				frappe.throw(frappe._("Coupon Book Serial No {0} was not found in Book Assignment {1}.").format(self.book_serial_no, self.book))
-			row.total_pages = max(cint(row.total_pages) - affected, cint(row.used_pages))
-			row.remaining_pages = max(cint(row.total_pages) - cint(row.used_pages), 0)
+				frappe.throw(frappe._("Book Serial No {0} was not found in Book Assignment {1}.").format(self.book_serial_no, self.book))
+
+			original_total = get_receipt_range_count(row.from_receipt_no, row.to_receipt_no)
+			used_pages = cint(row.used_receipts if row.book_type == "Donation Book" else row.used_pages)
+			available_to_adjust = original_total - used_pages - cint(row.adjusted_pages)
+			if affected > available_to_adjust:
+				frappe.throw(
+					frappe._("Only {0} unused page(s) can be adjusted for Book Serial No {1}.").format(
+						max(available_to_adjust, 0), row.book_serial_no
+					)
+				)
+
+			row.adjusted_pages = cint(row.adjusted_pages) + affected
 			clear_cancelled_stock_entry_link(book)
 			book.flags.ignore_validate_update_after_submit = True
 			book.save(ignore_permissions=True)
@@ -163,7 +178,7 @@ def get_coupon_book_serials(doctype, txt, searchfield, start, page_len, filters)
 		where detail.parent = %(book)s
 			and detail.parenttype = 'Book Assignment'
 			and detail.parentfield = 'assigned_books'
-			and detail.book_type = 'Coupon Book'
+			and detail.book_type in ('Coupon Book', 'Donation Book')
 			and ifnull(detail.book_serial_no, '') != ''
 			and detail.book_serial_no like %(search)s
 		order by detail.book_serial_no
@@ -189,8 +204,8 @@ def get_coupon_book_total_pages(book, book_serial_no=None, book_details=None):
 		["book_type", "total_pages", "book_serial_no"],
 		as_dict=True,
 	)
-	if not book_details or book_details.book_type not in ("Coupon Book", "Mixed"):
-		frappe.throw(frappe._("Page adjustments can only be requested for Coupon Book records."))
+	if not book_details or book_details.book_type not in ("Coupon Book", "Donation Book", "Mixed"):
+		frappe.throw(frappe._("Page adjustments can only be requested for Coupon Book or Donation Book records."))
 
 	rows = frappe.get_all(
 		"Book Assignment Detail",
@@ -198,20 +213,22 @@ def get_coupon_book_total_pages(book, book_serial_no=None, book_details=None):
 			"parent": book,
 			"parenttype": "Book Assignment",
 			"parentfield": "assigned_books",
-			"book_type": "Coupon Book",
 		},
-		fields=["book_serial_no", "total_pages"],
+		fields=["book_serial_no", "book_type", "total_pages"],
 	)
 	if rows:
 		if not book_serial_no:
-			frappe.throw(frappe._("Book Serial No is required for this Coupon Book Assignment."))
-		row = next((row for row in rows if row.book_serial_no == book_serial_no), None)
+			frappe.throw(frappe._("Book Serial No is required for this Book Assignment."))
+		row = next(
+			(row for row in rows if row.book_serial_no == book_serial_no and row.book_type in ("Coupon Book", "Donation Book")),
+			None,
+		)
 		if not row:
-			frappe.throw(frappe._("Coupon Book Serial No {0} was not found in this assignment.").format(book_serial_no))
+			frappe.throw(frappe._("Book Serial No {0} was not found in this assignment.").format(book_serial_no))
 		return cint(row.total_pages)
 
 	if book_details.book_type == "Mixed":
-		frappe.throw(frappe._("Coupon Book Serial No is required for a Mixed Book Assignment."))
+		frappe.throw(frappe._("Book Serial No is required for a Mixed Book Assignment."))
 	if book_serial_no and book_details.book_serial_no and book_serial_no != book_details.book_serial_no:
-		frappe.throw(frappe._("Book Serial No {0} is not the Coupon Book serial for this assignment.").format(book_serial_no))
+		frappe.throw(frappe._("Book Serial No {0} is not the serial for this assignment.").format(book_serial_no))
 	return cint(book_details.total_pages)

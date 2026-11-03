@@ -19,14 +19,14 @@ class TestBookPageAdjustment(FrappeTestCase):
 		with patch.object(
 			frappe,
 			"get_all",
-			return_value=[frappe._dict(book_serial_no="COUPON-01", total_pages=25)],
+			return_value=[frappe._dict(book_serial_no="COUPON-01", book_type="Coupon Book", total_pages=25)],
 		):
 			self.assertEqual(get_coupon_book_total_pages("BA-TEST", "COUPON-01", book_details), 25)
 
 	def test_mixed_assignment_rejects_missing_coupon_serial(self):
 		book_details = frappe._dict(book_type="Mixed", total_pages=0, book_serial_no=None)
 		with patch.object(frappe, "get_all", return_value=[]):
-			with self.assertRaisesRegex(frappe.ValidationError, "Coupon Book Serial No is required"):
+			with self.assertRaisesRegex(frappe.ValidationError, "Book Serial No is required"):
 				get_coupon_book_total_pages("BA-TEST", None, book_details)
 
 	def test_affected_pages_field_parses_page_numbers_and_ranges(self):

@@ -90,7 +90,7 @@
    "property": "field_order",
    "property_type": "Data",
    "row_name": null,
-   "value": "[\"coupon_detail_section\", \"book\", \"book_serial_no\", \"coupon_type\", \"coupon_value\", \"coupon_color\", \"coupon_number\", \"column_break_coupon\", \"warehouse\", \"receipt_format\", \"from_receipt_no\", \"to_receipt_no\", \"donor_detail_section\", \"donor_name\", \"cnic\", \"donor_contact_section\", \"contact\", \"column_break_khbk\", \"address\", \"section_break_emph\", \"volunteer_name\", \"area\", \"column_break_xjfk\", \"posting_date\", \"section_break_miro\", \"number_of_pages\", \"amount\", \"accounting_section\", \"company\", \"mode_of_payment\", \"mode_of_payment_type\", \"debit_account\", \"custom_column_break_xqgt6\", \"accounting_cost_center\", \"journal_entry\", \"accounting_status\", \"credit_account\"]"
+   "value": "[\"coupon_detail_section\", \"book_serial_no\", \"book\", \"coupon_type\", \"coupon_value\", \"coupon_color\", \"coupon_number\", \"column_break_coupon\", \"warehouse\", \"receipt_format\", \"from_receipt_no\", \"to_receipt_no\", \"donor_detail_section\", \"donor_name\", \"cnic\", \"donor_contact_section\", \"contact\", \"column_break_khbk\", \"address\", \"section_break_emph\", \"volunteer_name\", \"area\", \"column_break_xjfk\", \"posting_date\", \"section_break_miro\", \"number_of_pages\", \"amount\", \"accounting_section\", \"company\", \"mode_of_payment\", \"debit_account\", \"custom_column_break_xqgt6\", \"accounting_cost_center\", \"journal_entry\", \"accounting_status\", \"credit_account\"]"
   }
  ],
  "sync_on_migrate": 1

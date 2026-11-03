@@ -15,6 +15,7 @@
   "credit_account",
   "coupon_color",
   "total_pages",
+  "adjusted_pages",
   "used_pages",
   "remaining_pages",
   "receipt_format",
@@ -97,6 +98,15 @@
    "in_list_view": 1,
    "label": "Total Pages",
    "non_negative": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "adjusted_pages",
+   "fieldtype": "Int",
+   "hidden": 1,
+   "label": "Adjusted Pages",
+   "non_negative": 1,
+   "read_only": 1
   },
   {
    "default": "0",

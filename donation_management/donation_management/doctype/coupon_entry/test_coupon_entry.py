@@ -57,8 +57,11 @@ class TestCoupon(FrappeTestCase):
 				coupon.validate_number_of_pages()
 
 	def test_new_coupon_requires_a_returned_book(self):
-		coupon = Coupon({"doctype": "Coupon Entry", "book": "BK-00001"})
+		coupon = Coupon({"doctype": "Coupon Entry", "book_serial_no": "SC-01"})
 		with patch(
+			"donation_management.donation_management.doctype.coupon_entry.coupon_entry.get_coupon_book_assignment_for_serial",
+			return_value="BK-00001",
+		), patch(
 			"donation_management.donation_management.doctype.coupon_entry.coupon_entry._get_coupon_book_details",
 			return_value=frappe._dict(status="Issued"),
 		), self.assertRaisesRegex(frappe.ValidationError, "must be Returned"):
@@ -66,7 +69,7 @@ class TestCoupon(FrappeTestCase):
 
 	def test_coupon_serial_query_qualifies_joined_serial_column(self):
 		source = Path(__file__).with_name("coupon_entry.py").read_text()
-		self.assertIn("select detail.book_serial_no, detail.book_serial_no", source)
+		self.assertIn("select detail.book_serial_no, concat(detail.book_serial_no", source)
 
 	def test_coupon_type_can_be_detected_from_selected_item_value(self):
 		with patch.object(frappe.db, "get_value", return_value=None):

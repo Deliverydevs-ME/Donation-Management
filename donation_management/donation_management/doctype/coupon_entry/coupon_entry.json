@@ -7,8 +7,8 @@
  "engine": "InnoDB",
  "field_order": [
   "coupon_detail_section",
-  "book",
   "book_serial_no",
+  "book",
   "coupon_type",
   "coupon_value",
   "coupon_color",
@@ -37,7 +37,6 @@
   "accounting_section",
   "company",
   "mode_of_payment",
-  "mode_of_payment_type",
   "debit_account",
   "credit_account",
   "accounting_cost_center",
@@ -89,14 +88,15 @@
    "in_list_view": 1,
    "label": "Book Assignment",
    "options": "Book Assignment",
-   "reqd": 1
+   "read_only": 1
   },
   {
    "fieldname": "book_serial_no",
    "fieldtype": "Link",
    "in_list_view": 1,
    "label": "Book Serial No",
-   "options": "Serial No"
+   "options": "Serial No",
+   "reqd": 1
   },
   {
    "fetch_from": "book.warehouse",
@@ -231,12 +231,6 @@
    "fieldtype": "Link",
    "label": "Mode of Payment",
    "options": "Mode of Payment",
-   "read_only": 1
-  },
-  {
-   "fieldname": "mode_of_payment_type",
-   "fieldtype": "Data",
-   "label": "Mode of Payment Type",
    "read_only": 1
   },
   {

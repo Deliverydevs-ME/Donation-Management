@@ -577,6 +577,7 @@ function add_action_buttons(frm) {
 		frm.add_custom_button(__("Request Page Adjustment"), () => create_page_adjustment(frm), __("Actions"));
 	} else if (frm.doc.status === "Issued" && [book_type_donation, book_type_mixed].includes(frm.doc.book_type)) {
 		frm.add_custom_button(__("Return"), () => show_donation_book_return_dialog(frm), __("Actions"));
+		frm.add_custom_button(__("Request Page Adjustment"), () => create_page_adjustment(frm), __("Actions"));
 	} else if (frm.doc.status === "Returned") {
 		if (frm.doc.book_type === book_type_coupon) {
 			add_coupon_book_returned_actions(frm);
@@ -586,7 +587,7 @@ function add_action_buttons(frm) {
 				add_donation_book_reopen_button_if_eligible(frm);
 			}
 		}
-		if ([book_type_coupon, book_type_mixed].includes(frm.doc.book_type)) {
+		if ([book_type_coupon, book_type_donation, book_type_mixed].includes(frm.doc.book_type)) {
 			frm.add_custom_button(__("Request Page Adjustment"), () => create_page_adjustment(frm), __("Actions"));
 		}
 	} else if (frm.doc.status === "Closed" && frm.has_perm("write")) {
@@ -756,7 +757,7 @@ function build_donation_book_return_dialog(frm, return_details) {
 			fieldname: `collected_amount_${index}`,
 			fieldtype: "Currency",
 			label: __("Collected Amount"),
-			reqd: coupon_detail ? 0 : 1,
+				reqd: 0,
 			non_negative: 1,
 			default: flt(coupon_detail && coupon_detail.total_amount),
 			read_only: coupon_detail ? 1 : 0,
@@ -1090,15 +1091,6 @@ function validate_donation_book_return_collections(dialog, assigned_books) {
 		const collected_amount = flt(dialog.get_value(`collected_amount_${index}`));
 		const denomination_total = flt(dialog.get_value(`denomination_total_${index}`));
 
-		if (collected_amount <= 0 && assigned_books[index].book_type !== book_type_coupon) {
-			frappe.msgprint(
-				__("Collected Amount must be greater than zero for Book Serial No {0}.", [
-					book_serial_no,
-				])
-			);
-			return false;
-		}
-
 		if (denomination_total && collected_amount !== denomination_total) {
 			frappe.msgprint(
 				__(
@@ -1116,10 +1108,6 @@ function validate_donation_book_return_collections(dialog, assigned_books) {
 		grand_total += collected_amount;
 	}
 
-	if (grand_total <= 0) {
-		frappe.msgprint(__("Total Amount Collected must be greater than zero."));
-		return false;
-	}
 	return true;
 }
 

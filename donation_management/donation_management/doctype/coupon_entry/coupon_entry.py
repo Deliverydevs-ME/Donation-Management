@@ -54,6 +54,7 @@ class CouponEntry(Document):
 	def on_submit(self):
 		self.create_journal_entry()
 		self.allocate_coupon_book_leaves()
+		sync_coupon_entry_leaf_connections(self.name)
 		self.sync_book_pages()
 
 	def on_cancel(self):
@@ -76,8 +77,19 @@ class CouponEntry(Document):
 			sync_book_page_counts(self.book, exclude_coupon=self.name, book_serial_no=self.book_serial_no)
 
 	def set_coupon_book_details(self):
-		if not self.book:
-			frappe.throw(frappe._("Book is required."))
+		if not self.book_serial_no:
+			frappe.throw(frappe._("Book Serial No is required."))
+
+		derived_book = get_coupon_book_assignment_for_serial(
+			self.book_serial_no, require_available=self.is_new()
+		)
+		if self.book and self.book != derived_book:
+			frappe.throw(
+				frappe._("Book Serial No {0} does not belong to Book Assignment {1}.").format(
+					self.book_serial_no, self.book
+				)
+			)
+		self.book = derived_book
 
 		book = _get_coupon_book_details(self.book, self.book_serial_no)
 
@@ -311,9 +323,8 @@ def _get_coupon_book_details(book_name, book_serial_no=None, allow_missing_seria
 			frappe.throw(frappe._("Book Serial No {0} is not a Coupon Book in this assignment.").format(book_serial_no))
 		book.update(row)
 
-	# Mixed assignments keep the issuing employee in issued_to_employee while
-	# volunteer_name is hidden on the parent form. Coupons should still inherit
-	# that employee from the selected Book Assignment.
+	# Retain the historical employee display value when it exists on older Book
+	# Assignments. Warehouse selection remains the stock-control mechanism.
 	if not book.volunteer_name:
 		book.volunteer_name = book.issued_to_employee
 
@@ -323,6 +334,50 @@ def _get_coupon_book_details(book_name, book_serial_no=None, allow_missing_seria
 @frappe.whitelist()
 def get_coupon_book_details(book, book_serial_no=None):
 	return _get_coupon_book_details(book, book_serial_no, allow_missing_serial=True)
+
+
+def get_coupon_book_assignment_for_serial(book_serial_no, require_available=True):
+	"""Return the Coupon Book assignment that owns a serial, enforcing availability for new entries."""
+	if not book_serial_no:
+		frappe.throw(frappe._("Book Serial No is required."))
+
+	availability_condition = """
+		and detail.remaining_pages > 0
+		and book.status = 'Returned'
+	""" if require_available else """
+		and book.status in ('Returned', 'Closed')
+	"""
+	result = frappe.db.sql(
+		"""
+		select book.name
+		from `tabBook Assignment Detail` detail
+		inner join `tabBook Assignment` book on book.name = detail.parent
+		where detail.parenttype = 'Book Assignment'
+			and detail.parentfield = 'assigned_books'
+			and detail.book_type = 'Coupon Book'
+			and detail.book_serial_no = %(book_serial_no)s
+			{availability_condition}
+			and book.docstatus != 2
+		limit 1
+		""".format(availability_condition=availability_condition),
+		{"book_serial_no": book_serial_no},
+		as_dict=True,
+	)
+	if not result:
+		frappe.throw(frappe._("Coupon Book Serial No {0} is not available.").format(book_serial_no))
+
+	assignment = frappe.get_doc("Book Assignment", result[0].name)
+	assignment.check_permission("read")
+	return assignment.name
+
+
+@frappe.whitelist()
+def get_coupon_book_details_by_serial(book_serial_no, include_unavailable=0):
+	"""Populate Coupon Entry from its selected serial without allowing a separate book choice."""
+	book = get_coupon_book_assignment_for_serial(book_serial_no, require_available=not cint(include_unavailable))
+	details = _get_coupon_book_details(book, book_serial_no)
+	details.book = book
+	return details
 
 
 @frappe.whitelist()
@@ -522,18 +577,17 @@ def get_available_books(doctype, txt, searchfield, start, page_len, filters):
 @frappe.validate_and_sanitize_search_inputs
 def get_available_coupon_serials(doctype, txt, searchfield, start, page_len, filters):
 	filters = frappe._dict(filters or {})
-	if not filters.get("book"):
-		return []
 	return frappe.db.sql(
 		"""
-		select detail.book_serial_no, detail.book_serial_no
+		select detail.book_serial_no, concat(detail.book_serial_no, ' - ', book.name)
 		from `tabBook Assignment Detail` detail
 		inner join `tabBook Assignment` book on book.name = detail.parent
-		where detail.parent = %(book)s and detail.parenttype = 'Book Assignment'
+		where detail.parenttype = 'Book Assignment'
 			and detail.book_type = 'Coupon Book' and ifnull(detail.remaining_pages, 0) > 0
 			and book.status = 'Returned' and book.docstatus < 2
+			and (%(book)s = '' or detail.parent = %(book)s)
 			and detail.book_serial_no like %(txt)s
 		order by detail.idx limit %(start)s, %(page_len)s
 		""",
-		{"book": filters.book, "txt": f"%{txt}%", "start": start, "page_len": page_len},
+		{"book": filters.get("book") or "", "txt": f"%{txt}%", "start": start, "page_len": page_len},
 	)

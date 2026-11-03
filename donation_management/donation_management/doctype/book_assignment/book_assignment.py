@@ -261,11 +261,8 @@ class BookAssignment(Document):
 					to_receipt_no=row.to_receipt_no,
 					donation_book_serial_no=row.book_serial_no,
 				) if not self.is_new() else cint(row.used_receipts)
-				row.remaining_receipts = max(
-					get_receipt_range_count(row.from_receipt_no, row.to_receipt_no) - cint(row.used_receipts),
-					0,
-				)
-				row.total_pages = get_receipt_range_count(row.from_receipt_no, row.to_receipt_no)
+				row.total_pages = get_effective_row_total_pages(row)
+				row.remaining_receipts = max(cint(row.total_pages) - cint(row.used_receipts), 0)
 				row.used_pages = cint(row.used_receipts)
 				row.remaining_pages = cint(row.remaining_receipts)
 				total_used_receipts += cint(row.used_receipts)
@@ -282,7 +279,7 @@ class BookAssignment(Document):
 				self.validate_coupon_income_account(row)
 				row.coupon_color = COUPON_COLORS[row.coupon_type]
 				row.used_pages = get_assigned_coupon_used_pages(self.name, row.book_serial_no) if not self.is_new() else cint(row.used_pages)
-				row.total_pages = get_receipt_range_count(row.from_receipt_no, row.to_receipt_no)
+				row.total_pages = get_effective_row_total_pages(row)
 				row.remaining_pages = max(cint(row.total_pages) - cint(row.used_pages), 0)
 			row.status = row.status or "Draft"
 
@@ -492,11 +489,8 @@ class BookAssignment(Document):
 					from_receipt_no=row.from_receipt_no,
 					to_receipt_no=row.to_receipt_no,
 				) if not self.is_new() else cint(row.used_receipts)
-				row.remaining_receipts = max(
-					get_receipt_range_count(row.from_receipt_no, row.to_receipt_no) - cint(row.used_receipts),
-					0,
-				)
-				row.total_pages = get_receipt_range_count(row.from_receipt_no, row.to_receipt_no)
+				row.total_pages = get_effective_row_total_pages(row)
+				row.remaining_receipts = max(cint(row.total_pages) - cint(row.used_receipts), 0)
 				row.used_pages = cint(row.used_receipts)
 				row.remaining_pages = cint(row.remaining_receipts)
 				total_used_receipts += cint(row.used_receipts)
@@ -735,10 +729,6 @@ class BookAssignment(Document):
 		self.validate_book_serial_not_assigned_elsewhere(self.book_serial_no)
 
 	def validate_cash_denominations(self):
-		if self.status in ("Returned", "Closed"):
-			if flt(self.collected_amount) <= 0:
-				frappe.throw(frappe._("Total Amount Collected is required when Book is returned."))
-
 		if not self.cash_denominations:
 			return
 
@@ -1292,9 +1282,6 @@ def return_donation_book(book, collected_amount=None, denominations=None, book_c
 			)
 		donation_rows[0].collected_amount = flt(donation_rows[0].collected_amount) + collected_amount
 
-	if collected_amount <= 0:
-		frappe.throw(frappe._("Total Amount Collected is required when returning a Donation Book."))
-
 	set_cash_denominations(doc, denominations)
 	# Keep the assignment total cumulative across issue / return cycles. Each
 	# Donation Book row retains its own cumulative amount for serial-level checks.
@@ -1368,13 +1355,6 @@ def set_donation_book_return_collections(doc, book_collections):
 						book_serial_no
 					)
 				)
-		elif collected_amount <= 0:
-			frappe.throw(
-				frappe._("Collected Amount must be greater than zero for Book Serial No {0}.").format(
-					book_serial_no,
-				)
-			)
-
 		if assigned_book.book_type == BOOK_TYPE_COUPON:
 			if get_denomination_total(collection) or flt(collection.get("denomination_total")):
 				frappe.throw(
@@ -1441,6 +1421,14 @@ def validate_return_collection_denominations(collection, collected_amount, book_
 					book_serial_no,
 				)
 			)
+
+
+def get_effective_row_total_pages(row):
+	"""Return the printed receipt count less pages removed by approved adjustments."""
+	return max(
+		get_receipt_range_count(row.from_receipt_no, row.to_receipt_no) - cint(row.get("adjusted_pages")),
+		0,
+	)
 
 
 def get_receipt_range_count(from_receipt_no, to_receipt_no):
@@ -1683,12 +1671,12 @@ def update_donation_book_receipt_usage(book):
 			"parentfield": "assigned_books",
 			"book_type": BOOK_TYPE_DONATION,
 		},
-		fields=["name", "book_serial_no", "from_receipt_no", "to_receipt_no"],
+		fields=["name", "book_serial_no", "from_receipt_no", "to_receipt_no", "adjusted_pages"],
 	)
 	total_receipts = 0
 	if assigned_rows:
 		for row in assigned_rows:
-			row_total_receipts = get_receipt_range_count(row.from_receipt_no, row.to_receipt_no)
+			row_total_receipts = get_effective_row_total_pages(row)
 			row_used_receipts = get_donation_book_used_receipts(
 				book,
 				from_receipt_no=row.from_receipt_no,
@@ -2214,8 +2202,9 @@ def get_mohasil_donation_books(doctype, txt, searchfield, start, page_len, filte
 			group by parent
 		) serials
 			on serials.parent = book.name
-			where book.book_type in %(book_types)s
+		where book.book_type in %(book_types)s
 			and book.status = %(status)s
+			and book.issued_to_warehouse = %(mohasil)s
 			and (
 				book.remaining_receipts > 0
 				or exists (
@@ -2270,6 +2259,7 @@ def get_mohasil_donation_book_serials(doctype, txt, searchfield, start, page_len
 			where book.book_type in %(book_types)s
 				and book.status = %(status)s
 				and book.docstatus != 2
+				and book.issued_to_warehouse = %(mohasil)s
 			and detail.parentfield = 'assigned_books'
 			and detail.book_type = %(donation_book_type)s
 			and ifnull(detail.book_serial_no, '') != ''
@@ -2313,7 +2303,8 @@ def get_donation_book_for_serial(book_serial_no=None, mohasil=None):
 		where detail.book_serial_no = %(book_serial_no)s
 				and book.book_type in %(book_types)s
 			and book.status = %(status)s
-				and book.docstatus != 2
+			and book.docstatus != 2
+			and book.issued_to_warehouse = %(mohasil)s
 			and detail.parentfield = 'assigned_books'
 			and detail.book_type = %(donation_book_type)s
 		limit 1
@@ -2353,6 +2344,7 @@ def get_mohasil_donation_book_leaves(doctype, txt, searchfield, start, page_len,
 		where detail.book_type = %(donation_book_type)s
 			and book.book_type in %(book_types)s
 			and book.status = %(status)s
+			and book.issued_to_warehouse = %(mohasil)s
 				and (%(book)s = '' or book.name = %(book)s)
 			and (%(book_serial_no)s = '' or detail.book_serial_no = %(book_serial_no)s)
 			and book.docstatus != 2

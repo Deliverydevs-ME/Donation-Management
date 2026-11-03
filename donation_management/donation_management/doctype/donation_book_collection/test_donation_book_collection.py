@@ -83,11 +83,11 @@ class TestDonationBookCollection(FrappeTestCase):
 		self.assertIn("order_doc.docstatus = 1", query)
 		self.assertEqual(values, {"book": "BK-00001", "book_serial_no": "DB-001"})
 
-	def test_collection_uses_explicit_fetch_action(self):
+	def test_collection_has_no_explicit_fetch_action(self):
 		path = Path(__file__).with_name("donation_book_collection.js")
 		script = path.read_text()
-		self.assertIn('__("Fetch Submitted Receipts")', script)
-		self.assertNotIn("populate_book_assignment_details", script)
+		self.assertNotIn('__("Fetch Submitted Receipts")', script)
+		self.assertIn("get_donation_book_assignment_for_serial", script)
 
 	def test_save_populates_empty_collection_details_without_fetching_in_browser(self):
 		collection = DonationBookCollection(
@@ -133,7 +133,7 @@ class TestDonationBookCollection(FrappeTestCase):
 
 	def test_collection_submission_requires_fetched_rows(self):
 		collection = DonationBookCollection({"doctype": "Donation Book Collection"})
-		with self.assertRaisesRegex(frappe.ValidationError, "Fetch at least one submitted Donation Book Leaf"):
+		with self.assertRaisesRegex(frappe.ValidationError, "At least one submitted Donation Book Leaf"):
 			collection.before_submit()
 
 	def test_collection_requires_book_serial_no(self):
@@ -174,23 +174,23 @@ class TestDonationBookCollection(FrappeTestCase):
 		self.assertNotIn("book.book_type = 'Coupon Book'", query)
 		self.assertEqual(values["donation_book_type"], "Donation Book")
 
-	def test_serial_query_returns_nothing_until_assignment_is_selected(self):
-		query_method = unwrap_search_method(get_donation_book_serials)
-
-		with patch.object(frappe.db, "sql") as sql:
-			self.assertEqual(query_method("Serial No", "", "name", 0, 20, {}), [])
-			sql.assert_not_called()
-
-	def test_serial_query_is_restricted_to_selected_assignment_donation_rows(self):
+	def test_serial_query_does_not_require_assignment_selection(self):
 		query_method = unwrap_search_method(get_donation_book_serials)
 
 		with patch.object(frappe.db, "sql", return_value=[]) as sql:
-			query_method("Serial No", "DB", "name", 0, 20, {"book": "BK-0001"})
+			self.assertEqual(query_method("Serial No", "", "name", 0, 20, {}), [])
+			sql.assert_called_once()
+
+	def test_serial_query_is_restricted_to_donation_rows(self):
+		query_method = unwrap_search_method(get_donation_book_serials)
+
+		with patch.object(frappe.db, "sql", return_value=[]) as sql:
+			query_method("Serial No", "DB", "name", 0, 20, {})
 
 		query, values = sql.call_args.args
-		self.assertIn("detail.parent = %(book)s", query)
+		self.assertNotIn("detail.parent = %(book)s", query)
 		self.assertIn("detail.book_type = %(donation_book_type)s", query)
-		self.assertEqual(values["book"], "BK-0001")
+		self.assertEqual(values["donation_book_type"], "Donation Book")
 
 	def test_mohasil_layout_has_no_redundant_column_break(self):
 		path = (
