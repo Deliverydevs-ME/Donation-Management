@@ -46,19 +46,12 @@ frappe.ui.form.on("Book Assignment", {
 			filters: mohasil_employee_filters,
 		}));
 
-		frm.set_query("issued_to_employee", () => {
-			if (frm.doc.book_type === book_type_donation) {
-				return {
-					filters: mohasil_employee_filters,
-				};
-			}
-
-			return {
-				filters: {
-					status: "Active",
-				},
-			};
-		});
+		frm.set_query("issued_to_warehouse", () => ({
+			filters: {
+				is_group: 0,
+				disabled: 0,
+			},
+		}));
 
 		frm.set_query("book_serial_no", "assigned_books", (doc, cdt, cdn) => ({
 			query: "donation_management.donation_management.doctype.book_assignment.book_assignment.get_available_book_serial_nos",
@@ -120,7 +113,7 @@ frappe.ui.form.on("Book Assignment", {
 		set_coupon_color(frm);
 		frm.set_value("item", "");
 		frm.set_value("book_serial_no", "");
-		frm.set_value("issued_to_employee", "");
+		frm.set_value("issued_to_warehouse", "");
 		refresh_assigned_books_grid(frm);
 		frm.__previous_book_type = frm.doc.book_type;
 	},
@@ -142,7 +135,7 @@ frappe.ui.form.on("Book Assignment", {
 		frm.set_value("book_serial_no", "");
 	},
 
-	issued_to_employee(frm) {
+	issued_to_warehouse(frm) {
 		set_assigned_book_grid_properties(frm);
 	},
 
@@ -452,7 +445,8 @@ function set_book_type_visibility(frm) {
 
 	frm.toggle_reqd("item", false);
 	frm.toggle_reqd("book_serial_no", false);
-	frm.toggle_reqd("issued_to_employee", is_coupon_book || is_donation_book || is_mixed);
+	frm.toggle_reqd("issued_to_warehouse", is_coupon_book || is_donation_book || is_mixed);
+	frm.toggle_display("issued_to_employee", false);
 	frm.toggle_reqd("coupon_value", false);
 	frm.toggle_reqd("warehouse", false);
 	frm.toggle_reqd("total_pages", false);
@@ -651,11 +645,11 @@ function show_reopen_dialog(frm) {
 		title: __("Reopen Book"),
 		fields: [
 			{
-				fieldname: "issued_to_employee",
+				fieldname: "issued_to_warehouse",
 				fieldtype: "Link",
-				label: __("Issued To Employee"),
-				options: "Employee",
-				default: frm.doc.issued_to_employee,
+				label: __("Issued To Warehouse"),
+				options: "Warehouse",
+				default: frm.doc.issued_to_warehouse,
 				reqd: 1,
 			},
 			{
@@ -672,7 +666,7 @@ function show_reopen_dialog(frm) {
 				args: {
 					book: frm.doc.name,
 					reason: values.reason,
-					issued_to_employee: values.issued_to_employee,
+					issued_to_warehouse: values.issued_to_warehouse,
 				},
 				freeze: true,
 				callback() {

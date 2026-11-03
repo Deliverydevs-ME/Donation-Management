@@ -34,6 +34,8 @@ class BookAssignment(Document):
 	def validate(self):
 		self.set_defaults()
 		self.validate_book_type()
+		if self.issued_to_warehouse and (not self.docstatus or self.status == "Draft"):
+			self.set_issued_to_employee_from_warehouse()
 		self.set_book_serial_numbers()
 		self.validate_status_transition()
 		if self.is_mixed_assignment() or self.assigned_books or self.is_new():
@@ -338,8 +340,9 @@ class BookAssignment(Document):
 			frappe.throw(frappe._("Book Serial No is required for Book."))
 		if self.is_donation_book() and not (self.assigned_books or self.book_serial_no):
 			frappe.throw(frappe._("At least one Book Serial No is required in Assigned Books."))
-		if not self.issued_to_employee:
-			frappe.throw(frappe._("Issued To Employee is required for Book."))
+		if not self.issued_to_warehouse:
+			frappe.throw(frappe._("Issued To Warehouse is required for Book."))
+		get_book_target_warehouse(self)
 
 		item = frappe.db.get_value(
 			"Item",
@@ -353,12 +356,6 @@ class BookAssignment(Document):
 			frappe.throw(frappe._("Item {0} is disabled.").format(self.item))
 		if not cint(item.is_stock_item) or not cint(item.has_serial_no):
 			frappe.throw(frappe._("Book Item {0} must be a stock Item with serial numbers enabled.").format(self.item))
-
-		employee = frappe.db.get_value("Employee", self.issued_to_employee, ["status"], as_dict=True)
-		if not employee:
-			frappe.throw(frappe._("Issued To Employee {0} was not found.").format(self.issued_to_employee))
-		if employee.status and employee.status != "Active":
-			frappe.throw(frappe._("Issued To Employee {0} must be active.").format(self.issued_to_employee))
 
 	def validate_coupon_book_details(self):
 		if not is_coupon_item(self.item):
@@ -388,6 +385,13 @@ class BookAssignment(Document):
 
 	def set_coupon_employee_details(self):
 		self.volunteer_name = self.issued_to_employee
+
+	def set_issued_to_employee_from_warehouse(self):
+		"""Derive the operational employee from the selected employee-named Warehouse."""
+		if not self.issued_to_warehouse:
+			return
+
+		self.issued_to_employee = get_warehouse_employee(self.issued_to_warehouse, self.get("company"))
 
 	def set_used_pages_from_coupons(self):
 		if self.is_new():
@@ -600,8 +604,8 @@ class BookAssignment(Document):
 		if not self.assigned_books:
 			return
 
-		if not self.issued_to_employee:
-			frappe.throw(frappe._("Issued To Employee is required before assigning multiple books."))
+		if not self.issued_to_warehouse:
+			frappe.throw(frappe._("Issued To Warehouse is required before assigning multiple books."))
 
 		seen_serials = set()
 		for row in self.assigned_books:
@@ -794,22 +798,22 @@ def issue_book(book):
 
 
 @frappe.whitelist()
-def reopen_book(book, reason, issued_to_employee=None):
+def reopen_book(book, reason, issued_to_warehouse=None):
 	if not reason:
 		frappe.throw(frappe._("Reopen Reason is required."))
 
 	doc = frappe.get_doc("Book Assignment", book)
 	doc.check_permission("write")
 	if doc.is_donation_book() or doc.has_donation_rows():
-		return reopen_donation_book(doc, reason, issued_to_employee)
+		return reopen_donation_book(doc, reason, issued_to_warehouse)
 
 	if doc.status not in ("Returned", "Closed"):
 		frappe.throw(frappe._("Only returned or closed Books can be reopened."))
 	if doc.is_exhausted():
 		frappe.throw(frappe._("A fully utilized Book Assignment cannot be reopened."))
 
-	previous_employee = doc.issued_to_employee
-	set_reissued_employee(doc, issued_to_employee)
+	previous_warehouse = doc.issued_to_warehouse
+	set_reissued_warehouse(doc, issued_to_warehouse)
 	doc.flags.ignore_validate_update_after_submit = True
 	doc.flags.reopening_book = True
 	doc.status = "Issued"
@@ -820,7 +824,7 @@ def reopen_book(book, reason, issued_to_employee=None):
 	doc.reopen_count = cint(doc.reopen_count) + 1
 	doc.save()
 	stock_entry = create_book_issue_stock_entry(doc)
-	create_book_assignment_issue_log(doc, "Reissued", previous_employee, stock_entry)
+	create_book_assignment_issue_log(doc, "Reissued", previous_warehouse, stock_entry)
 	return doc.as_dict()
 
 
@@ -834,7 +838,7 @@ def get_coupon_book_return_status(book):
 	return frappe._dict(is_exhausted=doc.is_exhausted())
 
 
-def reopen_donation_book(doc, reason, issued_to_employee=None):
+def reopen_donation_book(doc, reason, issued_to_warehouse=None):
 	"""Return an eligible Donation Book to Issued for its remaining receipts."""
 	if doc.status not in ("Returned", "Closed"):
 		frappe.throw(frappe._("Only returned or closed Donation Books can be reopened."))
@@ -858,8 +862,8 @@ def reopen_donation_book(doc, reason, issued_to_employee=None):
 	# cash declared for each serial matches the corresponding Donation Orders.
 	validate_donation_book_order_total_matches_return(doc)
 
-	previous_employee = doc.issued_to_employee
-	set_reissued_employee(doc, issued_to_employee)
+	previous_warehouse = doc.issued_to_warehouse
+	set_reissued_warehouse(doc, issued_to_warehouse)
 	doc.flags.ignore_validate_update_after_submit = True
 	doc.flags.reopening_donation_book = True
 	doc.status = "Issued"
@@ -870,41 +874,36 @@ def reopen_donation_book(doc, reason, issued_to_employee=None):
 	doc.reopen_count = cint(doc.reopen_count) + 1
 	doc.save()
 	stock_entry = create_book_issue_stock_entry(doc)
-	create_book_assignment_issue_log(doc, "Reissued", previous_employee, stock_entry)
+	create_book_assignment_issue_log(doc, "Reissued", previous_warehouse, stock_entry)
 	sync_donation_book_leaves(doc.name)
 	return doc.as_dict()
 
 
-def set_reissued_employee(doc, issued_to_employee):
-	"""Validate and apply the employee receiving a book during a reissue."""
-	doc.issued_to_employee = issued_to_employee or doc.issued_to_employee
-	if not doc.issued_to_employee:
-		frappe.throw(frappe._("Issued To Employee is required when reopening a Book."))
+def set_reissued_warehouse(doc, issued_to_warehouse):
+	"""Validate and apply the Warehouse receiving a book during a reissue."""
+	doc.issued_to_warehouse = issued_to_warehouse or doc.issued_to_warehouse
+	if not doc.issued_to_warehouse:
+		frappe.throw(frappe._("Issued To Warehouse is required when reopening a Book."))
 
-	employee = frappe.db.get_value("Employee", doc.issued_to_employee, ["status"], as_dict=True)
-	if not employee:
-		frappe.throw(frappe._("Issued To Employee {0} was not found.").format(doc.issued_to_employee))
-	if employee.status and employee.status != "Active":
-		frappe.throw(frappe._("Issued To Employee {0} must be active.").format(doc.issued_to_employee))
-
-	if doc.is_donation_book() or doc.has_donation_rows():
-		validate_mohasil_employee(doc.issued_to_employee, "Issued To Employee")
+	get_book_target_warehouse(doc)
+	doc.set_issued_to_employee_from_warehouse()
 	if doc.is_coupon_book() or doc.has_coupon_rows():
 		doc.set_coupon_employee_details()
 		doc.set_volunteer_area()
 
 
-def create_book_assignment_issue_log(doc, action, previous_employee=None, stock_entry=None):
-	"""Keep an immutable custody history for every issue and reissue."""
+def create_book_assignment_issue_log(doc, action, previous_warehouse=None, stock_entry=None):
+	"""Keep an immutable custody history for every issue, return, reissue, and consumption."""
 	log = {
-			"doctype": "Book Assignment Issue Log",
-			"book_assignment": doc.name,
-			"action": action,
-			"action_date": now_datetime(),
-			"employee": doc.issued_to_employee,
-			"previous_employee": previous_employee,
-			"reopen_reason": doc.reopen_reason if action == "Reissued" else None,
-			"recorded_by": frappe.session.user,
+		"doctype": "Book Assignment Issue Log",
+		"book_assignment": doc.name,
+		"action": action,
+		"action_date": now_datetime(),
+		"warehouse": doc.issued_to_warehouse,
+		"previous_warehouse": previous_warehouse,
+		"employee": doc.issued_to_employee,
+		"reopen_reason": doc.reopen_reason if action == "Reissued" else None,
+		"recorded_by": frappe.session.user,
 	}
 	if stock_entry:
 		log["stock_entry"] = stock_entry
@@ -2467,19 +2466,19 @@ def has_submitted_book_stock_entry(stock_entry):
 
 
 def create_book_issue_stock_entry(doc, posting_date=None):
-	"""Transfer assigned books from their source Warehouse to the employee Warehouse."""
+	"""Transfer assigned books from their source Warehouse to the selected Warehouse."""
 	return create_book_stock_entry(
 		doc,
 		stock_action="Reissued" if cint(doc.get("reopen_count")) else "Issued",
 		purpose="Material Transfer",
 		from_warehouse=lambda row: row.warehouse,
-		to_warehouse=get_employee_book_warehouse(doc),
+		to_warehouse=get_book_target_warehouse(doc),
 		posting_date=posting_date,
 	)
 
 
 def return_book_stock_to_source(doc, posting_date=None):
-	"""Return books from the employee Warehouse to their original source Warehouse."""
+	"""Return books from the current custody Warehouse to their original source Warehouse."""
 	if is_legacy_material_issue(doc):
 		cancel_book_issue_stock_entry(doc)
 		return doc.stock_entry
@@ -2488,7 +2487,7 @@ def return_book_stock_to_source(doc, posting_date=None):
 		doc,
 		stock_action="Returned",
 		purpose="Material Transfer",
-		from_warehouse=lambda row: get_employee_book_warehouse(doc),
+		from_warehouse=lambda row: get_book_custody_warehouse(doc, row),
 		to_warehouse=lambda row: row.warehouse,
 		posting_date=posting_date or today(),
 	)
@@ -2566,13 +2565,60 @@ def create_book_stock_entry(doc, stock_action, purpose, from_warehouse, to_wareh
 	return stock_entry.name
 
 
-def get_employee_book_warehouse(doc):
-	"""Find the employee Warehouse by name without an Employee mapping field."""
-	employee = frappe.db.get_value(
-		"Employee", doc.issued_to_employee, ["employee_name", "status"], as_dict=True
+def get_book_target_warehouse(doc):
+	"""Validate and return the Warehouse selected as the book's custody destination."""
+	if not doc.get("issued_to_warehouse"):
+		frappe.throw(frappe._("Issued To Warehouse is required before issuing a Book."))
+
+	warehouse = frappe.db.get_value(
+		"Warehouse",
+		doc.issued_to_warehouse,
+		["name", "company", "is_group", "disabled"],
+		as_dict=True,
 	)
+	if not warehouse:
+		frappe.throw(frappe._("Issued To Warehouse {0} was not found.").format(doc.issued_to_warehouse))
+	if cint(warehouse.disabled) or cint(warehouse.is_group):
+		frappe.throw(frappe._("Issued To Warehouse {0} must be an active, non-group Warehouse.").format(warehouse.name))
+
+	company = doc.get("company") or get_default_company()
+	if company and warehouse.company and warehouse.company != company:
+		frappe.throw(
+			frappe._("Issued To Warehouse {0} must belong to Company {1}.").format(warehouse.name, company)
+		)
+	return warehouse.name
+
+
+def get_warehouse_employee(warehouse_name, company=None):
+	"""Resolve the active Employee whose name is used for the selected Warehouse."""
+	warehouse = frappe.db.get_value(
+		"Warehouse", warehouse_name, ["warehouse_name", "company", "is_group", "disabled"], as_dict=True
+	)
+	if not warehouse or cint(warehouse.disabled) or cint(warehouse.is_group):
+		frappe.throw(frappe._("Issued To Warehouse {0} must be an active, non-group Warehouse.").format(warehouse_name))
+	if company and warehouse.company and warehouse.company != company:
+		frappe.throw(
+			frappe._("Issued To Warehouse {0} must belong to Company {1}.").format(warehouse.name, company)
+		)
+
+	employee_filters = {"employee_name": warehouse.warehouse_name, "status": "Active"}
+	if warehouse.company:
+		employee_filters["company"] = warehouse.company
+	employee = frappe.db.get_value("Employee", employee_filters, "name")
+	if not employee:
+		frappe.throw(
+			frappe._("Create an active Employee named {0} before using Warehouse {1} for a Book Assignment.").format(
+				warehouse.warehouse_name, warehouse.name
+			)
+		)
+	return employee
+
+
+def get_legacy_employee_book_warehouse(doc):
+	"""Find the Warehouse for pre-migration assignments that only stored an Employee."""
+	employee = frappe.db.get_value("Employee", doc.issued_to_employee, ["employee_name", "status"], as_dict=True)
 	if not employee or not employee.employee_name:
-		frappe.throw(frappe._("An active Employee is required to determine the book Warehouse."))
+		frappe.throw(frappe._("An active Employee is required to determine the legacy book Warehouse."))
 	if employee.status and employee.status != "Active":
 		frappe.throw(frappe._("Issued To Employee {0} must be active.").format(doc.issued_to_employee))
 
@@ -2595,8 +2641,25 @@ def get_employee_book_warehouse(doc):
 	return warehouse
 
 
+def get_book_custody_warehouse(doc, row):
+	"""Return the Warehouse currently holding a book, with a legacy transaction fallback."""
+	if doc.get("issued_to_warehouse"):
+		return get_book_target_warehouse(doc)
+
+	if doc.stock_entry and frappe.db.get_value("Stock Entry", doc.stock_entry, "purpose") == "Material Transfer":
+		warehouse = frappe.db.get_value(
+			"Stock Entry Detail",
+			{"parent": doc.stock_entry, "serial_no": ["like", "%{0}%".format(row.book_serial_no)]},
+			"t_warehouse",
+		)
+		if warehouse:
+			return warehouse
+
+	return get_legacy_employee_book_warehouse(doc)
+
+
 def get_book_consumption_warehouse(doc, row):
-	return row.warehouse if doc.status == "Returned" else get_employee_book_warehouse(doc)
+	return row.warehouse if doc.status == "Returned" else get_book_custody_warehouse(doc, row)
 
 
 def is_legacy_material_issue(doc):

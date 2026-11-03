@@ -9,9 +9,11 @@
   "book_assignment",
   "action",
   "action_date",
+  "warehouse",
+  "previous_warehouse",
   "employee",
   "previous_employee",
-	 "stock_entry",
+  "stock_entry",
   "reopen_reason",
   "recorded_by"
  ],
@@ -43,13 +45,27 @@
    "reqd": 1
   },
   {
+   "fieldname": "warehouse",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Warehouse",
+   "options": "Warehouse",
+   "read_only": 1
+  },
+  {
+   "fieldname": "previous_warehouse",
+   "fieldtype": "Link",
+   "label": "Previous Warehouse",
+   "options": "Warehouse",
+   "read_only": 1
+  },
+  {
    "fieldname": "employee",
    "fieldtype": "Link",
    "in_list_view": 1,
    "label": "Employee",
    "options": "Employee",
-   "read_only": 1,
-   "reqd": 1
+   "read_only": 1
   },
   {
    "fieldname": "previous_employee",

@@ -18,6 +18,7 @@
   "stock_entry",
   "column_break_book",
   "warehouse",
+  "issued_to_warehouse",
   "issued_to_employee",
   "assigned_books_section",
   "assigned_books",
@@ -135,11 +136,18 @@
    "options": "Warehouse"
   },
   {
-   "fieldname": "issued_to_employee",
+   "allow_on_submit": 1,
+   "fieldname": "issued_to_warehouse",
    "fieldtype": "Link",
    "in_list_view": 1,
-   "label": "Issued To Employee",
-   "mandatory_depends_on": "eval:doc.book_type == 'Coupon Book' || doc.book_type == 'Donation Book' || doc.book_type == 'Mixed'",
+   "label": "Issued To Warehouse",
+   "options": "Warehouse"
+  },
+  {
+   "fieldname": "issued_to_employee",
+   "fieldtype": "Link",
+   "hidden": 1,
+   "label": "Issued To Employee (Derived)",
    "options": "Employee"
   },
   {
@@ -365,7 +373,7 @@
  ],
  "row_format": "Dynamic",
  "rows_threshold_for_grid_search": 20,
- "search_fields": "book_serial_numbers,book_type,item,book_serial_no,status,warehouse,issued_to_employee,coupon_type,volunteer_name,mohasil",
+ "search_fields": "book_serial_numbers,book_type,item,book_serial_no,status,warehouse,issued_to_warehouse,coupon_type,volunteer_name,mohasil",
  "show_title_field_in_link": 0,
  "sort_field": "modified",
  "sort_order": "DESC",

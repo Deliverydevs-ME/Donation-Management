@@ -152,7 +152,7 @@ class TestBookAssignment(FrappeTestCase):
 				"name": "BK-TEST",
 				"company": "JTQ",
 				"start_date": "2026-10-08",
-				"issued_to_employee": "EMP-TEST",
+				"issued_to_warehouse": "Employee Warehouse - JTQ",
 				"stock_entry": None,
 				"assigned_books": [
 					frappe._dict(
@@ -175,7 +175,7 @@ class TestBookAssignment(FrappeTestCase):
 		with patch.object(frappe.db, "get_value", return_value=None), patch.object(
 			frappe.db, "set_value"
 		) as set_value, patch(
-			"donation_management.donation_management.doctype.book_assignment.book_assignment.get_employee_book_warehouse",
+			"donation_management.donation_management.doctype.book_assignment.book_assignment.get_book_target_warehouse",
 			return_value="Employee Warehouse - JTQ",
 		), patch(
 			"erpnext.stock.doctype.stock_entry.stock_entry_utils.make_stock_entry",
@@ -205,9 +205,6 @@ class TestBookAssignment(FrappeTestCase):
 		with patch(
 			"donation_management.donation_management.doctype.book_assignment.book_assignment.is_legacy_material_issue",
 			return_value=False,
-		), patch(
-			"donation_management.donation_management.doctype.book_assignment.book_assignment.get_employee_book_warehouse",
-			return_value="Employee Warehouse - JTQ",
 		), patch(
 			"donation_management.donation_management.doctype.book_assignment.book_assignment.create_book_stock_entry",
 			return_value="MAT-STE-RETURN",
@@ -317,27 +314,28 @@ class TestBookAssignment(FrappeTestCase):
 		), patch(
 			"donation_management.donation_management.doctype.book_assignment.book_assignment.create_book_assignment_issue_log"
 		), patch(
-			"donation_management.donation_management.doctype.book_assignment.book_assignment.set_reissued_employee"
+			"donation_management.donation_management.doctype.book_assignment.book_assignment.set_reissued_warehouse"
 		), patch(
 			"donation_management.donation_management.doctype.book_assignment.book_assignment.now_datetime",
 			return_value="2026-10-06 12:00:00",
 		):
-			reopen_donation_book(doc, "Continue collecting receipts", "EMP-NEW")
+			reopen_donation_book(doc, "Continue collecting receipts", "Employee Warehouse - JTQ")
 
 		self.assertEqual(doc.status, "Issued")
 		self.assertIsNone(doc.return_date)
 		self.assertEqual(doc.reopen_count, 1)
 
-	def test_reopen_dialog_selects_the_employee_receiving_the_book(self):
+	def test_reopen_dialog_selects_the_warehouse_receiving_the_book(self):
 		script = Path(__file__).with_name("book_assignment.js").read_text()
 
-		self.assertIn('fieldname: "issued_to_employee"', script)
-		self.assertIn("issued_to_employee: values.issued_to_employee", script)
+		self.assertIn('fieldname: "issued_to_warehouse"', script)
+		self.assertIn("issued_to_warehouse: values.issued_to_warehouse", script)
 		self.assertIn('frm.doc.status === "Returned"', script)
 
-	def test_issue_log_records_assignment_employee_history(self):
+	def test_issue_log_records_assignment_warehouse_history(self):
 		doc = frappe._dict(
 			name="BK-TEST",
+			issued_to_warehouse="New Employee Warehouse - JTQ",
 			issued_to_employee="EMP-NEW",
 			reopen_reason="Assign the remaining pages to a new volunteer",
 		)
@@ -347,7 +345,7 @@ class TestBookAssignment(FrappeTestCase):
 			"donation_management.donation_management.doctype.book_assignment.book_assignment.now_datetime",
 			return_value="2026-10-08 12:00:00",
 		):
-			create_book_assignment_issue_log(doc, "Reissued", "EMP-OLD")
+			create_book_assignment_issue_log(doc, "Reissued", "Previous Employee Warehouse - JTQ")
 
 		get_doc.assert_called_once_with(
 			{
@@ -355,8 +353,9 @@ class TestBookAssignment(FrappeTestCase):
 				"book_assignment": "BK-TEST",
 				"action": "Reissued",
 				"action_date": "2026-10-08 12:00:00",
+				"warehouse": "New Employee Warehouse - JTQ",
+				"previous_warehouse": "Previous Employee Warehouse - JTQ",
 				"employee": "EMP-NEW",
-				"previous_employee": "EMP-OLD",
 				"reopen_reason": "Assign the remaining pages to a new volunteer",
 				"recorded_by": frappe.session.user,
 			}
