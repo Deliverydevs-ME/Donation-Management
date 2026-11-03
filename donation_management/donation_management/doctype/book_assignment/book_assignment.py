@@ -2592,7 +2592,7 @@ def get_book_target_warehouse(doc):
 def get_warehouse_employee(warehouse_name, company=None):
 	"""Resolve the active Employee whose name is used for the selected Warehouse."""
 	warehouse = frappe.db.get_value(
-		"Warehouse", warehouse_name, ["warehouse_name", "company", "is_group", "disabled"], as_dict=True
+		"Warehouse", warehouse_name, ["name", "warehouse_name", "company", "is_group", "disabled"], as_dict=True
 	)
 	if not warehouse or cint(warehouse.disabled) or cint(warehouse.is_group):
 		frappe.throw(frappe._("Issued To Warehouse {0} must be an active, non-group Warehouse.").format(warehouse_name))
@@ -2601,10 +2601,9 @@ def get_warehouse_employee(warehouse_name, company=None):
 			frappe._("Issued To Warehouse {0} must belong to Company {1}.").format(warehouse.name, company)
 		)
 
-	employee_filters = {"employee_name": warehouse.warehouse_name, "status": "Active"}
-	if warehouse.company:
-		employee_filters["company"] = warehouse.company
-	employee = frappe.db.get_value("Employee", employee_filters, "name")
+	employee = frappe.db.get_value(
+		"Employee", {"employee_name": warehouse.warehouse_name, "status": "Active"}, "name"
+	)
 	if not employee:
 		frappe.throw(
 			frappe._("Create an active Employee named {0} before using Warehouse {1} for a Book Assignment.").format(
