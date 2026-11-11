@@ -83,7 +83,7 @@ def copy_account_mappings(target_doc, source_purposes):
 		for mapping in frappe.get_all(
 			"Donation Purpose Account Mapping",
 			filters={"parent": source},
-			fields=["company", "donation_type", "credit_account", "cost_center", "is_default"],
+			fields=["company", "donation_type", "credit_account", "cost_center"],
 			order_by="idx",
 		):
 			key = (mapping.company, mapping.donation_type)
@@ -97,7 +97,6 @@ def copy_account_mappings(target_doc, source_purposes):
 					"donation_type": mapping.donation_type,
 					"credit_account": mapping.credit_account,
 					"cost_center": mapping.cost_center,
-					"is_default": mapping.is_default,
 				},
 			)
 			existing.add(key)

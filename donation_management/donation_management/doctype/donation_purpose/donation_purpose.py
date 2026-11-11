@@ -71,11 +71,9 @@ class DonationPurpose(NestedSet):
 		if account.is_group:
 			frappe.throw(frappe._("Credit Account {0} cannot be a group account.").format(row.credit_account))
 
-		if account.root_type not in ("Income", "Liability", "Equity"):
+		if account.root_type != "Income":
 			frappe.throw(
-				frappe._("Credit Account {0} must be an Income, Liability, or Equity account.").format(
-					row.credit_account
-				)
+				frappe._("Credit Account {0} must be an Income account.").format(row.credit_account)
 			)
 
 	def validate_account_mapping_cost_center(self, row):

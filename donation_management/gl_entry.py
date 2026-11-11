@@ -5,7 +5,7 @@ from erpnext.accounts.party import validate_party_frozen_disabled
 
 DEFAULT_ALLOWED_ACCOUNT_TYPES = {"Receivable", "Payable", "Equity"}
 DONATION_ORDER_ALLOWED_ACCOUNT_TYPES = {"Cash", "Bank"}
-DONATION_ORDER_ALLOWED_ROOT_TYPES = {"Income", "Liability", "Equity"}
+DONATION_ORDER_ALLOWED_ROOT_TYPES = {"Income"}
 
 
 class CustomGLEntry(GLEntry):

@@ -951,7 +951,7 @@ def get_credit_account_candidates(company):
 		filters={
 			"company": company,
 			"is_group": 0,
-			"root_type": ["in", ["Income", "Liability", "Equity"]],
+			"root_type": "Income",
 		},
 		fields=["name", "account_name", "account_type", "root_type"],
 		order_by="name",

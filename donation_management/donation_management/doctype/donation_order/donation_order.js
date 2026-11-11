@@ -112,7 +112,7 @@ frappe.ui.form.on("Donation Order", {
 		});
 
 		frm.set_query("credit_account", () => {
-			const filters = { is_group: 0, root_type: ["in", ["Income", "Liability", "Equity"]] };
+			const filters = { is_group: 0, root_type: "Income" };
 			if (frm.doc.company) {
 				filters.company = frm.doc.company;
 			}
@@ -148,7 +148,7 @@ frappe.ui.form.on("Donation Order", {
 		});
 
 		frm.set_query("credit_account", "purpose_details", () => {
-			const filters = { is_group: 0, root_type: ["in", ["Income", "Liability", "Equity"]] };
+			const filters = { is_group: 0, root_type: "Income" };
 			if (frm.doc.company) {
 				filters.company = frm.doc.company;
 			}

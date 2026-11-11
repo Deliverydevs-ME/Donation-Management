@@ -1486,7 +1486,7 @@ class DonationOrder(Document):
 			self.validate_account(
 				row.credit_account,
 				"Credit Account",
-				allowed_root_types=("Income", "Liability", "Equity"),
+				allowed_root_types=("Income",),
 			)
 
 		if self.mode_of_payment_type == "Cash":

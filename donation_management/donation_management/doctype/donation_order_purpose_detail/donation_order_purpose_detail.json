@@ -70,6 +70,7 @@
   {
    "fieldname": "purpose_path",
    "fieldtype": "Small Text",
+   "hidden": 1,
    "label": "Purpose Path",
    "read_only": 1
   },

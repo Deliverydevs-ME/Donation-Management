@@ -72,16 +72,6 @@
    "label": "Requires Prisoner"
   },
   {
-   "default": "0",
-   "fieldname": "requires_esaal_e_sawab",
-   "fieldtype": "Check",
-   "hidden": 1,
-   "label": "Legacy Requires Esaal e Sawab",
-   "print_hide": 1,
-   "read_only": 1,
-   "report_hide": 1
-  },
-  {
    "fieldname": "student_mode",
    "fieldtype": "Select",
    "label": "Student Mode",
@@ -90,6 +80,7 @@
   {
    "fieldname": "purpose_path",
    "fieldtype": "Small Text",
+   "hidden": 1,
    "label": "Purpose Path",
    "read_only": 1
   },

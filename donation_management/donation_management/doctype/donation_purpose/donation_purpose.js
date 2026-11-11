@@ -7,7 +7,7 @@ frappe.ui.form.on("Donation Purpose", {
 			const row = locals[cdt][cdn] || {};
 			const filters = {
 				is_group: 0,
-				root_type: ["in", ["Income", "Liability", "Equity"]],
+				root_type: "Income",
 			};
 
 			if (row.company) {

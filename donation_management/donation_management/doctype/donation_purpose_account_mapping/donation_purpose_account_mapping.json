@@ -9,8 +9,7 @@
   "company",
   "donation_type",
   "credit_account",
-  "cost_center",
-  "is_default"
+  "cost_center"
  ],
  "fields": [
   {
@@ -43,12 +42,6 @@
    "in_list_view": 1,
    "label": "Cost Center",
    "options": "Cost Center"
-  },
-  {
-   "default": "0",
-   "fieldname": "is_default",
-   "fieldtype": "Check",
-   "label": "Is Default"
   }
  ],
  "grid_page_length": 50,
