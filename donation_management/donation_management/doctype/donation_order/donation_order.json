@@ -819,12 +819,14 @@
   {
    "fieldname": "cancellation_section",
    "fieldtype": "Section Break",
+   "hidden": 1,
    "label": "Cancellation Controls",
    "collapsible": 1
   },
   {
    "fieldname": "cancellation_status",
    "fieldtype": "Select",
+   "hidden": 1,
    "label": "Cancellation Status",
    "options": "\nPending Approval\nApproved\nRejected",
    "print_hide": 1,
@@ -833,12 +835,14 @@
   {
    "fieldname": "cancellation_reason",
    "fieldtype": "Small Text",
+   "hidden": 1,
    "label": "Cancellation Reason",
    "print_hide": 1
   },
   {
    "fieldname": "cancellation_requested_by",
    "fieldtype": "Link",
+   "hidden": 1,
    "label": "Cancellation Requested By",
    "options": "User",
    "print_hide": 1,
@@ -847,6 +851,7 @@
   {
    "fieldname": "cancellation_requested_on",
    "fieldtype": "Datetime",
+   "hidden": 1,
    "label": "Cancellation Requested On",
    "print_hide": 1,
    "read_only": 1
@@ -854,6 +859,7 @@
   {
    "fieldname": "cancellation_approved_by",
    "fieldtype": "Link",
+   "hidden": 1,
    "label": "Cancellation Approved By",
    "options": "User",
    "print_hide": 1,
@@ -862,6 +868,7 @@
   {
    "fieldname": "cancellation_approved_on",
    "fieldtype": "Datetime",
+   "hidden": 1,
    "label": "Cancellation Approved On",
    "print_hide": 1,
    "read_only": 1
@@ -869,6 +876,7 @@
   {
    "fieldname": "replacement_donation_order",
    "fieldtype": "Link",
+   "hidden": 1,
    "label": "Replacement Donation Order",
    "options": "Donation Order",
    "print_hide": 1
