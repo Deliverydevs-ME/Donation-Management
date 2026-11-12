@@ -121,6 +121,32 @@ class TestBookAssignment(FrappeTestCase):
 		self.assertNotIn("available_stock", script)
 		self.assertNotIn("assigned_book_stock_refresh_interval", script)
 
+	def test_cancelled_parent_assignment_does_not_block_a_book_serial(self):
+		assignment = BookAssignment({"doctype": "Book Assignment", "name": "new-book-assignment"})
+		row = frappe._dict(
+			idx=1,
+			item="Donation Book",
+			warehouse="Head Office - JTQ",
+			book_serial_no="DBK-01",
+		)
+
+		with patch.object(
+			frappe.db,
+			"get_value",
+			side_effect=[
+				frappe._dict(disabled=0, is_stock_item=1, has_serial_no=1),
+				frappe._dict(item_code="Donation Book", warehouse="Head Office - JTQ"),
+			],
+		), patch(
+			"donation_management.donation_management.doctype.book_assignment.book_assignment.get_book_stock_qty",
+			return_value=1,
+		), patch.object(frappe.db, "sql", return_value=[]) as sql:
+			assignment.validate_assignment_row_stock(row)
+
+		query = sql.call_args.args[0]
+		self.assertIn("inner join `tabBook Assignment` parent", query)
+		self.assertIn("parent.docstatus != 2", query)
+
 	def test_book_assignment_form_uses_server_side_cancellation_cascade(self):
 		script = Path(__file__).with_name("book_assignment.js").read_text()
 

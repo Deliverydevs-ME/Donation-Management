@@ -310,11 +310,14 @@ class BookAssignment(Document):
 			frappe.throw(frappe._("Book Serial No {0} is not available in Warehouse {1}.").format(row.book_serial_no, row.warehouse))
 		existing = frappe.db.sql(
 			"""
-			select parent from `tabBook Assignment Detail`
-			where book_serial_no = %(serial)s
-				and parenttype = 'Book Assignment'
-				and parent != %(parent)s
-				and docstatus != 2
+			select detail.parent
+			from `tabBook Assignment Detail` detail
+			inner join `tabBook Assignment` parent
+				on parent.name = detail.parent
+			where detail.book_serial_no = %(serial)s
+				and detail.parenttype = 'Book Assignment'
+				and parent.name != %(parent)s
+				and parent.docstatus != 2
 			limit 1
 			""",
 			{"serial": row.book_serial_no, "parent": self.name or ""},
