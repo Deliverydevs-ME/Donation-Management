@@ -20,6 +20,7 @@ from donation_management.donation_management.doctype.book_assignment.book_assign
 	get_book_item_details,
 	get_book_items,
 	get_coupon_book_total_pages,
+	get_available_book_serial_nos,
 	get_book_stock_qty,
 	get_donation_book_reopen_eligibility,
 	get_donation_book_used_receipts,
@@ -135,7 +136,7 @@ class TestBookAssignment(FrappeTestCase):
 			"get_value",
 			side_effect=[
 				frappe._dict(disabled=0, is_stock_item=1, has_serial_no=1),
-				frappe._dict(item_code="Donation Book", warehouse="Head Office - JTQ"),
+				frappe._dict(item_code="Donation Book", warehouse="Head Office - JTQ", status="Active"),
 			],
 		), patch(
 			"donation_management.donation_management.doctype.book_assignment.book_assignment.get_book_stock_qty",
@@ -656,16 +657,36 @@ class TestBookAssignment(FrappeTestCase):
 		self.assertEqual(doc.collected_amount, 0)
 		self.assertEqual(doc.cash_denominations, [])
 
-	def test_available_stock_uses_book_assignment_lifecycle(self):
+	def test_available_stock_matches_the_serial_lookup_rule(self):
 		with patch.object(frappe.db, "sql", return_value=[(12,)]) as sql:
-			self.assertEqual(get_book_stock_qty("Donation Book", "Stores - J"), 12)
+			self.assertEqual(get_book_stock_qty("Donation Book", "Stores - J", "BK-TEST"), 12)
 
-		query, filters = sql.call_args.args
-		self.assertIn("book.status in ('Issued', 'Closed')", query)
-		self.assertIn("book.status = 'Returned'", query)
-		self.assertIn("detail.remaining_pages", query)
-		self.assertIn("detail.remaining_receipts", query)
-		self.assertEqual(filters, {"item": "Donation Book", "warehouse": "Stores - J"})
+		query, filters = sql.call_args_list[-1].args
+		self.assertIn("serial.status = 'Active'", query)
+		self.assertIn("book.docstatus != 2", query)
+		self.assertIn("book.name != %(book)s", query)
+		self.assertEqual(filters, {"item": "Donation Book", "warehouse": "Stores - J", "book": "BK-TEST"})
+
+	def test_serial_lookup_uses_the_same_active_and_unassigned_rule_as_stock_count(self):
+		query_method = get_available_book_serial_nos
+		while hasattr(query_method, "__wrapped__"):
+			query_method = query_method.__wrapped__
+
+		with patch.object(frappe.db, "sql", return_value=[]) as sql:
+			query_method(
+				"Serial No",
+				"",
+				"name",
+				0,
+				20,
+				{"item": "Donation Book", "warehouse": "Stores - J", "book": "BK-TEST"},
+			)
+
+		query, filters = sql.call_args_list[-1].args
+		self.assertIn("serial.status = 'Active'", query)
+		self.assertIn("book.docstatus != 2", query)
+		self.assertIn("book.name != %(book)s", query)
+		self.assertEqual(filters["book"], "BK-TEST")
 
 	def test_available_stock_is_zero_without_item_or_warehouse(self):
 		with patch.object(frappe.db, "sql") as sql:

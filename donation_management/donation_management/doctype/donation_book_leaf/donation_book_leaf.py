@@ -334,7 +334,7 @@ def cancel_leaf_for_donation_order(donation_order, clear_journal_entry=True):
 			leaf_doc.flags.ignore_permissions = True
 			leaf_doc.cancel()
 
-		values = {"status": "Cancelled"}
+		values = {"status": "Cancelled", "donation_order": None}
 		if clear_journal_entry:
 			values.update({"journal_entry": None, "accounting_status": "Cancelled"})
 		frappe.db.set_value("Donation Book Leaf", leaf.name, values, update_modified=False)

@@ -12,6 +12,7 @@ from donation_management.donation_management.doctype.donation_order.donation_ord
 	DonationOrder,
 	_get_donation_book_leaf_for_mohasil,
 	get_esaal_e_sawab_key,
+	lock_donation_book_return_amount,
 	notify_cancellation_approvers,
 )
 from donation_management.donation_management.api import get_esaal_person_options
@@ -134,6 +135,53 @@ class TestDonationOrder(FrappeTestCase):
 
 		self.assertTrue(entry.flags.ignore_permissions)
 		entry.cancel.assert_called_once_with()
+
+	def test_zero_returned_donation_book_rejects_a_positive_mohasil_order(self):
+		order = DonationOrder(
+			{
+				"doctype": "Donation Order",
+				"is_mohasil_collection": 1,
+				"donation_book": "BK-TEST",
+				"donation_book_serial_no": "DBK-TEST",
+				"donation_amount": 100,
+			}
+		)
+
+		with patch(
+			"donation_management.donation_management.doctype.donation_order.donation_order.lock_donation_book_return_amount"
+		), patch.object(order, "get_donation_book_returned_amount", return_value=0), patch(
+			"donation_management.donation_management.doctype.donation_order.donation_order.get_donation_book_order_total",
+			return_value=0,
+		):
+			with self.assertRaisesRegex(frappe.ValidationError, "cannot exceed returned amount"):
+				order.validate_donation_book_amount_limit()
+
+	def test_donation_book_orders_can_equal_the_returned_amount(self):
+		order = DonationOrder(
+			{
+				"doctype": "Donation Order",
+				"is_mohasil_collection": 1,
+				"donation_book": "BK-TEST",
+				"donation_book_serial_no": "DBK-TEST",
+				"donation_amount": 100,
+			}
+		)
+
+		with patch(
+			"donation_management.donation_management.doctype.donation_order.donation_order.lock_donation_book_return_amount"
+		), patch.object(order, "get_donation_book_returned_amount", return_value=100), patch(
+			"donation_management.donation_management.doctype.donation_order.donation_order.get_donation_book_order_total",
+			return_value=0,
+		):
+			order.validate_donation_book_amount_limit()
+
+	def test_amount_limit_locks_the_parent_for_legacy_book_assignments(self):
+		with patch.object(frappe.db, "sql", return_value=[]) as sql:
+			lock_donation_book_return_amount("BK-TEST", "DBK-TEST")
+
+		self.assertEqual(sql.call_count, 2)
+		self.assertIn("tabBook Assignment Detail", sql.call_args_list[0].args[0])
+		self.assertIn("tabBook Assignment` where name", sql.call_args_list[1].args[0])
 
 	def test_esaal_person_search_accepts_json_link_filters(self):
 		with patch.object(frappe.db, "sql", return_value=[]) as sql:

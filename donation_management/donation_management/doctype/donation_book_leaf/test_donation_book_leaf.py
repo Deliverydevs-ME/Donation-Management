@@ -82,7 +82,12 @@ class TestDonationBookLeaf(FrappeTestCase):
 		set_value.assert_called_once_with(
 			"Donation Book Leaf",
 			"DBL-TEST",
-			{"status": "Cancelled", "journal_entry": None, "accounting_status": "Cancelled"},
+			{
+				"status": "Cancelled",
+				"donation_order": None,
+				"journal_entry": None,
+				"accounting_status": "Cancelled",
+			},
 			update_modified=False,
 		)
 

@@ -294,18 +294,22 @@ class BookAssignment(Document):
 			frappe.throw(frappe._("Item {0} was not found.").format(row.item))
 		if cint(item.disabled) or not cint(item.is_stock_item) or not cint(item.has_serial_no):
 			frappe.throw(frappe._("Item {0} must be an enabled stock Item with serial numbers.").format(row.item))
-		available_stock = get_book_stock_qty(row.item, row.warehouse)
+		available_stock = get_book_stock_qty(row.item, row.warehouse, self.name)
 		if self.docstatus == 0 and available_stock <= 0:
 			frappe.throw(
 				frappe._(
 					"No stock is available for Item {0} in Warehouse {1} in Assigned Books row {2}."
 				).format(row.item, row.warehouse, row.idx)
 			)
-		serial = frappe.db.get_value("Serial No", row.book_serial_no, ["item_code", "warehouse"], as_dict=True)
+		serial = frappe.db.get_value(
+			"Serial No", row.book_serial_no, ["item_code", "warehouse", "status"], as_dict=True
+		)
 		if not serial:
 			frappe.throw(frappe._("Book Serial No {0} was not found.").format(row.book_serial_no))
 		if serial.item_code != row.item:
 			frappe.throw(frappe._("Book Serial No {0} belongs to Item {1}, not {2}.").format(row.book_serial_no, serial.item_code, row.item))
+		if serial.status != "Active":
+			frappe.throw(frappe._("Book Serial No {0} is not active in stock.").format(row.book_serial_no))
 		if not self.stock_entry and serial.warehouse != row.warehouse:
 			frappe.throw(frappe._("Book Serial No {0} is not available in Warehouse {1}.").format(row.book_serial_no, row.warehouse))
 		existing = frappe.db.sql(
@@ -617,7 +621,7 @@ class BookAssignment(Document):
 		serial_no = frappe.db.get_value(
 			"Serial No",
 			row.book_serial_no,
-			["item_code", "warehouse"],
+			["item_code", "warehouse", "status"],
 			as_dict=True,
 		)
 		if not serial_no:
@@ -630,6 +634,8 @@ class BookAssignment(Document):
 					row_item,
 				)
 			)
+		if serial_no.status != "Active":
+			frappe.throw(frappe._("Book Serial No {0} is not active in stock.").format(row.book_serial_no))
 
 		if not self.stock_entry and serial_no.warehouse != row_warehouse:
 			frappe.throw(
@@ -691,7 +697,7 @@ class BookAssignment(Document):
 		serial_no = frappe.db.get_value(
 			"Serial No",
 			self.book_serial_no,
-			["item_code", "warehouse"],
+			["item_code", "warehouse", "status"],
 			as_dict=True,
 		)
 		if not serial_no:
@@ -704,6 +710,8 @@ class BookAssignment(Document):
 					self.item,
 				)
 			)
+		if serial_no.status != "Active":
+			frappe.throw(frappe._("Book Serial No {0} is not active in stock.").format(self.book_serial_no))
 
 		if not self.stock_entry and serial_no.warehouse != self.warehouse:
 			frappe.throw(
@@ -2146,33 +2154,21 @@ def get_available_book_serial_nos(doctype, txt, searchfield, start, page_len, fi
 		"""
 		select serial.name, serial.item_code, serial.warehouse
 		from `tabSerial No` serial
-		where serial.item_code = %(item)s
-			and serial.warehouse = %(warehouse)s
-			and serial.name like %(search)s
-			{selected_serials_condition}
-			and not exists (
-				select book.name
-				from `tabBook Assignment` book
-				where book.book_serial_no = serial.name
-					and book.docstatus != 2
-					and (%(book)s is null or book.name != %(book)s)
-			)
-			and not exists (
-				select detail.name
-				from `tabBook Assignment Detail` detail
-				inner join `tabBook Assignment` book
-					on book.name = detail.parent
-				where detail.book_serial_no = serial.name
-					and book.docstatus != 2
-					and (%(book)s is null or book.name != %(book)s)
-			)
-		order by serial.name
-		limit %(start)s, %(page_len)s
-		""".format(selected_serials_condition=selected_serials_condition),
+			where serial.item_code = %(item)s
+				and serial.warehouse = %(warehouse)s
+				{availability_condition}
+				and serial.name like %(search)s
+				{selected_serials_condition}
+			order by serial.name
+			limit %(start)s, %(page_len)s
+		""".format(
+			availability_condition=get_book_serial_availability_condition(),
+			selected_serials_condition=selected_serials_condition,
+		),
 		{
 			"item": filters.get("item"),
 			"warehouse": filters.get("warehouse"),
-			"book": current_book,
+			"book": current_book or "",
 			"selected_serials": selected_serials,
 			"search": search,
 			"start": cint(start),
@@ -2376,12 +2372,33 @@ def get_mohasil_donation_book_leaves(doctype, txt, searchfield, start, page_len,
 	)
 
 
+def get_book_serial_availability_condition():
+	"""Return the shared availability rule for Book Assignment serial lookups."""
+	return """
+		and serial.status = 'Active'
+		and not exists (
+			select book.name
+			from `tabBook Assignment` book
+			where book.book_serial_no = serial.name
+				and book.docstatus != 2
+				and (%(book)s = '' or book.name != %(book)s)
+		)
+		and not exists (
+			select detail.name
+			from `tabBook Assignment Detail` detail
+			inner join `tabBook Assignment` book
+				on book.name = detail.parent
+			where detail.book_serial_no = serial.name
+				and book.docstatus != 2
+				and (%(book)s = '' or book.name != %(book)s)
+		)
+	"""
+
+
 @frappe.whitelist()
-def get_book_stock_qty(item=None, warehouse=None):
+def get_book_stock_qty(item=None, warehouse=None, book=None):
 	if not item or not warehouse:
 		return 0
-	# Book Assignment does not transfer a serial out of its warehouse. A serial
-	# is available only while it is not actively issued or fully consumed.
 	return cint(
 		frappe.db.sql(
 			"""
@@ -2389,27 +2406,9 @@ def get_book_stock_qty(item=None, warehouse=None):
 			from `tabSerial No` serial
 			where serial.item_code = %(item)s
 				and serial.warehouse = %(warehouse)s
-				and not exists (
-					select book.name
-					from `tabBook Assignment` book
-					left join `tabBook Assignment Detail` detail
-						on detail.parent = book.name
-						and detail.parenttype = 'Book Assignment'
-						and detail.parentfield = 'assigned_books'
-						and detail.book_serial_no = serial.name
-					where book.docstatus != 2
-						and (book.book_serial_no = serial.name or detail.name is not null)
-						and (
-							book.status in ('Issued', 'Closed')
-							or (
-								book.status = 'Returned'
-								and ifnull(detail.remaining_pages, book.remaining_pages, 0) <= 0
-								and ifnull(detail.remaining_receipts, book.remaining_receipts, 0) <= 0
-							)
-						)
-				)
-			""",
-			{"item": item, "warehouse": warehouse},
+					{availability_condition}
+			""".format(availability_condition=get_book_serial_availability_condition()),
+			{"item": item, "warehouse": warehouse, "book": book or ""},
 		)[0][0]
 	)
 

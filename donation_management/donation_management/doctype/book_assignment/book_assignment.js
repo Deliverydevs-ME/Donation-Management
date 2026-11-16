@@ -358,6 +358,7 @@ function show_assigned_book_stock(cdt, cdn) {
 		args: {
 			item,
 			warehouse,
+			book: frm.doc.name,
 		},
 		callback(response) {
 			const current_row = locals[cdt] && locals[cdt][cdn];

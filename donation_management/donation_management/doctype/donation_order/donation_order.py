@@ -729,10 +729,8 @@ class DonationOrder(Document):
 		if not cint(self.is_mohasil_collection) or not self.donation_book:
 			return
 
+		lock_donation_book_return_amount(self.donation_book, self.donation_book_serial_no)
 		returned_amount = self.get_donation_book_returned_amount()
-		if returned_amount <= 0:
-			return
-
 		current_total = get_donation_book_order_total(
 			self.donation_book,
 			exclude_order=self.name,
@@ -2106,6 +2104,30 @@ def get_esaal_e_sawab_key(person_name, relationship=None):
 	if not person_name:
 		return None
 	return (person_name, relationship)
+
+
+def lock_donation_book_return_amount(book, donation_book_serial_no=None):
+	"""Serialize Mohasil donation validation for one book serial within the request transaction."""
+	if donation_book_serial_no:
+		locked_row = frappe.db.sql(
+			"""
+			select name
+			from `tabBook Assignment Detail`
+			where parent = %(book)s
+				and parenttype = 'Book Assignment'
+				and parentfield = 'assigned_books'
+				and book_serial_no = %(book_serial_no)s
+			for update
+			""",
+			{"book": book, "book_serial_no": donation_book_serial_no},
+		)
+		if locked_row:
+			return
+
+	frappe.db.sql(
+		"select name from `tabBook Assignment` where name = %(book)s for update",
+		{"book": book},
+	)
 
 
 def _get_donation_book_leaf_for_mohasil(leaf_name, mohasil, current_order=None):
